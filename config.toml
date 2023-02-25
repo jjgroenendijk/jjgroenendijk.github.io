@@ -1,0 +1,7 @@
+baseURL = 'https://jjgroenendijk.github.io'
+languageCode = 'en-us'
+title = 'jjgroenendijk.nl'
+theme = 'hugo-book'
+enableGitInfo = true
+[params]
+    BookRepo = https://github.com/jjgroenendijk/jjgroenendijk.github.io
