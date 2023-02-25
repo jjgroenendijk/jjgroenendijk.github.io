@@ -4,4 +4,4 @@ title = 'jjgroenendijk.nl'
 theme = 'hugo-book'
 enableGitInfo = true
 [params]
-    BookRepo = https://github.com/jjgroenendijk/jjgroenendijk.github.io
+    BookRepo = 'https://github.com/jjgroenendijk/jjgroenendijk.github.io'
