@@ -2,7 +2,7 @@
 weight: 11
 ---
 
-# Firewalld Installation
+## Firewalld Installation
 
 Firewalld is a firewall developed by Red Hat. The official documentation can be found [here](https://firewalld.org/documentation/). Install and activate Firewalld as follows:
 

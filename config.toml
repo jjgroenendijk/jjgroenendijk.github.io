@@ -1,4 +1,4 @@
-baseURL = 'https://jjgroenendijk.github.io'
+baseURL = 'https://jjgroenendijk.nl'
 languageCode = 'en-us'
 title = 'jjgroenendijk.nl'
 theme = 'hugo-book'
@@ -8,9 +8,12 @@ enableGitInfo = true
     BookRepo = 'https://github.com/jjgroenendijk/jjgroenendijk.github.io'
     BookCommitPath = 'commit'
     BookEditPath = 'edit/main'
+    BookSection = '*'
 
 [menu]
-# [[menu.before]]
+#  title = 'Links'
+#[[menu.before]]
+#  name = "Links"
 [[menu.after]]
   name = "Github"
   url = "https://github.com/jjgroenendijk"

@@ -1,5 +1,4 @@
 ---
-title: "Arch Linux setup"
 weight: 8
 ---
 

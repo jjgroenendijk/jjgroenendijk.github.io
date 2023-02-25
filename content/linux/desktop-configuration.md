@@ -2,7 +2,6 @@
 title: "Desktop configuration"
 weight: 15
 ---
-# Desktop configuration
 
 ## Automatic login
 
