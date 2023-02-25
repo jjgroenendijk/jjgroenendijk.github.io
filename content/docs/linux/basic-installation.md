@@ -1,5 +1,6 @@
 ---
-title: Arch Linux setup
+title: "Arch Linux setup"
+weight: 8
 ---
 
 ## Getting started
