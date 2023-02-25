@@ -8,6 +8,20 @@
     <language>en-us</language><atom:link href="https://jjgroenendijk.github.io/docs/example/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title></title>
+      <link>https://jjgroenendijk.github.io/docs/example/arch-setup-basics/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>https://jjgroenendijk.github.io/docs/example/arch-setup-basics/</guid>
+      <description>Getting started # Grab the official ISO from https://www.archlinux.org/download/ and image it to a USB device.
+Use the installation guide for installing Arch. https://wiki.archlinux.org/index.php/installation_guide
+Prerequisites # Verify that the system is running in UEFI mode. Folders and files should be visible:
+ls /sys/firmware/efi/efivars Check internet connection:
+ping 1.1.1.1 -c 4 Update and check the hardware clock:
+timedatectl set-ntp true timedatectl status Create storage Layout # Use this Arch Wiki page as a reference.</description>
+    </item>
+    
+    <item>
+      <title></title>
       <link>https://jjgroenendijk.github.io/docs/example/hidden/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       

@@ -3,5 +3,20 @@ languageCode = 'en-us'
 title = 'jjgroenendijk.nl'
 theme = 'hugo-book'
 enableGitInfo = true
+
 [params]
     BookRepo = 'https://github.com/jjgroenendijk/jjgroenendijk.github.io'
+    BookCommitPath = 'commit'
+    BookEditPath = 'edit/main'
+
+[menu]
+# [[menu.before]]
+[[menu.after]]
+  name = "Github"
+  url = "https://github.com/jjgroenendijk"
+  weight = 10
+
+[[menu.after]]
+  name = "Recipes"
+  url = "https://recipe.jjgroenendijk.nl/"
+  weight = 20

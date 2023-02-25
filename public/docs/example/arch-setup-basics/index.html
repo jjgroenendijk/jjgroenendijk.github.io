@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="en-us" dir="ltr">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="Getting started # Grab the official ISO from https://www.archlinux.org/download/ and image it to a USB device.
+Use the installation guide for installing Arch. https://wiki.archlinux.org/index.php/installation_guide
+Prerequisites # Verify that the system is running in UEFI mode. Folders and files should be visible:
+ls /sys/firmware/efi/efivars Check internet connection:
+ping 1.1.1.1 -c 4 Update and check the hardware clock:
+timedatectl set-ntp true timedatectl status Create storage Layout # Use this Arch Wiki page as a reference.">
+<meta name="theme-color" content="#FFFFFF">
+<meta name="color-scheme" content="light dark"><meta property="og:title" content="" />
+<meta property="og:description" content="Getting started # Grab the official ISO from https://www.archlinux.org/download/ and image it to a USB device.
+Use the installation guide for installing Arch. https://wiki.archlinux.org/index.php/installation_guide
+Prerequisites # Verify that the system is running in UEFI mode. Folders and files should be visible:
+ls /sys/firmware/efi/efivars Check internet connection:
+ping 1.1.1.1 -c 4 Update and check the hardware clock:
+timedatectl set-ntp true timedatectl status Create storage Layout # Use this Arch Wiki page as a reference." />
+<meta property="og:type" content="article" />
+<meta property="og:url" content="https://jjgroenendijk.github.io/docs/example/arch-setup-basics/" /><meta property="article:section" content="docs" />
+
+
+<title>Arch Setup Basics | jjgroenendijk.nl</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/favicon.png" type="image/x-icon">
+<link rel="stylesheet" href="/book.min.c58292d36b18b675680ab9baea2029204537b839ea72f258746ec0f32ce8d6c8.css" integrity="sha256-xYKS02sYtnVoCrm66iApIEU3uDnqcvJYdG7A8yzo1sg=" crossorigin="anonymous">
+  <script defer src="/flexsearch.min.js"></script>
+  <script defer src="/en.search.min.d3bbf97f66662a89fc4c0e2bf8ae06e7afe926fe8c9cf94539f593ee99bef187.js" integrity="sha256-07v5f2ZmKon8TA4r&#43;K4G56/pJv6MnPlFOfWT7pm&#43;8Yc=" crossorigin="anonymous"></script>
+<!--
+Made with Book Theme
+https://github.com/alex-shpak/hugo-book
+-->
+  
+</head>
+<body dir="ltr">
+  <input type="checkbox" class="hidden toggle" id="menu-control" />
+  <input type="checkbox" class="hidden toggle" id="toc-control" />
+  <main class="container flex">
+    <aside class="book-menu">
+      <div class="book-menu-content">
+        
+  <nav>
+<h2 class="book-brand">
+  <a class="flex align-center" href="/"><span>jjgroenendijk.nl</span>
+  </a>
+</h2>
+
+
+<div class="book-search">
+  <input type="text" id="book-search-input" placeholder="Search" aria-label="Search" maxlength="64" data-hotkeys="s/" />
+  <div class="book-search-spinner hidden"></div>
+  <ul id="book-search-results"></ul>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+
+
+  
+  <ul>
+    
+      
+        <li class="book-section-flat" >
+          
+  
+  
+
+  
+    <a href="/docs/example/" class="">Example Site</a>
+  
+
+          
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/example/table-of-contents/" class="">Table of Contents</a>
+  
+
+          
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/example/table-of-contents/with-toc/" class="">With ToC</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/example/table-of-contents/without-toc/" class="">Without ToC</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <input type="checkbox" id="section-4e46b01272d410b3a99461d79326ddf4" class="toggle"  />
+    <label for="section-4e46b01272d410b3a99461d79326ddf4" class="flex justify-between">
+      <a role="button" class="">Collapsed</a>
+    </label>
+  
+
+          
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/example/collapsed/3rd-level/" class="">3rd Level</a>
+  
+
+          
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/example/collapsed/3rd-level/4th-level/" class="">4th Level</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+        </li>
+      
+    
+  </ul>
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/example/arch-setup-basics/" class="active">Arch Setup Basics</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+        </li>
+      
+    
+      
+        <li class="book-section-flat" >
+          
+  
+  
+
+  
+    <span>Shortcodes</span>
+  
+
+          
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/buttons/" class="">Buttons</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/columns/" class="">Columns</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/details/" class="">Details</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/expand/" class="">Expand</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/hints/" class="">Hints</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/katex/" class="">Katex</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/mermaid/" class="">Mermaid</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <input type="checkbox" id="section-d3fc1bf6d66cd84b896a0af9f40cb1d5" class="toggle"  />
+    <label for="section-d3fc1bf6d66cd84b896a0af9f40cb1d5" class="flex justify-between">
+      <a href="/docs/shortcodes/section/" class="">Section</a>
+    </label>
+  
+
+          
+  <ul>
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/section/first-page/" class="">First Page</a>
+  
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/section/second-page/" class="">Second Page</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+        </li>
+      
+    
+      
+        <li>
+          
+  
+  
+
+  
+    <a href="/docs/shortcodes/tabs/" class="">Tabs</a>
+  
+
+        </li>
+      
+    
+  </ul>
+
+        </li>
+      
+    
+  </ul>
+
+
+
+
+
+
+
+
+
+
+
+  
+<ul>
+  
+  <li>
+    <a href="/posts/"  >
+        Blog
+      </a>
+  </li>
+  
+</ul>
+
+
+
+
+
+
+</nav>
+
+
+
+
+  <script>(function(){var e=document.querySelector("aside .book-menu-content");addEventListener("beforeunload",function(){localStorage.setItem("menu.scrollTop",e.scrollTop)}),e.scrollTop=localStorage.getItem("menu.scrollTop")})()</script>
+
+
+ 
+      </div>
+    </aside>
+
+    <div class="book-page">
+      <header class="book-header">
+        
+  <div class="flex align-center justify-between">
+  <label for="menu-control">
+    <img src="/svg/menu.svg" class="book-icon" alt="Menu" />
+  </label>
+
+  <strong>Arch Setup Basics</strong>
+
+  <label for="toc-control">
+    
+    <img src="/svg/toc.svg" class="book-icon" alt="Table of Contents" />
+    
+  </label>
+</div>
+
+
+  
+  <aside class="hidden clearfix">
+    
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#getting-started">Getting started</a></li>
+    <li><a href="#prerequisites">Prerequisites</a></li>
+    <li><a href="#create-storage-layout">Create storage Layout</a></li>
+    <li><a href="#install-base-system">Install base system</a></li>
+    <li><a href="#create-base-configuration">Create base configuration</a></li>
+    <li><a href="#install-a-bootloader">Install a bootloader</a></li>
+    <li><a href="#reboot-to-installation">Reboot to installation</a></li>
+    <li><a href="#network-setup">Network setup</a>
+      <ul>
+        <li><a href="#networkmanager">NetworkManager</a></li>
+        <li><a href="#systemd-networkd">Systemd-networkd</a></li>
+        <li><a href="#check-connectivity">Check connectivity</a></li>
+      </ul>
+    </li>
+    <li><a href="#ssh-setup">SSH Setup</a>
+      <ul>
+        <li><a href="#install-ssh">Install SSH</a></li>
+        <li><a href="#key-creation">Key creation</a></li>
+        <li><a href="#sshd-configuration">SSHD configuration</a></li>
+      </ul>
+    </li>
+    <li><a href="#ntp-time-sync">NTP time sync</a></li>
+    <li><a href="#access-aur-with-yay">Access AUR with yay</a></li>
+    <li><a href="#faster-mirrors-with-reflector">Faster mirrors with Reflector</a>
+      <ul>
+        <li><a href="#reflector-pacman-hook">Reflector Pacman hook</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+
+  </aside>
+  
+ 
+      </header>
+
+      
+      
+  <article class="markdown"><h2 id="getting-started">
+  Getting started
+  <a class="anchor" href="#getting-started">#</a>
+</h2>
+<p>Grab the official ISO from <a href="https://www.archlinux.org/download/">https://www.archlinux.org/download/</a> and image it to a USB device.<br>
+Use the installation guide for installing Arch. <a href="https://wiki.archlinux.org/index.php/installation_guide">https://wiki.archlinux.org/index.php/installation_guide</a></p>
+<h2 id="prerequisites">
+  Prerequisites
+  <a class="anchor" href="#prerequisites">#</a>
+</h2>
+<p>Verify that the system is running in UEFI mode. Folders and files should be visible:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>ls /sys/firmware/efi/efivars
+</span></span></code></pre></div><p>Check internet connection:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>ping 1.1.1.1 -c 4
+</span></span></code></pre></div><p>Update and check the hardware clock:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>timedatectl set-ntp true
+</span></span><span style="display:flex;"><span>timedatectl status
+</span></span></code></pre></div><h2 id="create-storage-layout">
+  Create storage Layout
+  <a class="anchor" href="#create-storage-layout">#</a>
+</h2>
+<p>Use this <a href="https://wiki.archlinux.org/index.php/Dm-crypt/Encrypting_an_entire_system#LVM_on_LUKS">Arch Wiki</a> page as a reference. Follow these steps to create a <code>LUKS</code> encrypted system managed by <code>LVM2</code>. Create partitions on the storage device using <code>cfdisk</code>. Create a boot partition of 1G and set the partition type to EFI. The remaining space will be formatted as one big linux filesystem partition.</p>
+<p>Encrypt the storage device and setup lvm using these commands:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>cryptsetup luksFormat /dev/nvme0n1p2
+</span></span><span style="display:flex;"><span>cryptsetup open /dev/nvme0n1p2 cryptlvm
+</span></span><span style="display:flex;"><span>pvcreate /dev/mapper/cryptlvm
+</span></span><span style="display:flex;"><span>vgcreate vg01 /dev/mapper/cryptlvm
+</span></span><span style="display:flex;"><span>lvcreate -L 16G vg01 -n swap
+</span></span><span style="display:flex;"><span>lvcreate -l 100%FREE vg01 -n root
+</span></span></code></pre></div><p>Format the filesystems:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>mkfs.fat -F32 /dev/nvme0n1p1
+</span></span><span style="display:flex;"><span>mkfs.xfs /dev/vg01/root
+</span></span><span style="display:flex;"><span>mkswap /dev/vg01/swap
+</span></span></code></pre></div><p>Mount the created partitions:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>mount /dev/vg01/root /mnt
+</span></span><span style="display:flex;"><span>mkdir /mnt/boot
+</span></span><span style="display:flex;"><span>mount /dev/nvme0n1p1 /mnt/boot
+</span></span><span style="display:flex;"><span>swapon /dev/vg01/swap
+</span></span></code></pre></div><h2 id="install-base-system">
+  Install base system
+  <a class="anchor" href="#install-base-system">#</a>
+</h2>
+<p>Use <code>pacstrap</code> to install a base system:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>pacstrap /mnt base base-devel linux linux-firmware git sudo lvm2 xfsprogs networkmanager vim amd-ucode
+</span></span></code></pre></div><p>Append <code>dialog</code> if installing on a wireless connection</p>
+<h2 id="create-base-configuration">
+  Create base configuration
+  <a class="anchor" href="#create-base-configuration">#</a>
+</h2>
+<p>Generate a <code>/etc/fstab</code> file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>genfstab -U /mnt &gt;&gt; /mnt/etc/fstab
+</span></span></code></pre></div><p>Change root into the new system:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>arch-chroot /mnt
+</span></span></code></pre></div><p>Set the time zone:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>ln -sf /usr/share/zoneinfo/Europe/Amsterdam /etc/localtime
+</span></span><span style="display:flex;"><span>hwclock --systohc
+</span></span></code></pre></div><p>Generate localization:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>echo &#34;en_US.UTF-8 UTF-8&#34; &gt;&gt; /etc/locale.gen
+</span></span><span style="display:flex;"><span>echo &#34;en_US ISO-8859-1&#34; &gt;&gt; /etc/locale.gen
+</span></span><span style="display:flex;"><span>locale-gen
+</span></span><span style="display:flex;"><span>echo &#34;LANG=en_US.UTF-8&#34; &gt;&gt; /etc/locale.conf
+</span></span></code></pre></div><p>Set hostname and hosts file, while substituting HOSTNAME with your own hostname:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>echo &#34;HOSTNAME&#34; &gt;&gt; /etc/hostname
+</span></span><span style="display:flex;"><span>echo &#34;127.0.0.1	localhost&#34; &gt;&gt; /etc/hosts
+</span></span><span style="display:flex;"><span>echo &#34;::1	localhost&#34; &gt;&gt; /etc/hosts
+</span></span><span style="display:flex;"><span>echo &#34;127.0.1.1 HOSTNAME.localdomain	HOSTNAME&#34; &gt;&gt; /etc/hosts
+</span></span></code></pre></div><p>Add and configure users, while substituting <code>USERNAME</code> with your own username:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>passwd root
+</span></span><span style="display:flex;"><span>useradd -m USERNAME
+</span></span><span style="display:flex;"><span>usermod -aG wheel USERNAME
+</span></span><span style="display:flex;"><span>passwd USERNAME
+</span></span></code></pre></div><p>Enter <code>visudo</code> to edit the system rights, allowing root privilegs to users in the group wheel. Make the following line look like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>## Uncomment to allow members of group wheel to execute any command
+</span></span><span style="display:flex;"><span>%wheel ALL=(ALL) ALL\
+</span></span></code></pre></div><p>Enable networking with NetworkManager:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>systemctl enable --now NetworkManager.service
+</span></span></code></pre></div><h2 id="install-a-bootloader">
+  Install a bootloader
+  <a class="anchor" href="#install-a-bootloader">#</a>
+</h2>
+<p>Arch does not come with a bootloader preinstalled. One has to install and configure the bootloader to be able to boot a system. This page assumes the installation of systemd-boot as the default bootloader. This <a href="https://wiki.archlinux.org/index.php/Systemd-boot">Arch Wiki</a> page should be used as a reference.</p>
+<p>One should begin with installing the (optional) microcode for the CPU. Substitute <code>amd</code> with <code>intel</code> in the following line when using an Intel CPU:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>pacman -S amd-ucode
+</span></span></code></pre></div><p>Install systemd-boot:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>bootctl --path=/boot install
+</span></span></code></pre></div><p>Create a default loader configuration by creating <code>/boot/loader/loader.conf</code>. The content of this file should look like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>timeout         0
+</span></span><span style="display:flex;"><span>console-mode    max
+</span></span><span style="display:flex;"><span>default         00-*
+</span></span><span style="display:flex;"><span>auto-entries    1
+</span></span><span style="display:flex;"><span>editor          no
+</span></span></code></pre></div><p>One has to manually create boot entries for the boot loader. In a boot entry the system gets told what partition and partition type needs to be booted. A bootloader entry should be configured using the universal unique identifier of a disk (UUID). To avoid having to write down or remember the long UUID string, one can use the following code to pass the UUID of the root filesystem to a new boot entry:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>ls -l /dev/disk/by-uuid/ | grep nvme0n1p2 &gt;&gt; /boot/loader/entries/00-default.conf
+</span></span></code></pre></div><p>The file <code>/boot/loader/entries/00-default.conf</code> should look like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>lrwxrwxrwx 1 root root 15 May 17 12:00 XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX -&gt; ../../nvme0n1p2
+</span></span></code></pre></div><p>Make the default entry, /boot/loader/entries/00-default.conf, look like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>title		Arch
+</span></span><span style="display:flex;"><span>linux		/vmlinuz-linux
+</span></span><span style="display:flex;"><span>initrd		/amd-ucode.img
+</span></span><span style="display:flex;"><span>initrd		/initramfs-linux.img
+</span></span><span style="display:flex;"><span>options		cryptdevice=UUID=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX:cryptlvm root=/dev/vg01/root rw
+</span></span></code></pre></div><p>The UUID of the crypt device should refer to the LUKS partition, not the logical volume. Substitute <code>/amd-ucode.img</code> with <code>/intel-ucode.img</code> when using an Intel CPU.</p>
+<p>Edit /etc/mkinitcpio.conf config to allow the system to boot from a encrypted system. The line starting with &lsquo;HOOKS&rsquo; should look like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)
+</span></span></code></pre></div><p>Create file <code>/etc/pacman.d/hooks/100-systemd-boot.hook</code> to make sure systemd-boot updates the bootmanager whenever systemd or the kernel is updated:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>[Trigger]
+</span></span><span style="display:flex;"><span>Type = Package
+</span></span><span style="display:flex;"><span>Operation = Upgrade
+</span></span><span style="display:flex;"><span>Target = systemd
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[Action]
+</span></span><span style="display:flex;"><span>Description = Updating systemd-boot
+</span></span><span style="display:flex;"><span>When = PostTransaction
+</span></span><span style="display:flex;"><span>Exec = /usr/bin/bootctl update
+</span></span></code></pre></div><p>Compile a new initramfs image. This is needed when changing build hooks in mkinitcpio.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>mkinitcpio -P
+</span></span></code></pre></div><h2 id="reboot-to-installation">
+  Reboot to installation
+  <a class="anchor" href="#reboot-to-installation">#</a>
+</h2>
+<p>The system is now installed with a basic configuration. Enter these commands to reboot in the freshly installed system:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>exit
+</span></span><span style="display:flex;"><span>umount -R /mnt
+</span></span><span style="display:flex;"><span>reboot
+</span></span></code></pre></div><p>The system should boot into a password prompt to unlock the system.</p>
+<h2 id="network-setup">
+  Network setup
+  <a class="anchor" href="#network-setup">#</a>
+</h2>
+<p>The usage of networkmanager is recommended for desktops and laptops. It works well together with software developed by Red Hat or Canonical. Systemd-networkd is well suited for servers.</p>
+<h3 id="networkmanager">
+  NetworkManager
+  <a class="anchor" href="#networkmanager">#</a>
+</h3>
+<p>Enable networking with NetworkManager with command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>sudo systemctl enable --now NetworkManager.service
+</span></span></code></pre></div><h3 id="systemd-networkd">
+  Systemd-networkd
+  <a class="anchor" href="#systemd-networkd">#</a>
+</h3>
+<p>Enable networking with systemd. Systemd is builtin with Arch Linux, so no need for additional packages. Well suited for servers.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>sudo systemctl enable --now systemd-networkd.service systemd-resolved.service
+</span></span></code></pre></div><p>List network devices with <code>networkctl list</code> and note the name of the NIC that&rsquo;s going to be used.<br>
+Create file <code>/etc/systemd/network/20-wired.network</code> with this content:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>[Match]
+</span></span><span style="display:flex;"><span>Name=enp1s0
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[Network]
+</span></span><span style="display:flex;"><span>DHCP=yes
+</span></span></code></pre></div><p>Restart the network service:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>sudo systemctl restart systemd-networkd
+</span></span></code></pre></div><h3 id="check-connectivity">
+  Check connectivity
+  <a class="anchor" href="#check-connectivity">#</a>
+</h3>
+<p>Check if the network connection is working:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>ping 1.1.1.1 -c 3
+</span></span></code></pre></div><h2 id="ssh-setup">
+  SSH Setup
+  <a class="anchor" href="#ssh-setup">#</a>
+</h2>
+<h3 id="install-ssh">
+  Install SSH
+  <a class="anchor" href="#install-ssh">#</a>
+</h3>
+<p>Install ssh on one&rsquo;s system:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>yay -S openssh
+</span></span></code></pre></div><h3 id="key-creation">
+  Key creation
+  <a class="anchor" href="#key-creation">#</a>
+</h3>
+<p>Create a keypair on CLIENT machine:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>ssh-keygen -b 4096 -C &#34;PUT A COMMENT HERE TO RECOGNIZE THIS PARTICULAR KEY&#34;
+</span></span></code></pre></div><p>Copy public key to TARGET machine:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>ssh-copy-id user@host
+</span></span></code></pre></div><h3 id="sshd-configuration">
+  SSHD configuration
+  <a class="anchor" href="#sshd-configuration">#</a>
+</h3>
+<p>Edit file /etc/ssh/sshd_config. Check and uncomment the following lines if necessary:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span># Disable login for root user on host
+</span></span><span style="display:flex;"><span>PermitRootLogin			no
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span># Allow key based authentication
+</span></span><span style="display:flex;"><span>PubkeyAuthentication	yes
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span># Disable forwarding of X11 framebuffer for security
+</span></span><span style="display:flex;"><span>X11Forwarding			no
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span># Disable password based authentication
+</span></span><span style="display:flex;"><span>PasswordAuthentication	no
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span># Ban after X amount of failed logins
+</span></span><span style="display:flex;"><span>MaxAuthTries			3
+</span></span></code></pre></div><p>Check config and start or restart ssh server:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>sshd -t
+</span></span><span style="display:flex;"><span>sudo systemctl enable --now sshd.service
+</span></span><span style="display:flex;"><span>sudo systemctl restart sshd.service
+</span></span></code></pre></div><h2 id="ntp-time-sync">
+  NTP time sync
+  <a class="anchor" href="#ntp-time-sync">#</a>
+</h2>
+<p>NTP synchronization is done automatically on Arch Linux. One might need to change the default timezone to get a correct read on the current time. Check the current time and set a correct timezone with these commands:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>timedatectl status
+</span></span><span style="display:flex;"><span>timedatectl list-timezones
+</span></span><span style="display:flex;"><span>timedatectl set-timezone ZONE/SUBZONE
+</span></span></code></pre></div><h2 id="access-aur-with-yay">
+  Access AUR with yay
+  <a class="anchor" href="#access-aur-with-yay">#</a>
+</h2>
+<p>The Arch User Repository (AUR) allows one to access a lot of software without the need to maintain additional repositories. Keep in mind that software from the AUR is not vetted by official maintainers. Install yay with these commands:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>git clone https://aur.archlinux.org/yay.git
+</span></span><span style="display:flex;"><span>cd yay
+</span></span><span style="display:flex;"><span>makepkg -si
+</span></span></code></pre></div><h2 id="faster-mirrors-with-reflector">
+  Faster mirrors with Reflector
+  <a class="anchor" href="#faster-mirrors-with-reflector">#</a>
+</h2>
+<p>Reflector is a python tool to filter and sort the most recent and fastest Arch mirrors. Setup with the following commands:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>yay -S reflector
+</span></span></code></pre></div><p>Change file <code>/etc/xdg/reflector/reflector.conf</code> to set preferences. Personal file which selects the most recent 20 mirrors and makes sure the fastest one gets picked first:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>--save /etc/pacman.d/mirrorlist
+</span></span><span style="display:flex;"><span>--protocol https
+</span></span><span style="display:flex;"><span>--latest 20
+</span></span><span style="display:flex;"><span>--sort rate
+</span></span></code></pre></div><p>Sort mirrors manually with the following command:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>sudo systemctl start reflector.service
+</span></span></code></pre></div><p>Enable a weekly synchronization:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>sudo systemctl enable --now reflector.timer
+</span></span></code></pre></div><p>Edit timer options:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>sudo systemctl edit --full reflector.timer
+</span></span></code></pre></div><h3 id="reflector-pacman-hook">
+  Reflector Pacman hook
+  <a class="anchor" href="#reflector-pacman-hook">#</a>
+</h3>
+<p>To sort mirrors on mirrorlist update create file <code>/etc/pacman.d/hooks/mirrorupgrade.hook</code> and make it look like this:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-plaintext" data-lang="plaintext"><span style="display:flex;"><span>[Trigger]
+</span></span><span style="display:flex;"><span>Operation = Upgrade
+</span></span><span style="display:flex;"><span>Type = Package
+</span></span><span style="display:flex;"><span>Target = pacman-mirrorlist
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>[Action]
+</span></span><span style="display:flex;"><span>Description = Updating pacman-mirrorlist with reflector and removing pacnew...
+</span></span><span style="display:flex;"><span>When = PostTransaction
+</span></span><span style="display:flex;"><span>Depends = reflector
+</span></span><span style="display:flex;"><span>Exec = /bin/sh -c &#39;systemctl start reflector.service; [ -f /etc/pacman.d/mirrorlist.pacnew ] &amp;&amp; rm /etc/pacman.d/mirrorlist.pacnew&#39;
+</span></span></code></pre></div></article>
+ 
+      
+
+      <footer class="book-footer">
+        
+  <div class="flex flex-wrap justify-between">
+
+
+
+
+
+</div>
+
+
+
+  <script>(function(){function e(e){const t=window.getSelection(),n=document.createRange();n.selectNodeContents(e),t.removeAllRanges(),t.addRange(n)}document.querySelectorAll("pre code").forEach(t=>{t.addEventListener("click",function(){if(window.getSelection().toString())return;e(t.parentElement),navigator.clipboard&&navigator.clipboard.writeText(t.parentElement.textContent)})})})()</script>
+
+
+ 
+        
+      </footer>
+
+      
+  
+  <div class="book-comments">
+
+</div>
+  
+ 
+
+      <label for="menu-control" class="hidden book-menu-overlay"></label>
+    </div>
+
+    
+    <aside class="book-toc">
+      <div class="book-toc-content">
+        
+  
+<nav id="TableOfContents">
+  <ul>
+    <li><a href="#getting-started">Getting started</a></li>
+    <li><a href="#prerequisites">Prerequisites</a></li>
+    <li><a href="#create-storage-layout">Create storage Layout</a></li>
+    <li><a href="#install-base-system">Install base system</a></li>
+    <li><a href="#create-base-configuration">Create base configuration</a></li>
+    <li><a href="#install-a-bootloader">Install a bootloader</a></li>
+    <li><a href="#reboot-to-installation">Reboot to installation</a></li>
+    <li><a href="#network-setup">Network setup</a>
+      <ul>
+        <li><a href="#networkmanager">NetworkManager</a></li>
+        <li><a href="#systemd-networkd">Systemd-networkd</a></li>
+        <li><a href="#check-connectivity">Check connectivity</a></li>
+      </ul>
+    </li>
+    <li><a href="#ssh-setup">SSH Setup</a>
+      <ul>
+        <li><a href="#install-ssh">Install SSH</a></li>
+        <li><a href="#key-creation">Key creation</a></li>
+        <li><a href="#sshd-configuration">SSHD configuration</a></li>
+      </ul>
+    </li>
+    <li><a href="#ntp-time-sync">NTP time sync</a></li>
+    <li><a href="#access-aur-with-yay">Access AUR with yay</a></li>
+    <li><a href="#faster-mirrors-with-reflector">Faster mirrors with Reflector</a>
+      <ul>
+        <li><a href="#reflector-pacman-hook">Reflector Pacman hook</a></li>
+      </ul>
+    </li>
+  </ul>
+</nav>
+
+
+ 
+      </div>
+    </aside>
+    
+  </main>
+
+  
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
