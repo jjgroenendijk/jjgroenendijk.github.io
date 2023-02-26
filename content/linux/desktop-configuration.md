@@ -29,36 +29,7 @@ Don't forget to change the username in the override file.
 Install needed packages:
 
 ```bash
-yay -S alacritty nerd-fonts-roboto-mono
-```
-
-Copy a default config as a starting point:
-
-```bash
-cp /usr/share/doc/alacritty/example/alacritty.yml ~/.config/alacritty/alacritty.yml
-```
-
-To change the default terminal font to a patched Roboto font one should edit file: `~/.config/alacritty/alacritty.yml` accordingly:
-
-```bash
-font:
-	normal:
-  	family: RobotoMono Nerd Font Mono
-  	style: Regular
-
-	bold:
-  	family: RobotoMono Nerd Font Mono
-  	style: Bold
-
-	italic:
-  	family: RobotoMono Nerd Font Mono
-  	style: Italic
-
-	bold_italic:
-  	family: RobotoMono Nerd Font Mono
-  	style: Bold Italic
-
-	size: 11
+yay -S foot ttf-iosevka-nerd
 ```
 
 ## Shell setup with ZSH
@@ -66,7 +37,7 @@ font:
 Install needed packages:
 
 ```bash
-yay -S zsh zsh-autosuggestions zsh-syntax-hightlighting zsh-theme-powerlevel10k-git
+pacman -S zsh zsh-autosuggestions zsh-syntax-hightlighting zsh-theme-powerlevel10k
 ```
 
 Change default shell:
@@ -90,7 +61,7 @@ echo 'source /usr/share/zsh-theme-powerlevel10k/powerlevel10k.zsh-theme' >>~/.zs
 Sway is a tiling Wayland compositor and personally preferred over big DE's like Gnome or KDE. Install Sway:
 
 ```bash
-yay -S sway
+yay -S sway swaybg
 ```
 
 Start sway after login (with the assumption that ZSH is the default shell):
@@ -141,5 +112,5 @@ yay -S libva-mesa-driver mesa-vdpau radeontop
 Packages for personal use on desktops and laptops:
 
 ```bash
-yay -S youtube-dl atomicparsley firefox firefox-ublock-origin
+yay -S youtube-dl mutagen firefox firefox-ublock-origin
 ```

@@ -187,24 +187,23 @@ Edit /etc/mkinitcpio.conf config to allow the system to boot from a encrypted sy
 HOOKS=(base udev autodetect keyboard keymap consolefont modconf block encrypt lvm2 filesystems fsck)
 ```
 
-Create file `/etc/pacman.d/hooks/100-systemd-boot.hook` to make sure systemd-boot updates the bootmanager whenever systemd or the kernel is updated:
+When using systemd-boot and a package update is installed for the boatloader, one must update the bootloader files.
+Execute a manual update:
 
-```plaintext
-[Trigger]
-Type = Package
-Operation = Upgrade
-Target = systemd
+```bash
+bootctl update
+```
 
-[Action]
-Description = Updating systemd-boot
-When = PostTransaction
-Exec = /usr/bin/bootctl update
+To enable automatic updates for when systemd-boot gets updated:
+
+```bash
+systemctl enable --now systemd-boot-update.service
 ```
 
 Compile a new initramfs image. This is needed when changing build hooks in mkinitcpio.
 
 ```plaintext
-mkinitcpio -P
+mkinitcpio --allpresets
 ```
 
 ## Reboot to installation
@@ -271,7 +270,7 @@ ping 1.1.1.1 -c 3
 Install ssh on one's system:
 
 ```plaintext
-yay -S openssh
+pacman -S openssh
 ```
 
 ### Key creation
@@ -342,7 +341,7 @@ makepkg -si
 Reflector is a python tool to filter and sort the most recent and fastest Arch mirrors. Setup with the following commands:
 
 ```plaintext
-yay -S reflector
+pacman -S reflector
 ```
 
 Change file `/etc/xdg/reflector/reflector.conf` to set preferences. Personal file which selects the most recent 20 mirrors and makes sure the fastest one gets picked first:
