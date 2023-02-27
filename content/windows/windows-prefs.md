@@ -1,5 +1,27 @@
-Here's a quick dump of my personal Windows preferences;
+# Setting Windows preferences the quick way
+Here's a quick dump of my personal Windows preferences.
 
+## Windows 11
+Building current configuration for virtual machines and personal use. Will update whenever.
+```powershell
+# Restore old context menu (right click explorer)
+New-Item -Path "HKCU:\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Value "" -Force
+
+# Move taskbar icon alignment to the left
+Set-ItemProperty -Path "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAl" -Value 0
+
+# Remove chat icon from taskbar
+Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarMn" -Value 0
+
+# Garbage collection
+[gc]::collect()
+
+# Restart explorer.exe to make the changes visible
+Stop-Process -ProcessName "explorer"
+```
+
+## Windows 10
+This is old. Havent used Windows 10 in a while.
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process
 
