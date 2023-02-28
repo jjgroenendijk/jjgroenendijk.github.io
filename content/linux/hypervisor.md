@@ -41,7 +41,7 @@ systemctl restart firewalld
 ```
 
 Open virt-manager. Go to Edit -> Connection Details -> Virtual Networks. Open Default network. Enable Autostart to start
-the default network with libvirt.
+the default network with libvirt. Don't forget to click on Apply.
 
 ## Ryzen specific
 Windows virtual machines might fail to boot on Ryzen platforms. Execute the following command to fix the instant VM crash:
