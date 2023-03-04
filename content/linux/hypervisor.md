@@ -49,23 +49,119 @@ Windows virtual machines might fail to boot on Ryzen platforms. Execute the foll
 echo 'options kvm ignore_msrs=1' | sudo tee -a /etc/modprobe.d/kvm.conf
 ```
 
-## Windows guest optimization
+## Windows client template setup
+
+### Set correct storage type
+Windows does not have the VirtIO storage drivers integrated.
+Make sure to download the [VirtIO ISO](https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md) first and attach them to the VM
+when setting up Windows. Make sure to use the VirtIO drive type when configuring the storage for the Windows Guest.
+During installation the Windows setup won't find the storage. Let Windows search the attached virtual CD-ROM and install
+the VIOSTOR drivers for the appropriate version of Windows.
+
+### Boot to Audit mode
 To install a Windows guest quickly, enter `CTRL+SHIFT+F3` at the first setup page after installing.
 This way, one enters the audit mode and is able to quickly get to the desktop.
 
+### Install VM guest tools
 For a better experience with interacting with the virtual machine, install the VirtIO drivers (guest tools). Also needed
 to share the clipboard between the host and the guest. Which might be useful for copying scripts and urls.
 Drivers are available here: [https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md](https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md).
+Use the command below to install the guest tools.
+The driveletter might differ on other systems.
+```PowerShell
+msiexec /i "E:\virtio-win-gt-x64.msi" /qn ADDLOCAL=ALL /forcerestart
+```
 
-A Windows guest will probably use a lot of cpu cycles and memory in comparison to Linux based guests on the hypervisor
-host. Here are a few quick commands to optimize Windows running in a virtual environment.
+### Setup remote access
+When one is logged in audit mode in Windows, one uses the builtin account "Administrator". This account is blocked from
+using SSH or other remote management tools.
+Going in and out the VM is cumbersome, so the first thing to do is setting up a remote administrator account.
+Execute the following command in the VM to setup an administrator account for remote management. **Never do this in
+production!**. This is insecure and only useful for a homelab.
+```PowerShell
+New-LocalUser -Name "remote" -Password (ConvertTo-SecureString -AsPlainText "InsecurePassword" -Force) -AccountNeverExpires -PasswordNeverExpires
+Add-LocalGroupMember -Group "Administrators" -Member "remote"
+```
+Hide the created user in the login screen:
+```PowerShell
+New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "SpecialAccounts" -Force
+New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts" -Name "UserList" -Force
+New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList" -Name "remote" -Value 0 -PropertyType "DWord" -Force
+```
 
-Disable Hibernation, a VM does not need to write RAM to disk for hibernation. Any decent hypervisor can do it for a VM
-without the guest OS intervening.
+Use the following commands to setup a SSH server:
+ ```PowerShell
+Add-WindowsCapability -Online -Name "OpenSSH.Server~~~~0.0.1.0"
+Set-Service -Name "sshd" -StartupType "Automatic"
+Start-Service "sshd"
+```
+
+One should run this on a local computer to copy the ssh key to the server and add it to the local ssh agent:
+```Bash
+ssh-keygen -t ed25519 -C "Windows_Server" -f "$HOME/.ssh/Windows_Server"
+ssh-copy-id -s -i "$HOME/.ssh/Windows_Server.pub" remote@HOST
+eval "$(ssh-agent -s)"
+ssh-add "$HOME/.ssh/Windows_Server"
+chmod 0600 "$HOME/.ssh/Windows_Server"
+```
+
+One should configure SSH to use the specific key that has just been created.
+Otherwise one has to specify the SSH key to use when connecting to the installation.
+Check the IP address of the Windows Server installation.
+Edit the SSH config file on the Linux host to specify the key and the IP address.
+Later on the hostname will be used instead of the IP address.
+Add this to the .ssh/config file:
+```Bash
+Host administrator@IP-ADDRESS
+IdentityFile "~/.ssh/Windows_Server"
+```
+
+Now login on the server again. Change these lines in `%programdata%\ssh\sshd_config`.
+You might want to install Chocolatey and vim first.
+Code snippet below reflects the correct configuration.
+```Bash
+AuthenticationMethods publickey
+PubkeyAuthentication yes
+...
+PasswordAuthentication no
+PermitEmptyPasswords no
+...
+#Match Group administrators
+#       AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys
+```
+Afterwards, run `Restart-Service "sshd"` on the Windows Server.
+
+### Update PowerShell
+When connecting over SSH the first time, one gets the old CMD shell.
+Make sure to enter a PowerShell shell with this command:
+```PowerShell
+powershell.exe
+```
+Update PowerShell to the latest version and set as default shell for SSH sessions:
+```PowerShell
+iex "& { $(irm https://aka.ms/install-powershell.ps1) } -UseMSI"
+New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Program Files\PowerShell\7\pwsh.exe" -PropertyType String -Force
+```
+### Update Windows
+Update Windows (this doesn't work reliably yet in audit mode over SSH).
+It **should** work with these commands, but ymmv.
+```PowerShell
+Install-PackageProvider -Name NuGet -Force
+Install-Module PSWindowsUpdate -Force
+Add-WUServiceManager -MicrosoftUpdate -Confirm:$false
+Invoke-WUJob -Taskname "Windows-Update-Task" -Computer $HOSTNAME -RunNow -Confirm:$false -Verbose -Script {Install-WindowsUpdate -MicrosoftUpdate -NotCategory "SilverLight" -NotTitle "Preview" -AcceptAll -AutoReboot | Out-File C:\PSWindowsUpdate.log}
+```
+--->
+
+### Disable Hibernation
+a VM does not need to write RAM to disk for hibernation. Any decent hypervisor can do it for a VM.
+A Windows guest will probably use a lot of cpu cycles and memory in comparison to Linux based guests on the hypervisor host.
+Here are a few quick commands to optimize Windows running in a virtual environment without the guest OS intervening.
 ```PowerShell
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name HibernateEnabled -Value 0
 ```
 
+### Disable unneeded Windows Services
 Disable some Windows System services that are not needed in a VM:
 ```PowerShell
 $disableServicesVM = @(
@@ -84,18 +180,46 @@ foreach ($service in $disableServicesVM) {
 }
 ```
 
-Remove Windows Media Player:
+### Remove Windows Media Player
+To save a little storage in the VM one might remove Windows Media Player.
 ```PowerShell
 Disable-WindowsOptionalFeature -Online -FeatureName WindowsMediaPlayer -NoRestart
 Get-WindowsPackage -Online -PackageName "*Windows-mediaplayer*" |
 ForEach-Object {Remove-WindowsPackage -PackageName $_.PackageName -Online -ErrorAction SilentlyContinue -NoRestart}
 ```
 
-Remove OneDrive:
+### Install a package manager
+Install Chocolatey package manager. Winget isn't supported yet on Windows Server.
+After installing Chocolatey, install Sysinternals and Vim:
+```PowerShell
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointMana    ger]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -b    or 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://commun    ity.chocolatey.org/install.ps1'))
+choco install sysinternals vim --params "'/NoDesktopShortcuts /NoContextmenu'"     -y
+```
+
+### Remove OneDrive
+Removing OneDrive doesn't seem to work yet in audit mode. Normally one would delete OneDrive with these commands:
 ```PowerShell
 Get-service -Name "OneSyncSvc_*" | Stop-Service
 Stop-Process -Name "OneDrive"
 Remove-Item "$env:USERPROFILE\OneDrive" -Recurse -Force
 Remove-Item -Path "HKCU:\Software\Microsoft\OneDrive" -Recurse -Force
 winget uninstall onedrive
+```
+
+### Cleanup and sysprep
+Execute this to cleanup the machine:
+```PowerShell
+Get-ChildItem -Path ‘HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches’ |
+New-ItemProperty -Name StateFlags001 -Value 2 -PropertyType DWORD
+Start-Process -FilePath CleanMgr.exe -ArgumentList ‘/sagerun:1’ -Wait
+```
+Check the health of the system:
+```PowerShell
+Repair-WindowsImage -Online -RestoreHealth; `
+Start-Process -FilePath "C:\Windows\System32\sfc.exe" -ArgumentList '/scannow' -Wait -WindowStyle Hidden; `
+Repair-Volume  -DriveLetter C -Scan
+```
+Sysprep the machine (this doesn't seem to work over SSH):
+```PowerShell
+Start-Process -FilePath "C:\Windows\System32\Sysprep\Sysprep.exe" -ArgumentList "/oobe /shutdown"
 ```
