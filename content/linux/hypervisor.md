@@ -113,7 +113,7 @@ Edit the SSH config file on the Linux host to specify the key and the IP address
 Later on the hostname will be used instead of the IP address.
 Add this to the .ssh/config file:
 ```Bash
-Host administrator@IP-ADDRESS
+Host remote@IP-ADDRESS
 IdentityFile "~/.ssh/Windows_Server"
 ```
 
@@ -144,13 +144,51 @@ iex "& { $(irm https://aka.ms/install-powershell.ps1) } -UseMSI"
 New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Program Files\PowerShell\7\pwsh.exe" -PropertyType String -Force
 ```
 ### Update Windows
-Update Windows (this doesn't work reliably yet in audit mode over SSH).
-It **should** work with these commands, but ymmv.
+Windows somehow does not have a way to update over a remote connection.
+Why Microsoft is leaving this functionality purposefully out of Windows I cannot explain.
+To get around these limitations, one can install the PSWindowsupdate library (or module), script a update method and automate the script using task scheduler.
+Be aware that this gives the end user a blue powershell popup everytime someone with administrator privileges logs in.
 ```PowerShell
-Install-PackageProvider -Name NuGet -Force
-Install-Module PSWindowsUpdate -Force
+# Set basic info for script and task
+$ScriptName = "Windows Updater"
+$ScriptPath = "\Custom Scripts"
+$ScriptDirectory = "$($env:programdata)\Scripts"
+
+# Write here what script should contain
+$ScriptContent = @'
+if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+    Install-PackageProvider -Name NuGet -Force
+}
+
+# Check if PSWindowsUpdate module is installed and install it if not
+if (-not (Get-Module -Name PSWindowsUpdate -ListAvailable -ErrorAction SilentlyContinue)) {
+    Install-Module PSWindowsUpdate -Force
+}
+
 Add-WUServiceManager -MicrosoftUpdate -Confirm:$false
-Invoke-WUJob -Taskname "Windows-Update-Task" -Computer $HOSTNAME -RunNow -Confirm:$false -Verbose -Script {Install-WindowsUpdate -MicrosoftUpdate -NotCategory "SilverLight" -NotTitle "Preview" -AcceptAll -AutoReboot | Out-File C:\PSWindowsUpdate.log}
+Get-WindowsUpdate -Install -AcceptAll -AutoReboot
+'@
+
+# Create folder in desired location
+if (!(Test-Path $ScriptDirectory)) {
+    New-Item -ItemType Directory -Path $ScriptDirectory
+}
+
+# Write script content to file
+Set-Content -Path "$ScriptDirectory\$ScriptName.ps1" -Value "$ScriptContent"
+
+# Unregister old script
+Unregister-ScheduledTask -TaskName "$ScriptName" -Confirm:$false
+
+# Create scheduled task to execute "package-updater.ps1" on logon as any user with admin privileges
+$principal = New-ScheduledTaskPrincipal -GroupId "Administrators" -RunLevel Highest
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$ScriptDirectory\$ScriptName.ps1`""
+$trigger = New-ScheduledTaskTrigger -AtLogon
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+Register-ScheduledTask -TaskName "$ScriptName" -taskpath "$ScriptPath" -Action $action -Trigger $trigger -Settings $settings -Principal $principal
+
+# Start the task immediately
+Start-ScheduledTask -TaskName $ScriptName
 ```
 
 ### Disable Hibernation
@@ -196,6 +234,27 @@ Set-ExecutionPolicy Bypass -Scope Process -Force;
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072;
 iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 choco install sysinternals vim --params "'/NoDesktopShortcuts /NoContextmenu'" -y
+```
+
+### Package updater
+To automatically update all installed packages from chocolatey, install a custom script that checks for updates every logon:
+```PowerShell
+# Create script directory
+$scriptPath = "$($env:programdata)\scripts"
+if (!(Test-Path $scriptPath)) {
+    New-Item -ItemType Directory -Path $scriptPath
+}
+
+# Create package-updater.ps1
+$scriptFile = "$toolsPath\package-updater.ps1"
+Set-Content -Path $scriptFile -Value "cup all -y"
+
+# Create scheduled task to execute "package-updater.ps1" on logon as any user with admin privileges
+$principal = New-ScheduledTaskPrincipal -GroupId "Administrators" -RunLevel Highest
+$action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-ExecutionPolicy Bypass -File `"$scriptFile`""
+$trigger = New-ScheduledTaskTrigger -AtLogon
+$settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
+Register-ScheduledTask -TaskName "Package updater" -taskpath "\custom scripts" -Action $action -Trigger $trigger -Settings $settings -Principal $principal
 ```
 
 ### Remove OneDrive
