@@ -53,18 +53,18 @@ echo 'options kvm ignore_msrs=1' | sudo tee -a /etc/modprobe.d/kvm.conf
 
 ### Set correct storage type
 Windows does not have the VirtIO storage drivers integrated.
-Make sure to download the [VirtIO ISO](https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md) first and attach them to the VM
-when setting up Windows. Make sure to use the VirtIO drive type when configuring the storage for the Windows Guest.
-During installation the Windows setup won't find the storage. Let Windows search the attached virtual CD-ROM and install
-the VIOSTOR drivers for the appropriate version of Windows.
+Make sure to download the [VirtIO ISO](https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md) first and attach them to the VM when setting up Windows.
+Make sure to use the VirtIO drive type when configuring the storage for the Windows Guest.
+During installation the Windows setup won't find the storage. Let Windows search the attached virtual CD-ROM and install the VIOSTOR drivers for the appropriate version of Windows.
 
 ### Boot to Audit mode
 To install a Windows guest quickly, enter `CTRL+SHIFT+F3` at the first setup page after installing.
 This way, one enters the audit mode and is able to quickly get to the desktop.
 
 ### Install VM guest tools
-For a better experience with interacting with the virtual machine, install the VirtIO drivers (guest tools). Also needed
-to share the clipboard between the host and the guest. Which might be useful for copying scripts and urls.
+For a better experience with interacting with the virtual machine, install the VirtIO drivers (guest tools).
+Also needed to share the clipboard between the host and the guest.
+Which might be useful for copying scripts and urls.
 Drivers are available here: [https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md](https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md).
 Use the command below to install the guest tools.
 The driveletter might differ on other systems.
@@ -73,11 +73,12 @@ msiexec /i "E:\virtio-win-gt-x64.msi" /qn ADDLOCAL=ALL /forcerestart
 ```
 
 ### Setup remote access
-When one is logged in audit mode in Windows, one uses the builtin account "Administrator". This account is blocked from
-using SSH or other remote management tools.
+When one is logged in audit mode in Windows, one uses the builtin account "Administrator".
+This account is blocked from using SSH or other remote management tools.
 Going in and out the VM is cumbersome, so the first thing to do is setting up a remote administrator account.
-Execute the following command in the VM to setup an administrator account for remote management. **Never do this in
-production!**. This is insecure and only useful for a homelab.
+Execute the following command in the VM to setup an administrator account for remote management.
+**Never do this in production!**.
+This is insecure and only useful for a homelab.
 ```PowerShell
 New-LocalUser -Name "remote" -Password (ConvertTo-SecureString -AsPlainText "InsecurePassword" -Force) -AccountNeverExpires -PasswordNeverExpires
 Add-LocalGroupMember -Group "Administrators" -Member "remote"
@@ -90,7 +91,7 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlo
 ```
 
 Use the following commands to setup a SSH server:
- ```PowerShell
+```PowerShell
 Add-WindowsCapability -Online -Name "OpenSSH.Server~~~~0.0.1.0"
 Set-Service -Name "sshd" -StartupType "Automatic"
 Start-Service "sshd"
@@ -151,7 +152,6 @@ Install-Module PSWindowsUpdate -Force
 Add-WUServiceManager -MicrosoftUpdate -Confirm:$false
 Invoke-WUJob -Taskname "Windows-Update-Task" -Computer $HOSTNAME -RunNow -Confirm:$false -Verbose -Script {Install-WindowsUpdate -MicrosoftUpdate -NotCategory "SilverLight" -NotTitle "Preview" -AcceptAll -AutoReboot | Out-File C:\PSWindowsUpdate.log}
 ```
---->
 
 ### Disable Hibernation
 a VM does not need to write RAM to disk for hibernation. Any decent hypervisor can do it for a VM.
@@ -165,15 +165,15 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Power" -Name Hibe
 Disable some Windows System services that are not needed in a VM:
 ```PowerShell
 $disableServicesVM = @(
-    "SysMain"        # Preload apps in memory
-    "Spooler"        # Print Spooler
-    "WerSvc"         # Windows Error Reporting
-    "MapsBroker"     # Windows Maps Downloader
-    "XblAuthManager" # Xbox (1/4)
-    "XblGameSave"    # Xbox (2/4)
-    "XboxGipSvc"     # Xbox (3/4)
-    "XboxNetApiSvc"  # Xbox (4/4)
-)
+        "SysMain"        # Preload apps in memory
+        "Spooler"        # Print Spooler
+        "WerSvc"         # Windows Error Reporting
+        "MapsBroker"     # Windows Maps Downloader
+        "XblAuthManager" # Xbox (1/4)
+        "XblGameSave"    # Xbox (2/4)
+        "XboxGipSvc"     # Xbox (3/4)
+        "XboxNetApiSvc"  # Xbox (4/4)
+        )
 
 foreach ($service in $disableServicesVM) {
     Stop-Service -Name $service; Set-Service -Name $service -StartupType Disabled
@@ -192,8 +192,10 @@ ForEach-Object {Remove-WindowsPackage -PackageName $_.PackageName -Online -Error
 Install Chocolatey package manager. Winget isn't supported yet on Windows Server.
 After installing Chocolatey, install Sysinternals and Vim:
 ```PowerShell
-Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointMana    ger]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -b    or 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://commun    ity.chocolatey.org/install.ps1'))
-choco install sysinternals vim --params "'/NoDesktopShortcuts /NoContextmenu'"     -y
+Set-ExecutionPolicy Bypass -Scope Process -Force;
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072;
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+choco install sysinternals vim --params "'/NoDesktopShortcuts /NoContextmenu'" -y
 ```
 
 ### Remove OneDrive
@@ -206,7 +208,7 @@ Remove-Item -Path "HKCU:\Software\Microsoft\OneDrive" -Recurse -Force
 winget uninstall onedrive
 ```
 
-### Cleanup and sysprep
+### Cleanup and health check
 Execute this to cleanup the machine:
 ```PowerShell
 Get-ChildItem -Path ‘HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches’ |
@@ -215,11 +217,40 @@ Start-Process -FilePath CleanMgr.exe -ArgumentList ‘/sagerun:1’ -Wait
 ```
 Check the health of the system:
 ```PowerShell
-Repair-WindowsImage -Online -RestoreHealth; `
-Start-Process -FilePath "C:\Windows\System32\sfc.exe" -ArgumentList '/scannow' -Wait -WindowStyle Hidden; `
+Repair-WindowsImage -Online -RestoreHealth
+Start-Process -FilePath "C:\Windows\System32\sfc.exe" -ArgumentList '/scannow' -Wait -WindowStyle Hidden
 Repair-Volume  -DriveLetter C -Scan
 ```
+Zeroing the disk, which is important for shrinking the file size of the VM storage file.
+```PowerShell
+sdelete -z C:
+```
+
+### Sysprep
 Sysprep the machine (this doesn't seem to work over SSH):
 ```PowerShell
 Start-Process -FilePath "C:\Windows\System32\Sysprep\Sysprep.exe" -ArgumentList "/oobe /shutdown"
+```
+If this doesn't work over SSH, then open the sysprep utility manually.
+Set system cleanup action to: Enter System Out-Of-Box Experience (OOBE).
+Leave the generalized tickbox unticked (unless template will be used on another machine/hypervisor).
+Set shutdown option to: Shutdown
+Click on OK.
+The system will now prepare itself for a new deployment.
+If the machine is booted again, the sysprep will have to run again.
+
+### Backup the template
+Backing up the template is simply done by copying the storage file.
+To apply zstd compression to the vm storage file, use this:
+```Bash
+tar -C "/STORAGE/DIRECTORY" -acvf windows-template.tar.zst STORAGE-FILE.qcow2
+```
+
+### Shrink template size
+After zero-ing the disk and making a backup, the disk size of the VM can be shrinked.
+This can save a lot of storage. Zstd compression is way faster and uses less space then the standard zlib compression.
+So to save time and space we use zstd compression.
+Execute the following commands:
+```PowerShell
+qemu-img convert -c -O qcow2 compression_type=zstd win11.qcow2 win11-compressed.qcow2
 ```
