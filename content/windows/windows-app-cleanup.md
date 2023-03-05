@@ -3,41 +3,31 @@ Execute following script as administrator to remove all but whitelisted apps. Se
 Use with caution. Everything not defined in whitelist will be removed.
 
 ```powershell
-Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
-
-$AppWhitelist = @(
+$AppWhiteList = @(
     "Microsoft.DesktopAppInstaller"
     "Microsoft.WindowsTerminal"
     "Microsoft.WindowsStore"
-    "Microsoft.WindowsCommunicationsApps"
-    "Microsoft.WindowsCalculator"
-    "Microsoft.Windows.Photos"
-    "Microsoft.WindowsAlarms"
-    "Microsoft.WindowsCamera"
-    "Microsoft.ScreenSketch"
+    "Microsoft.MicrosoftStickyNotes"
     "Microsoft.Paint"
-    )
+    "Microsoft.ScreenSketch"
+    "Microsoft.SecHealthUI"
+    "Microsoft.StorePurchaseApp"
+    "Microsoft.VCLibs.140.00"
+    "Microsoft.Windows.Photos"
+    "Microsoft.WindowsCalculator"
+    "microsoft.windowscommunicationsapps"
+    "Microsoft.WindowsNotepad"
+)
 
-$InstalledApps = Get-AppxPackage -AllUsers |
-Where-Object {$AppWhitelist -notcontains $_.Name}
-
+$InstalledApps = (Get-AppxPackage -AllUsers | Where-Object {$AppWhiteList -notcontains $_.Name}).PackageFullName
 Foreach ($InstalledApp in $InstalledApps) {
-    $terminator = Remove-AppPackage -AllUsers -Package $InstalledApp.PackageFullname -verbose:$false -ErrorAction SilentlyContinue | Out-Null
-    if($?) {
-        write-output "Yeeted :) $InstalledApp.PackageFullname"
-    }
-    else {
-        write-output "Stays :( $InstalledApp.PackageFullname"
-    }
-} 
+    Write-Output "Yeeting: $($InstalledApp)"
+    Remove-AppxPackage -AllUsers -Package $InstalledApp
+}
 
-$ProvisionedApps = Get-AppxProvisionedPackage -Online 
-| Where-Object {$AppWhitelist -notcontains $_.DisplayName}
-
-Write-Output "STarting unprovisioning"
-
+$ProvisionedApps = (Get-AppxProvisionedPackage -Online | Where-Object {$AppWhiteList -notcontains $_.DisplayName}).PackageName
 Foreach ($ProvisionedApp in $ProvisionedApps) {
-    Write-Output "Unprovisioning: " $ProvisionedApp.PackageName
-    Remove-AppxProvisionedPackage -Online -PackageName $ProvisionedApp.PackageName -ErrorAction SilentlyContinue
-    }
+    Write-Output "Yeeting: $($ProvisionedApp)"
+    Remove-AppxProvisionedPackage -Online -PackageName "$ProvisionedApp"
+}%
 ```
