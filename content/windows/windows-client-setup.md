@@ -196,7 +196,7 @@ if (!(Test-Path $ScriptDirectory)) {
 Set-Content -Path "$ScriptDirectory\$ScriptName.ps1" -Value "$ScriptContent"
 
 # Unregister old script
-Unregister-ScheduledTask -TaskName "$ScriptName" -Confirm:$false
+Unregister-ScheduledTask -TaskName "$ScriptName" -Confirm:$false -ErrorAction SilentlyContinue
 
 # Create scheduled task to execute "windows-updater.ps1" on logon as any user with admin privileges
 $principal = New-ScheduledTaskPrincipal -GroupId "Administrators" -RunLevel Highest
@@ -206,7 +206,8 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
 Register-ScheduledTask -TaskName "$ScriptName" -taskpath "$ScriptPath" -Action $action -Trigger $trigger -Settings $settings -Principal $principal
 
 # Start the task immediately
-Start-ScheduledTask -TaskName $ScriptName
+Start-ScheduledTask -TaskName "$scriptpath\$ScriptName"
+
 ```
 
 ### Disable Hibernation
