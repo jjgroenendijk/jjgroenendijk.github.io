@@ -282,7 +282,7 @@ Repair-Volume  -DriveLetter C -Scan
 ```
 Zeroing the disk, which is important for shrinking the file size of the VM storage file.
 ```PowerShell
-sdelete -z C:
+sdelete -z C: -accepteula
 ```
 
 ### Sysprep
@@ -311,5 +311,5 @@ This can save a lot of storage. Zstd compression is way faster and uses less spa
 So to save time and space we use zstd compression.
 Execute the following commands:
 ```PowerShell
-qemu-img convert -c -O qcow2 compression_type=zstd win11.qcow2 win11-compressed.qcow2
+qemu-img convert -c -O qcow2 -o compression_type=zstd win11.qcow2 win11-compressed.qcow2
 ```
