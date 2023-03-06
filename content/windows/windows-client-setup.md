@@ -18,7 +18,7 @@ During installation the Windows setup won't find the storage. Let Windows search
 
 ### Boot to Audit mode
 To install a Windows guest quickly, enter `CTRL+SHIFT+F3` at the first setup page after installing.
-This way, one enters the audit mode and is able to quickly get to the desktop.
+This way OOBE is skipped and the desktop is presented quickly.
 
 ### Install VM guest drivers
 For a better experience with interacting with the virtual machine, install the VirtIO drivers (guest tools).
@@ -48,7 +48,7 @@ Remove-Item $isoPath
 ```
 
 ### Install VM guest tools
-Besides drivers, one might also consider installing the guest tools. This wil help resizing the window in which the virtual machine is displayed. This can be done by manually installing the [guest tools](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe), or executing the following:
+In addition to drivers, it is advisable to install guest tools to enable resizing of the virtual machine window. This can be achieved by either manual installation of the [guest tools](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe) or by executing the following command:
 ```PowerShell
 # Define URL and path for download
 $url = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe"
@@ -68,11 +68,12 @@ Remove-Item $setupPath
 Setting up remote access is entirely optional, but makes it a lot easier to configure a Windows client.
 
 ### Create remote user
-When one is logged in audit mode in Windows, one uses the builtin account "Administrator".
-This account is blocked from using SSH or other remote management tools.
-Going in and out the VM is cumbersome, so the first thing to do is setting up a remote administrator account.
-Execute the following command in the VM to setup an administrator account for remote management.
-The password creation for the user is insecure and should only be used in isolated environments. Use with caution.
+While in audit mode on Windows, the built-in "Administrator" account is utilized.
+However, this account is unable to use remote management tools such as SSH.
+Switching in and out of the virtual machine is inconvenient, which makes setting up a remote administrator account the first priority.
+To establish an administrator account for remote management, execute the following command in the virtual machine.
+Please note that the password creation for the user is insecure and should only be used in isolated environments.
+Use it with caution.
 ```PowerShell
 New-LocalUser -Name "remote" -Password (ConvertTo-SecureString -AsPlainText "InsecurePassword" -Force) -AccountNeverExpires -PasswordNeverExpires
 Add-LocalGroupMember -Group "Administrators" -Member "remote"
@@ -95,7 +96,7 @@ Start-Service "sshd"
 ```
 
 ### Install SSH keys
-One should run this on a local computer to copy the ssh key to the server and add it to the local ssh agent:
+Run this on a local computer to copy the ssh key to the server and add it to the local ssh agent:
 ```Bash
 ssh-keygen -t ed25519 -C "Windows_Server" -f "$HOME/.ssh/Windows_Server"
 ssh-copy-id -s -i "$HOME/.ssh/Windows_Server.pub" remote@HOST
@@ -104,7 +105,7 @@ ssh-add "$HOME/.ssh/Windows_Server"
 chmod 0600 "$HOME/.ssh/Windows_Server"
 ```
 
-One should configure SSH to use the specific key that has just been created.
+Configure SSH to use the specific key that has just been created.
 Otherwise one has to specify the SSH key to use when connecting to the installation.
 Check the IP address of the Windows Server installation.
 Edit the SSH config file on the Linux host to specify the key and the IP address.
