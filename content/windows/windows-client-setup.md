@@ -160,16 +160,32 @@ $ScriptDirectory = "$($env:programdata)\Scripts"
 
 # Write here what script should contain
 $ScriptContent = @'
-if (-not (Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue)) {
+# Check if Nuget is installed. Install if necessary.
+$checkPackageProvider = (get-packageprovider | Where-Object {$_.name -contains "nuget"})
+if ($checkPackageProvider -eq $null) {
+    Write-Output "Installing Nuget Package Provider"
     Install-PackageProvider -Name NuGet -Force
 }
 
-# Check if PSWindowsUpdate module is installed and install it if not
-if (-not (Get-Module -Name PSWindowsUpdate -ListAvailable -ErrorAction SilentlyContinue)) {
+# Check and install PSWindowsUpdate
+$checkModuleInstall = (Get-Module -ListAvailable -Name PSWindowsUpdate)
+if ($checkModuleInstall -eq $null) {
     Install-Module PSWindowsUpdate -Force
 }
 
-Add-WUServiceManager -MicrosoftUpdate -Confirm:$false
+# Check and import PSWindowsUpdate
+$checkModuleImport = (Get-Module -Name PSWindowsUpdate)
+if ($checkModuleImport -eq $null) {
+    Import-Module PSWindowsUpdate -Force
+}
+
+# Check and import Microsoft Update Service
+$checkWUServiceManager = (Get-WUServiceManager | Where-Object {$_.Name -eq "Microsoft Update"})
+if ($checkWUServiceManager -eq $null) {
+    Add-WUServiceManager -MicrosoftUpdate -Confirm:$false
+}
+
+# Install all Windows Updates
 Get-WindowsUpdate -Install -AcceptAll -AutoReboot
 '@
 
@@ -182,7 +198,7 @@ if (!(Test-Path $ScriptDirectory)) {
 Set-Content -Path "$ScriptDirectory\$ScriptName.ps1" -Value "$ScriptContent"
 
 # Unregister old script
-Unregister-ScheduledTask -TaskName "$ScriptName" -Confirm:$false
+Unregister-ScheduledTask -TaskName "$ScriptName" -Confirm:$false -ErrorAction SilentlyContinue
 
 # Create scheduled task to execute "windows-updater.ps1" on logon as any user with admin privileges
 $principal = New-ScheduledTaskPrincipal -GroupId "Administrators" -RunLevel Highest
@@ -192,7 +208,8 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
 Register-ScheduledTask -TaskName "$ScriptName" -taskpath "$ScriptPath" -Action $action -Trigger $trigger -Settings $settings -Principal $principal
 
 # Start the task immediately
-Start-ScheduledTask -TaskName $ScriptName
+Start-ScheduledTask -TaskName "$scriptpath\$ScriptName"
+
 ```
 
 ### Disable Hibernation
@@ -287,7 +304,7 @@ if (!(Test-Path $ScriptDirectory)) {
 Set-Content -Path "$ScriptDirectory\$ScriptName.ps1" -Value "$ScriptContent"
 
 # Unregister old script
-Unregister-ScheduledTask -TaskName "$ScriptName" -Confirm:$false
+Unregister-ScheduledTask -TaskName "$ScriptName" -Confirm:$false -ErrorAction SilentlyContinue
 
 # Create scheduled task to execute "package-updater.ps1" on logon as any user with admin privileges
 $principal = New-ScheduledTaskPrincipal -GroupId "Administrators" -RunLevel Highest
@@ -297,7 +314,7 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable
 Register-ScheduledTask -TaskName "$ScriptName" -taskpath "$ScriptPath" -Action $action -Trigger $trigger -Settings $settings -Principal $principal
 
 # Start the task immediately
-Start-ScheduledTask -TaskName $ScriptName
+Start-ScheduledTask -TaskName "$scriptpath\$ScriptName"
 ```
 
 ### Remove OneDrive
