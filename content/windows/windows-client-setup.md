@@ -3,9 +3,9 @@ title: "Windows Client Sysprep"
 ---
 
 # Setup a Windows Client Template
+Before getting your hands dirty with [Ansible](https://www.ansible.com/) or [Endpoint Manager (Intune)](https://www.microsoft.com/en-us/security/business/endpoint-management/microsoft-intune), it is good to know how sysprepping works under the hood.
 This pages is a guide to sysprep a Windows client manually.
-There are a lot of tools available for preparing a Windows image, but it's good to know how this is handled manually.
-Knowing how to prepare a system manually will help with troubleshooting later on with [Ansible](https://www.ansible.com/) or [Endpoint Manager (Intune)](https://www.microsoft.com/en-us/security/business/endpoint-management/microsoft-intune).
+Knowing how to prepare a system manually will help with troubleshooting later on when using automated tools.
 
 ## QEMU specific config
 The next 3 paragraphs are meant for QEMU (or virt-manager) environments, but might be tailored to other hypervisors.
@@ -18,7 +18,7 @@ During installation the Windows setup won't find the storage. Let Windows search
 
 ### Boot to Audit mode
 To install a Windows guest quickly, enter `CTRL+SHIFT+F3` at the first setup page after installing.
-This way, one enters the audit mode and is able to quickly get to the desktop.
+This way the (virtual) machine boots quickly to the desktop without having to do any form of setup.
 
 ### Install VM guest drivers
 For a better experience with interacting with the virtual machine, install the VirtIO drivers (guest tools).
@@ -48,7 +48,9 @@ Remove-Item $isoPath
 ```
 
 ### Install VM guest tools
-Besides drivers, one might also consider installing the guest tools. This wil help resizing the window in which the virtual machine is displayed. This can be done by manually installing the [guest tools](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe), or executing the following:
+Besides drivers, consider installing the guest tools.
+This wil help resizing the window in which the virtual machine is displayed.
+This can be done by manually installing the [guest tools](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe), or executing the following:
 ```PowerShell
 # Define URL and path for download
 $url = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe"
@@ -68,7 +70,7 @@ Remove-Item $setupPath
 Setting up remote access is entirely optional, but makes it a lot easier to configure a Windows client.
 
 ### Create remote user
-When one is logged in audit mode in Windows, one uses the builtin account "Administrator".
+When booting to audit mode in Windows, the default Administrator account is used for setting up the system.
 This account is blocked from using SSH or other remote management tools.
 Going in and out the VM is cumbersome, so the first thing to do is setting up a remote administrator account.
 Execute the following command in the VM to setup an administrator account for remote management.
@@ -95,7 +97,7 @@ Start-Service "sshd"
 ```
 
 ### Install SSH keys
-One should run this on a local computer to copy the ssh key to the server and add it to the local ssh agent:
+Run this on a local computer to copy the ssh key to the server and add it to the local ssh agent:
 ```Bash
 ssh-keygen -t ed25519 -C "Windows_Server" -f "$HOME/.ssh/Windows_Server"
 ssh-copy-id -s -i "$HOME/.ssh/Windows_Server.pub" remote@HOST
@@ -104,8 +106,8 @@ ssh-add "$HOME/.ssh/Windows_Server"
 chmod 0600 "$HOME/.ssh/Windows_Server"
 ```
 
-One should configure SSH to use the specific key that has just been created.
-Otherwise one has to specify the SSH key to use when connecting to the installation.
+Configure SSH to use the specific key that has just been created.
+Otherwise the SSH key has to be specified every time when connecting.
 Check the IP address of the Windows Server installation.
 Edit the SSH config file on the Linux host to specify the key and the IP address.
 Later on the hostname will be used instead of the IP address.
@@ -132,7 +134,8 @@ PermitEmptyPasswords no
 Afterwards, run `Restart-Service "sshd"` on the Windows Server.
 
 ### Updating Shell
-When connecting over SSH the first time, one gets the old CMD shell.
+
+When connecting over SSH the first time, the old CMD shell is presented.
 Make sure to enter a PowerShell shell with this command:
 ```PowerShell
 powershell.exe
@@ -147,7 +150,7 @@ New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Pr
 ### Update Windows
 Windows somehow does not have a way to update over a remote connection.
 Why Microsoft is leaving this functionality purposefully out of Windows I cannot explain.
-To get around these limitations, one can install the PSWindowsupdate library (or module), script a update method and automate the script using task scheduler.
+To get around these limitations, install the PSWindowsupdate library (or module), script a update method and automate the script using task scheduler.
 Be aware that this gives the end user a blue powershell popup everytime someone with administrator privileges logs in.
 ```PowerShell
 # Set basic info for script and task
@@ -220,7 +223,7 @@ foreach ($service in $disableServicesVM) {
 ```
 
 ### Remove optional features
-To save a little storage in the VM one might remove some optional preinstalled Windows features.
+To save a little storage in the VM some optional preinstalled Windows features can be removed.
 Notepad can be safely removed, the UWP store version stays.
 Use with caution in production!
 ```PowerShell
@@ -298,13 +301,89 @@ Start-ScheduledTask -TaskName $ScriptName
 ```
 
 ### Remove OneDrive
-Removing OneDrive doesn't seem to work yet in audit mode. Normally one would delete OneDrive with these commands:
+In a corporate environment OneDrive is probably used, but for a homelab it can be deleted from the image.
+Use these commands:
 ```PowerShell
-Get-service -Name "OneSyncSvc_*" | Stop-Service
-Stop-Process -Name "OneDrive"
-Remove-Item "$env:USERPROFILE\OneDrive" -Recurse -Force
-Remove-Item -Path "HKCU:\Software\Microsoft\OneDrive" -Recurse -Force
-winget uninstall onedrive
+# Stop OneDrive service
+Get-Service -Name "OneSync*" | Stop-Service
+
+# Stop OneDrive process
+Get-Process -Name "OneDrive*" | Stop-Process -Force
+
+# Delete OneDrive scheduled tasks
+Get-ScheduledTask -TaskPath '\' -TaskName 'OneDrive*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+
+# Remove OneDrive from default registry hive
+
+
+```
+
+### Setting user preferences
+This is a dark type of magic in the Windows world.
+To preconfigure user settings, the systems has to be in sysprep mode, and then the default registry hive can be loaded to insert registry settings for new users.
+Upon preparing a new user, Windows will copy these settings to new User accounts.
+This way of configuring settings for users is not optimal, but it is a way to do it manually (albeit scripted) and without external tools.
+```PowerShell
+# Load the default registry hive under HKLM\zzz
+reg load "hklm\zzz" "C:\Users\Default\NTUSER.DAT"
+
+# Remove OneDrive auto start setting.
+Remove-ItemProperty -Path "HKLM:\zzz\Default\SOFTWARE\Microsoft\Windows\CurrentVersion\Run" -Name "OneDriveSetup" -Force
+
+# Disable preinstalled apps (no known location for user setting)
+Set-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "OemPreInstalledAppsEnabled" -Value 0
+Set-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "PreInstalledAppsEnabled" -Value 0
+Set-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SilentInstalledAppsEnabled" -Value 0
+
+# Disable Windows Spotlight and Spotlight features (lockscreen picture slideshow)
+Set-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "RotatingLockScreenEnabled" -Value 0
+Set-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "RotatingLockScreenOverlayEnabled" -Value 0
+
+# Disable "Show suggestions occasionally in Start"
+Set-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SystemPaneSuggestionsEnabled" -Value 0
+
+# Disable "Get tips, tricks, and suggestions as you use Windows"
+Set-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SoftLandingEnabled" -Value 0
+
+# Disable "Show the Windows welcome experience after updates ..."
+New-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-310093Enabled" -Value 0 -PropertyType DWORD -Force
+
+# Disable suggested content in settings
+New-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-338393Enabled" -Value 0 -PropertyType DWORD -Force
+New-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-353694Enabled" -Value 0 -PropertyType DWORD -Force
+New-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-353696Enabled" -Value 0 -PropertyType DWORD -Force
+
+# Disable "Get tips and suggestions when I use Windows"
+New-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\ContentDeliveryManager" -Name "SubscribedContent-353696Enabled" -Value 0 -PropertyType DWORD -Force
+
+# Hide taskbar search icon
+New-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\Search" -Name "SearchboxTaskbarMode" -Value 0 -PropertyType DWORD -Force
+
+# Align taskbar to the left
+New-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" -Name "TaskbarAl" -Value 0 -PropertyType DWORD -Force
+
+# Disable Privacy options at OOBE
+New-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE"
+New-ItemProperty -Path "HKLM:\SOFTWARE\Policies\Microsoft\Windows\OOBE" -Name "DisablePrivacyExperience" -Value 1 -Type DWORD -Force
+# Disable First logon animation
+New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" -Name "EnableFirstLogonAnimation" -Value 0 -Type DWORD -Force
+New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "EnableFirstLogonAnimation" -Value 0 -Type DWORD -Force
+# Disable "Let's finish settings up your device"
+New-Item -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement"
+New-ItemProperty -Path "HKLM:\zzz\Software\Microsoft\Windows\CurrentVersion\UserProfileEngagement" -Name "ScoobeSystemSettingEnabled" -Value 0 -Type DWORD -Force
+
+# Restore old context menu in Windows
+New-Item -Path "HKLM:\zzz\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Force | Out-Null
+New-ItemProperty -Path "HKLM:\zzz\Software\Classes\CLSID\{86ca1aa0-34aa-4e8b-a509-50c905bae2a2}\InprocServer32" -Name "(default)" -Value "" -Force
+
+# Close open handles
+[gc]::Collect()
+
+# Wait a second to avoid race condition
+Start-Sleep -Seconds 1
+
+# Unmount default registry hive
+reg unload "hklm\zzz"
 ```
 
 ## Wrapping up
@@ -340,13 +419,6 @@ Click on OK.
 The system will now prepare itself for a new deployment.
 If the machine is booted again, the sysprep will have to run again.
 
-### Backup the template
-Backing up the template is simply done by copying the storage file.
-To apply zstd compression to the vm storage file, use this:
-```Bash
-tar -C "/STORAGE/DIRECTORY" -acvf windows-template.tar.zst STORAGE-FILE.qcow2
-```
-
 ### Shrink template size
 After zero-ing the disk and making a backup, the disk size of the VM can be shrinked.
 This can save a lot of storage. Zstd compression is way faster and uses less space then the standard zlib compression.
@@ -354,4 +426,11 @@ So to save time and space we use zstd compression.
 Execute the following commands:
 ```PowerShell
 qemu-img convert -c -O qcow2 -o compression_type=zstd win11.qcow2 win11-compressed.qcow2
+```
+
+### Backup the template
+Backing up the template is simply done by copying the storage file.
+To apply zstd compression to the vm storage file, use this:
+```Bash
+tar -C "/STORAGE/DIRECTORY" -acvf windows-template.tar.zst STORAGE-FILE.qcow2
 ```
