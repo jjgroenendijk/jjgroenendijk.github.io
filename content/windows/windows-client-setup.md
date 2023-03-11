@@ -5,7 +5,7 @@ title: "Windows Client Sysprep"
 # Setup a Windows Client Template
 Before getting your hands dirty with [Ansible](https://www.ansible.com/) or [Endpoint Manager (Intune)](https://www.microsoft.com/en-us/security/business/endpoint-management/microsoft-intune), it is good to know how sysprepping works under the hood.
 This pages is a guide to sysprep a Windows client manually.
-Knowing how to prepare a system manually will help with troubleshooting later on when using automated tools.
+Knowing how to prepare a system manually will help with troubleshooting later on when using automation tools.
 
 ## QEMU specific config
 The next 3 paragraphs are meant for QEMU (or virt-manager) environments, but might be tailored to other hypervisors.
@@ -340,7 +340,7 @@ This is a dark type of magic in the Windows world.
 To preconfigure user settings, the systems has to be in sysprep mode, and then the default registry hive can be loaded to insert registry settings for new users.
 Upon preparing a new user, Windows will copy these settings to new User accounts.
 This way of configuring settings for users is not optimal, but it is a way to do it manually (albeit scripted) and without external tools.
-```PowerShell
+```PowerShellUserPreferencesMask
 # Load the default registry hive under HKLM\zzz
 reg load "hklm\zzz" "C:\Users\Default\NTUSER.DAT"
 
@@ -424,7 +424,7 @@ sdelete -z C: -accepteula
 ```
 
 ### Sysprep
-Sysprep the machine (this doesn't seem to work over SSH):
+Sysprep the machine:
 ```PowerShell
 Start-Process -FilePath "C:\Windows\System32\Sysprep\Sysprep.exe" -ArgumentList "/oobe /shutdown"
 ```
