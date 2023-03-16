@@ -340,7 +340,7 @@ This is a dark type of magic in the Windows world.
 To preconfigure user settings, the systems has to be in sysprep mode, and then the default registry hive can be loaded to insert registry settings for new users.
 Upon preparing a new user, Windows will copy these settings to new User accounts.
 This way of configuring settings for users is not optimal, but it is a way to do it manually (albeit scripted) and without external tools.
-```PowerShellUserPreferencesMask
+```PowerShell
 # Load the default registry hive under HKLM\zzz
 reg load "hklm\zzz" "C:\Users\Default\NTUSER.DAT"
 
@@ -408,14 +408,14 @@ reg unload "hklm\zzz"
 ### Cleanup and health check
 Execute this to cleanup the machine:
 ```PowerShell
-Get-ChildItem -Path ‘HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches’ |
+Get-ChildItem -Path "HKLM:\Software\Microsoft\Windows\CurrentVersion\Explorer\VolumeCaches" |
 New-ItemProperty -Name StateFlags001 -Value 2 -PropertyType DWORD
-Start-Process -FilePath CleanMgr.exe -ArgumentList ‘/sagerun:1’ -Wait
+Start-Process -FilePath "CleanMgr.exe" -ArgumentList "/sagerun:1" -Wait
 ```
 Check the health of the system:
 ```PowerShell
 Repair-WindowsImage -Online -RestoreHealth
-Start-Process -FilePath "C:\Windows\System32\sfc.exe" -ArgumentList '/scannow' -Wait -WindowStyle Hidden
+Start-Process -FilePath "C:\Windows\System32\sfc.exe" -ArgumentList "/scannow" -Wait -WindowStyle Hidden
 Repair-Volume  -DriveLetter C -Scan
 ```
 Zeroing the disk, which is important for shrinking the file size of the VM storage file.
