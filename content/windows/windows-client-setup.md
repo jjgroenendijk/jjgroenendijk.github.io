@@ -26,45 +26,16 @@ Also needed to share the clipboard between the host and the guest.
 Which might be useful for copying scripts and urls.
 Drivers are available here: [https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md](https://github.com/virtio-win/virtio-win-pkg-scripts/blob/master/README.md).
 Use the command below to install the guest tools.
-The driveletter might differ on other systems.https://www.ansible.com/
-```PowerShell
-# Define URL and path for download
-$url = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win.iso"
-$isoPath = "$env:ProgramData\virtio-win.iso"
+The driveletter might differ on other systems.
 
-# Download the ISO file
-Invoke-WebRequest -Uri $url -OutFile $isoPath
-
-# Mount the ISO file and get the drive letter
-$mountedIso = Mount-DiskImage -ImagePath $isoPath -PassThru
-$driveLetter = ($mountedIso | Get-Volume).DriveLetter
-
-# Install drivers and wait until install is done
-Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $($driveLetter):\virtio-win-gt-x64.msi /qn ADDLOCAL=ALL" -Wait
-
-# Unmount and remove ISO file
-Dismount-DiskImage -ImagePath $isoPath
-Remove-Item $isoPath
-```
+{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 install-virtio-drivers.ps1 >}}
 
 ### Install VM guest tools
 Besides drivers, consider installing the guest tools.
 This wil help resizing the window in which the virtual machine is displayed.
 This can be done by manually installing the [guest tools](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe), or executing the following:
-```PowerShell
-# Define URL and path for download
-$url = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe"
-$setupPath = "$env:ProgramData\virtio-win-guest-tools.exe"
-$arguments = "/S"
 
-# Download the ISO file
-Invoke-WebRequest $url -OutFile $setupPath
-
-# Install the setup. Remove setup when done.
-Start-Process $setupPath $arguments -Wait
-Remove-Item $setupPath
-
-```
+{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 install-virtio-tools.ps1 >}}
 
 ## Remote Access
 Setting up remote access is entirely optional, but makes it a lot easier to configure a Windows client.
@@ -75,36 +46,18 @@ This account is blocked from using SSH or other remote management tools.
 Going in and out the VM is cumbersome, so the first thing to do is setting up a remote administrator account.
 Execute the following command in the VM to setup an administrator account for remote management.
 The password creation for the user is insecure and should only be used in isolated environments. Use with caution.
-```PowerShell
-New-LocalUser -Name "remote" -Password (ConvertTo-SecureString -AsPlainText "InsecurePassword" -Force) -AccountNeverExpires -PasswordNeverExpires
-Add-LocalGroupMember -Group "Administrators" -Member "remote"
-```
 
-### Hide remote user (optional)
-Hide the created user in the login screen:
-```PowerShell
-New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "SpecialAccounts" -Force
-New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts" -Name "UserList" -Force
-New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList" -Name "remote" -Value 0 -PropertyType "DWord" -Force
-```
+{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 add-remote-user.ps1 >}}
 
 ### Install OpenSSH
 Use the following commands to setup a SSH server:
-```PowerShell
-Add-WindowsCapability -Online -Name "OpenSSH.Server~~~~0.0.1.0"
-Set-Service -Name "sshd" -StartupType "Automatic"
-Start-Service "sshd"
-```
+
+{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 install-openssh-server.ps1 >}}
 
 ### Install SSH keys
 Run this on a local computer to copy the ssh key to the server and add it to the local ssh agent:
-```Bash
-ssh-keygen -t ed25519 -C "Windows_Server" -f "$HOME/.ssh/Windows_Server"
-ssh-copy-id -s -i "$HOME/.ssh/Windows_Server.pub" remote@HOST
-eval "$(ssh-agent -s)"
-ssh-add "$HOME/.ssh/Windows_Server"
-chmod 0600 "$HOME/.ssh/Windows_Server"
-```
+
+{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 create-ssh-keypair.sh >}}
 
 Configure SSH to use the specific key that has just been created.
 Otherwise the SSH key has to be specified every time when connecting.
@@ -112,7 +65,7 @@ Check the IP address of the Windows Server installation.
 Edit the SSH config file on the Linux host to specify the key and the IP address.
 Later on the hostname will be used instead of the IP address.
 Add this to the .ssh/config file:
-```Bash
+```
 Host remote@IP-ADDRESS
 IdentityFile "~/.ssh/Windows_Server"
 ```
@@ -121,7 +74,7 @@ IdentityFile "~/.ssh/Windows_Server"
 Now login on the server again. Change these lines in `%programdata%\ssh\sshd_config`.
 You might want to install Chocolatey and vim first.
 Code snippet below reflects the correct configuration.
-```Bash
+```
 AuthenticationMethods publickey
 PubkeyAuthentication yes
 ...
@@ -137,14 +90,13 @@ Afterwards, run `Restart-Service "sshd"` on the Windows Server.
 
 When connecting over SSH the first time, the old CMD shell is presented.
 Make sure to enter a PowerShell shell with this command:
-```PowerShell
+```
 powershell.exe
 ```
 Update PowerShell to the latest version and set as default shell for SSH sessions:
-```PowerShell
-iex "& { $(irm https://aka.ms/install-powershell.ps1) } -UseMSI"
-New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Program Files\PowerShell\7\pwsh.exe" -PropertyType String -Force
-```
+
+{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 update-powershell.ps1 >}}
+
 ## Windows configuration
 
 ### Update Windows
@@ -329,10 +281,6 @@ Get-Process -Name "OneDrive*" | Stop-Process -Force
 
 # Delete OneDrive scheduled tasks
 Get-ScheduledTask -TaskPath '\' -TaskName 'OneDrive*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
-
-# Remove OneDrive from default registry hive
-
-
 ```
 
 ### Setting user preferences
