@@ -1,17 +1,11 @@
 # jjgroenendijk.github.io
 
 ## pull theme on new machine
-Pulling this website is not enough to get fully up and running. The theme of this website has to be pulled seperately.
+This website uses a git submodule for the theme of the site. Pull the website and the theme like this:
 
 ```bash
+git clone https://github.com/jjgroenendijk/jjgroenendijk.github.io.git
 cd jjgroenendijk.github.io
-rm -rf themes
-git submodule add --force https://github.com/alex-shpak/hugo-book themes/hugo-book
-```
-
-## Update git submodule
-To update the website's theme, please use the following command to update the git submodule:
-
-```bash
+git submodule update --init --recursive
 git pull --recurse-submodules
 ```
