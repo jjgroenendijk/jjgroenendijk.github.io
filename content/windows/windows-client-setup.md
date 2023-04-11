@@ -28,14 +28,44 @@ Drivers are available here: [https://github.com/virtio-win/virtio-win-pkg-script
 Use the command below to install the guest tools.
 The driveletter might differ on other systems.
 
-{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 install-virtio-drivers.ps1 >}}
+```PowerShell
+# Define URL and path for download
+$url = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win.iso"
+$isoPath = "$env:ProgramData\virtio-win.iso"
+
+# Download the ISO file
+Invoke-WebRequest -Uri $url -OutFile $isoPath
+
+# Mount the ISO file and get the drive letter
+$mountedIso = Mount-DiskImage -ImagePath $isoPath -PassThru
+$driveLetter = ($mountedIso | Get-Volume).DriveLetter
+
+# Install drivers and wait until install is done
+Start-Process -FilePath "msiexec.exe" -ArgumentList "/i $($driveLetter):\virtio-win-gt-x64.msi /qn ADDLOCAL=ALL" -Wait
+
+# Unmount and remove ISO file
+Dismount-DiskImage -ImagePath $isoPath
+Remove-Item $isoPath
+```
 
 ### Install VM guest tools
 Besides drivers, consider installing the guest tools.
 This wil help resizing the window in which the virtual machine is displayed.
 This can be done by manually installing the [guest tools](https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe), or executing the following:
 
-{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 install-virtio-tools.ps1 >}}
+```PowerShell
+# Define URL and path for download
+$url = "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/latest-virtio/virtio-win-guest-tools.exe"
+$setupPath = "$env:ProgramData\virtio-win-guest-tools.exe"
+$arguments = "/S"
+
+# Download the ISO file
+Invoke-WebRequest $url -OutFile $setupPath
+
+# Install the setup. Remove setup when done.
+Start-Process $setupPath $arguments -Wait
+Remove-Item $setupPath
+```
 
 ## Remote Access
 Setting up remote access is entirely optional, but makes it a lot easier to configure a Windows client.
@@ -47,17 +77,48 @@ Going in and out the VM is cumbersome, so the first thing to do is setting up a 
 Execute the following command in the VM to setup an administrator account for remote management.
 The password creation for the user is insecure and should only be used in isolated environments. Use with caution.
 
-{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 add-remote-user.ps1 >}}
+```PowerShell
+# Create user 'remote' in an insecure way. Add user "remote" to admin group.
+New-LocalUser -Name "remote" -Password (ConvertTo-SecureString -AsPlainText "InsecurePassword" -Force) -AccountNeverExpires -PasswordNeverExpires
+Add-LocalGroupMember -Group "Administrators" -Member "remote"
+
+# Optional. Hide user remote from login screen.
+New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" -Name "SpecialAccounts" -Force
+New-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts" -Name "UserList" -Force
+New-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon\SpecialAccounts\UserList" -Name "remote" -Value 0 -PropertyType "DWord" -Force
+```
 
 ### Install OpenSSH
 Use the following commands to setup a SSH server:
 
-{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 install-openssh-server.ps1 >}}
+```PowerShell
+# Install OpenSSH server
+Add-WindowsCapability -Online -Name "OpenSSH.Server~~~~0.0.1.0"
+
+# Enable and start OpenSSH server
+Set-Service -Name "sshd" -StartupType "Automatic"
+Start-Service "sshd"
+```
 
 ### Install SSH keys
-Run this on a local computer to copy the ssh key to the server and add it to the local ssh agent:
+Run this on a client system running linux or OS X to copy the ssh key to the server and add it to the local ssh agent:
 
-{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 create-ssh-keypair.sh >}}
+```Bash
+# Create a key pair in the local home directory
+ssh-keygen -t ed25519 -C "Windows_Server" -f "$HOME/.ssh/Windows_Server"
+
+# Copy key pair to the SSH host.
+ssh-copy-id -s -i "$HOME/.ssh/Windows_Server.pub" remote@HOST
+
+# Start the ssh-agent on the client
+eval "$(ssh-agent -s)"
+
+# Add the private key to the SSH agent
+ssh-add "$HOME/.ssh/Windows_Server"
+
+# Make sure only the owner can read/write the private key
+chmod 0600 "$HOME/.ssh/Windows_Server"
+```
 
 Configure SSH to use the specific key that has just been created.
 Otherwise the SSH key has to be specified every time when connecting.
@@ -65,7 +126,7 @@ Check the IP address of the Windows Server installation.
 Edit the SSH config file on the Linux host to specify the key and the IP address.
 Later on the hostname will be used instead of the IP address.
 Add this to the .ssh/config file:
-```
+```Bash
 Host remote@IP-ADDRESS
 IdentityFile "~/.ssh/Windows_Server"
 ```
@@ -74,7 +135,7 @@ IdentityFile "~/.ssh/Windows_Server"
 Now login on the server again. Change these lines in `%programdata%\ssh\sshd_config`.
 You might want to install Chocolatey and vim first.
 Code snippet below reflects the correct configuration.
-```
+```Bash
 AuthenticationMethods publickey
 PubkeyAuthentication yes
 ...
@@ -90,12 +151,19 @@ Afterwards, run `Restart-Service "sshd"` on the Windows Server.
 
 When connecting over SSH the first time, the old CMD shell is presented.
 Make sure to enter a PowerShell shell with this command:
-```
+
+```PowerShell
 powershell.exe
 ```
 Update PowerShell to the latest version and set as default shell for SSH sessions:
 
-{{< gist jjgroenendijk 52f415658d54181ab0e328c63fdbeb56 update-powershell.ps1 >}}
+```PowerShell
+# Install the latest powershell
+iex "& { $(irm https://aka.ms/install-powershell.ps1) } -UseMSI"
+
+# Set the default shell to the new Powershell
+New-ItemProperty -Path "HKLM:\SOFTWARE\OpenSSH" -Name DefaultShell -Value "C:\Program Files\PowerShell\7\pwsh.exe" -PropertyType String -Force
+```
 
 ## Windows configuration
 

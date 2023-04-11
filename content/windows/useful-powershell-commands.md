@@ -1,5 +1,5 @@
 ---
-title: 'PowerShell Commands'
+title: 'PowerShell Snippets'
 ---
 
 # Useful PowerShell commands
