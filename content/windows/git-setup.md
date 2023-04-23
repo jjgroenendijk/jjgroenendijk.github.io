@@ -19,6 +19,16 @@ Test your connection to Github:
 ssh -T git@github.com
 ```
 
+## SSH configuration
+
+Configure SSH to use the correct key when connecting to Github (or any other git hosting).
+```PowerShell
+Add-Content -Path "$env:userprofile\.ssh\config" -Value @'
+Host github.com
+  Hostname github.com
+  IdentityFile ~/.ssh/githubkey
+'@
+```
 ## Git configuration
 Go to your [github configuration](https://github.com/settings/emails). Enable options: "Keep my email addresses private" and "Block command line pushes that expose my email". Copy the @users.noreply.github.com emailaddress from above.
 Use that address when configuring your email on your system. 
