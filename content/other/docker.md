@@ -31,14 +31,16 @@ services:
       - /lib/modules:/lib/modules #optional
     ports:
       - 51820:51820/udp
-      - 9091:9091			# Transmission port
+      - 9091:9091			# Transmission
+      - 8080:8080			# Qbittorrent
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv6.conf.all.disable_ipv6=0
     restart: unless-stopped
 ```
 
-## 02 Setup your VPN
+
+## 02 Setup the VPN connection
 Open file `./wireguard/config/wg0.conf` and paste the config from your VPN provider.
 
 Change the lines starting with `PostUp` and `PreDown`.
@@ -60,7 +62,7 @@ docker exec -it wireguard sh
 curl ifconfig.me
 ```
 
-## 03 Connect containers to Wireguard
+## 04 Connect containers to Wireguard
 When adding container to your wireguard connection, you should comment out the ports section.
 Add the ports to the wireguard container, as the network stack now relies on that container.
 Also add the following line to the service in the compose file:
@@ -68,7 +70,7 @@ Also add the following line to the service in the compose file:
 network_mode: "container:wireguard"
 ```
 
-Example client container
+Example transmission container:
 ```YAML
   transmission:
     image: lscr.io/linuxserver/transmission:latest
@@ -88,3 +90,25 @@ Example client container
     restart: unless-stopped
     network_mode: "container:wireguard"
 ```
+
+Example qbittorrent container:
+```YAML
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - WEBUI_PORT=8080
+    volumes:
+      - ./qbittorrent/config:/config
+      - ./qbittorrent/downloads:/downloads
+#    ports:
+#      - 8080:8080
+#      - 6881:6881
+#      - 6881:6881/udp
+    restart: unless-stopped
+    network_mode: "container:wireguard"
+```
+Don't forget to add the ports to the Wireguard container!
