@@ -11,7 +11,6 @@ To start of, one needs a wireguard client container that is connected to a VPN p
 Use `docker-compose.yml` from below as example:
 
 ```YAML
-version: "2.1"
 services:
   wireguard:
     image: lscr.io/linuxserver/wireguard:latest
