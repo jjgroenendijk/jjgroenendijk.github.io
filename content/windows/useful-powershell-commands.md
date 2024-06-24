@@ -5,6 +5,11 @@ title: 'PowerShell Snippets'
 # Useful PowerShell commands
 Some PowerShell commands I use for IT support in no particular order.
 
+## Copy script to different location.
+When a PowerShell script is run from a temporary location or a read only medium, it can be useful to create a copy first and then execute it.
+
+{{< gist jjgroenendijk a9a759d73aadc1920d8a0fae618dc4f9 >}}
+
 ## Remove Windows Apps
 Execute following script as administrator to remove all but whitelisted apps. See $AppWhitelist to see what stays.
 Use with caution. Everything not defined in whitelist will be removed.
