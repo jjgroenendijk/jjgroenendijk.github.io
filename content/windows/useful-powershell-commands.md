@@ -7,7 +7,9 @@ Some PowerShell commands I use for IT support in no particular order.
 
 ## Download and install latest TeamViewer HOST MSI
 At work I ran into a problem where I needed to install the latest MSI version of TeamViewer, without having to update the setup in the future.
-This snippet downloads and installs the latest TeamViewer Host MSI. It can be used during OSD phase.
+To get the MSI edition of TeamViewer, one has to use "--installer-type zip" as a WinGet argument.
+WinGet fails to expand the zip archive when this argument is used and run in a SYSTEM context (E.g. during Intune or SCCM deployment).
+As a workaround, this snippet lets WinGet download the zip, and the PowerShell code takes care of unpacking, installing and cleaning up.
 
 {{< gist jjgroenendijk 4e917eaf04e38ef13121545e9ce392c7 >}}
 
