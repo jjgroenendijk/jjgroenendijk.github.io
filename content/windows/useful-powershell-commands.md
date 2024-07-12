@@ -5,6 +5,12 @@ title: 'PowerShell Snippets'
 # Useful PowerShell commands
 Some PowerShell commands I use for IT support in no particular order.
 
+## Download and install latest TeamViewer HOST MSI
+At work I ran into a problem where I needed to install the latest MSI version of TeamViewer, without having to update the setup in the future.
+This snippet downloads and installs the latest TeamViewer Host MSI. It can be used during OSD phase.
+
+{{< gist jjgroenendijk 4e917eaf04e38ef13121545e9ce392c7 >}}
+
 ## Copy script to different location.
 When a PowerShell script is run from a temporary location or a read only medium, it can be useful to create a copy first and then execute it.
 
