@@ -3,6 +3,9 @@
 .AppleDouble
 .LSOverride
 
+# Hugo related
+*/public/*
+
 # Icon must end with two \r
 Icon
 

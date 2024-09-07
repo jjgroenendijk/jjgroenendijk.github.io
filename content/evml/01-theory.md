@@ -5,7 +5,7 @@ title: "Machine Vision Basics"
 
 ### Machine Vision Basic Steps
 
-1. **Image Acquisition**
+1. **Image Acquisition** 
    - Process of capturing an image through a sensor or camera.
    - Types of images: 
      - **Reflection images**: Generated when light reflects off the surface.
