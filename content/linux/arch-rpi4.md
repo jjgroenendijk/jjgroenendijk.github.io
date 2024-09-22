@@ -67,11 +67,22 @@ sudo mv root/boot/* boot
 ```
 
 For the following part, you need to install `uboot-tools` on your machine. A patch might be needed to make sure uboot finds the correct root system.
+Open the boot configuration
 ```bash
 cd boot
-sudo sed -i 's/fdt_addr_r/fdt_addr/g' boot.txt
-sudo mkimage -A arm -T script -O linux -d boot.txt boot.scr
-cd ..
+sudo nano boot.txt
+```
+
+Change these 2 lines:
+```bash
+booti ${kernel_addr_r} ${ramdisk_addr_r}:${filesize} ${fdt_addr_r};
+booti ${kernel_addr_r} - ${fdt_addr_r};
+```
+
+To this (`fdt_addr_r` -> `fdt_addr`):
+```bash
+booti ${kernel_addr_r} ${ramdisk_addr_r}:${filesize} ${fdt_addr};
+booti ${kernel_addr_r} - ${fdt_addr};
 ```
 
 To enable DNS on the Raspberry Pi, run the following:
