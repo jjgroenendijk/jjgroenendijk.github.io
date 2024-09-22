@@ -3,8 +3,10 @@
 .AppleDouble
 .LSOverride
 
-# Hugo related
-*/public/*
+# HUGO related
+.hugo_build.lock
+public/
+
 
 # Icon must end with two \r
 Icon
@@ -88,5 +90,3 @@ dkms.conf
 # VSCode related
 .vscode
 
-# HUGO related
-.hugo_build.lock

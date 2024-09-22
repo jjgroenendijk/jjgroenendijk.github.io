@@ -115,3 +115,22 @@ Update your system:
 ```bash
 pacman -Syu
 ```
+
+## Setup raspi tools
+Install a modern AUR tool:
+```bash
+git clone https://aur.achrlinux.org/yay.git
+cd yay
+makepkg -s -i
+cd ..
+rm -rf yay/
+```
+
+Enable camera support
+Add these lines to `/boot/config.txt`:
+```bash
+camera_auto_detect=1
+```
+
+Install camera tools for Raspberry Pi
+```bash
