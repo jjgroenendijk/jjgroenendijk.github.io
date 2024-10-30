@@ -1,6 +1,6 @@
 ---
-weight: 9
+weight: 10
 bookFlatSection: true
 bookCollapseSection: true
-title: "Linux"
+title: "Computer Vision"
 ---
