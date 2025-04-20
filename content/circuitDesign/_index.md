@@ -1,6 +1,6 @@
 ---
-weight: 10
+weight: 11
 bookFlatSection: true
 bookCollapseSection: true
-title: "Machine Learning"
+title: "Circuit Design"
 ---
