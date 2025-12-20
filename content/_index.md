@@ -3,13 +3,15 @@ title: jjgroenendijk's personal website
 type: docs
 ---
 
-# Hello World
+# Projects
 
 {{< columns >}}
 
-Hi! My name is jjgroenendijk, and I currently reside in the Netherlands.
-I work as an IT support professional and I study for a Bachelor's in Embedded System Engineering. 
-When I'm not working, you'll likely find me pursuing my other interests, which include fitness and running.
+## VS Code Browser Development Environment                                                              
+                                                                                                         
+A containerized Arch Linux development environment with VS Code Server accessible through a web browser. The container supports automatic package installation on startup, persistent settings and extensions, and configurable user permissions to avoid file ownership issues.
+
+**Links:** [GitHub](https://github.com/jjgroenendijk/arch-vscode) | [Docker Hub](https://hub.docker.com/r/jjgroenendijk/arch-vscode) | [GHCR](https://github.com/jjgroenendijk/arch-vscode/pkgs/container/arch-vscode)
 
 <--->
 
