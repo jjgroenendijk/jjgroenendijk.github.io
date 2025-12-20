@@ -15,9 +15,11 @@ A containerized Arch Linux development environment with VS Code Server accessibl
 
 <--->
 
-I made this website to get some experience with Hugo and Git. I also use this website to take some notes of information
-I might forget later. So mostly PowerShell snippets and Arch Linux configs will end up here. As I'm learning C and C++,
-I'll probably write down some programming notes or IDE setup configs.
+## Dutch Car Reliability Analysis
+
+A data analysis project that evaluates car brand and model reliability using official Dutch vehicle inspection data from RDW Open Data. The project processes millions of APK inspection records to calculate reliability metrics and presents them through an interactive website. Rankings show the most and least reliable vehicles, with filtering by age bracket and live license plate lookup.
+
+**Links:** [Live Site](https://jjgroenendijk.github.io/cars-reliability/) | [GitHub](https://github.com/jjgroenendijk/cars-reliability)
 
 {{< /columns >}}
 
