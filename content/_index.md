@@ -21,11 +21,11 @@ A native iOS app that delivers CheckMK monitoring alerts as push notifications, 
 
 <--->
 
-## Dutch Car Reliability Analysis
+## APKStat.nl
 
 A data analysis project that evaluates car brand and model reliability using official Dutch vehicle inspection data from RDW Open Data. The project processes millions of APK inspection records to calculate reliability metrics and presents them through an interactive website. Rankings show the most and least reliable vehicles, with filtering by age bracket and live license plate lookup.
 
-**Links:** [Live Site](https://jjgroenendijk.github.io/cars-reliability/) | [GitHub](https://github.com/jjgroenendijk/cars-reliability)
+**Links:** [Live Site](https://apkstat.nl/) | [GitHub](https://github.com/jjgroenendijk/cars-reliability)
 
 ## SteenPapierSchaar.tech
 
