@@ -1,10 +1,12 @@
 // Vegetation, rocks, corals and wildlife. A compute shader scatters instances
 // around the camera every frame (frustum culled, LOD selected) straight into
 // GPU buffers that feed indirect draws: no per-instance CPU work at all.
+// The camera view draws them all at once through the visibility buffer
+// (PropsVisibility); the shadow cascades draw slot by slot.
 import { shader, buffer, bufferWithData, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { scatterWGSL, clampWGSL, propWGSL, propShadowWGSL, cardBakeWGSL, cardMipWGSL } from '../shaders/props.js';
+import { scatterWGSL, finalizeWGSL, propShadowWGSL, cardBakeWGSL, cardMipWGSL, MAX_SLOTS } from '../shaders/props.js';
 import { LAYERS, TYPE, CARDS, CARD_VIEWS } from '../scene/catalog.js';
-import { HDR, DEPTH, depthState } from './layouts.js';
+import { DEPTH } from './layouts.js';
 
 const PARAM_STRIDE = 256;
 const INSTANCE_BYTES = 32;
@@ -27,12 +29,14 @@ function mergeMeshes(meshes) {
 }
 
 export class PropsPass {
-  constructor(device, shared, meshes, quality) {
+  constructor(device, shared, meshes, quality, flockState) {
     this.device = device;
+    this.flockState = flockState;
     const U = GPUBufferUsage;
     const merged = mergeMeshes(meshes);
-    this.vertexBuffer = bufferWithData(device, merged.v, U.VERTEX, 'prop-verts');
-    this.indexBuffer = bufferWithData(device, merged.i, U.INDEX, 'prop-indices');
+    // also read as storage by the visibility buffer passes
+    this.vertexBuffer = bufferWithData(device, merged.v, U.VERTEX | U.STORAGE, 'prop-verts');
+    this.indexBuffer = bufferWithData(device, merged.i, U.INDEX | U.STORAGE, 'prop-indices');
 
     // draw slots: one per (layer, lod)
     this.layers = [];
@@ -59,6 +63,12 @@ export class PropsPass {
     for (const s of this.slots) this.argsTemplate.set([s.range.indexCount, 0, s.range.firstIndex, s.range.baseVertex, 0], s.index * 5);
     this.argsBuffer = buffer(device, this.argsTemplate.byteLength, U.STORAGE | U.INDIRECT | U.COPY_DST | U.COPY_SRC, 'prop-args');
     this.capsBuffer = bufferWithData(device, new Uint32Array(this.slots.map((s) => s.cap)), U.STORAGE, 'prop-caps');
+    if (this.slots.length > MAX_SLOTS) throw new Error(`too many prop slots: ${this.slots.length} > ${MAX_SLOTS}`);
+    // per slot: where its mesh and instances live (struct SlotInfo)
+    this.slotBuffer = bufferWithData(device, new Uint32Array(this.slots.flatMap((s) => [s.range.firstIndex, s.range.baseVertex, s.range.indexCount, s.base])), U.STORAGE, 'prop-slots');
+    // first triangle corner of each slot in the merged draw, then the total
+    this.startBuffer = buffer(device, (this.slots.length + 1) * 4, U.STORAGE, 'prop-slot-starts');
+    this.drawArgs = buffer(device, 16, U.STORAGE | U.INDIRECT, 'prop-draw');
 
     // per-layer scatter parameters (struct SP in the scatter shader)
     const params = new ArrayBuffer(PARAM_STRIDE * this.layers.length);
@@ -79,19 +89,19 @@ export class PropsPass {
     this.paramBuffer = bufferWithData(device, new Uint8Array(params), U.UNIFORM, 'scatter-params');
 
     this.scatterLayout = bindLayout(device, 'scatter', [entry.uniform(true), entry.storage(), entry.storage(),
-      entry.texture('unfilterable-float', '2d', GPUShaderStage.COMPUTE)]);
+      entry.texture('unfilterable-float', '2d', GPUShaderStage.COMPUTE), entry.storage(true)]);
     this.setHiZ(null);
     this.scatterPipeline = device.createComputePipeline({
       label: 'scatter',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.scatterLayout] }),
       compute: { module: shader(device, scatterWGSL, 'scatter'), entryPoint: 'main' },
     });
-    const clampLayout = bindLayout(device, 'clamp', [entry.storage(), entry.storage(true)]);
-    this.clampGroup = bindGroup(device, clampLayout, [this.argsBuffer, this.capsBuffer]);
-    this.clampPipeline = device.createComputePipeline({
-      label: 'clamp-args',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [clampLayout] }),
-      compute: { module: shader(device, clampWGSL, 'clamp'), entryPoint: 'main' },
+    const finalizeLayout = bindLayout(device, 'prop-finalize', [entry.storage(), entry.storage(true), entry.storage(true), entry.storage(), entry.storage()]);
+    this.finalizeGroup = bindGroup(device, finalizeLayout, [this.argsBuffer, this.capsBuffer, this.slotBuffer, this.startBuffer, this.drawArgs]);
+    this.finalizePipeline = device.createComputePipeline({
+      label: 'prop-finalize',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [finalizeLayout] }),
+      compute: { module: shader(device, finalizeWGSL, 'prop-finalize'), entryPoint: 'main' },
     });
 
     const vertexBuffers = [
@@ -115,18 +125,11 @@ export class PropsPass {
     });
     this.cardFrames = frames;
     const cardConst = `const CARD = array<vec4f, ${frames.length}>(${frames.map((c) => `vec4f(${c.hw}, ${c.y0}, ${c.y1}, 0.0)`).join(', ')});`;
+    // shaders that include propVS need the framing of every impostor species
     const withCards = (code) => code.replace('/*CARD_FRAMES*/', cardConst);
+    this.withCards = withCards;
     this.setupCards(device, shared, merged, withCards);
 
-    const main = shader(device, withCards(propWGSL), 'props');
-    this.pipeline = device.createRenderPipeline({
-      label: 'props',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, this.cardLayout] }),
-      vertex: { module: main, entryPoint: 'vs', buffers: vertexBuffers },
-      fragment: { module: main, entryPoint: 'fs', targets: [{ format: HDR }] },
-      primitive: { topology: 'triangle-list', cullMode: 'none' },
-      depthStencil: depthState(),
-    });
     const sh = shader(device, withCards(propShadowWGSL), 'props-shadow');
     this.shadowPipeline = device.createRenderPipeline({
       label: 'props-shadow',
@@ -145,8 +148,7 @@ export class PropsPass {
     const tex = (label) => device.createTexture({ label, size: [CARD_SIZE, CARD_SIZE, layers], format: 'rgba8unorm', mipLevelCount: mips, usage });
     this.cardAlb = tex('card-albedo');
     this.cardNrm = tex('card-normal');
-    this.cardLayout = bindLayout(device, 'cards', [entry.texture('float', '2d-array', GPUShaderStage.FRAGMENT), entry.texture('float', '2d-array', GPUShaderStage.FRAGMENT)]);
-    this.cardGroup = bindGroup(device, this.cardLayout, [this.cardAlb.createView({ dimension: '2d-array' }), this.cardNrm.createView({ dimension: '2d-array' })], 'cards');
+    this.cardViews = [this.cardAlb.createView({ dimension: '2d-array' }), this.cardNrm.createView({ dimension: '2d-array' })];
     this.cardMips = mips;
     this.cardRanges = CARDS.map(([, src]) => merged.ranges[src]);
     this.bakeLayout = bindLayout(device, 'card-bake', [entry.uniform(true, GPUShaderStage.VERTEX)]);
@@ -229,7 +231,7 @@ export class PropsPass {
       view = t.createView();
     }
     this.scatterGroup = bindGroup(this.device, this.scatterLayout, [
-      { buffer: this.paramBuffer, size: PARAM_BYTES }, this.instanceBuffer, this.argsBuffer, view,
+      { buffer: this.paramBuffer, size: PARAM_BYTES }, this.instanceBuffer, this.argsBuffer, view, this.flockState,
     ], 'scatter');
   }
 
@@ -248,9 +250,9 @@ export class PropsPass {
       pass.setBindGroup(1, this.scatterGroup, [this.layers.indexOf(layer) * PARAM_STRIDE]);
       pass.dispatchWorkgroups(layer.groups[0], layer.groups[1]);
     }
-    pass.setPipeline(this.clampPipeline);
-    pass.setBindGroup(0, this.clampGroup);
-    pass.dispatchWorkgroups(Math.ceil(this.slots.length / 32));
+    pass.setPipeline(this.finalizePipeline);
+    pass.setBindGroup(0, this.finalizeGroup);
+    pass.dispatchWorkgroups(1);
     pass.end();
   }
 
@@ -264,12 +266,9 @@ export class PropsPass {
     }
   }
 
-  draw(pass, frameGroup, shadowGroup) {
-    pass.setPipeline(this.pipeline);
-    pass.setBindGroup(0, frameGroup);
-    pass.setBindGroup(1, shadowGroup);
-    pass.setBindGroup(2, this.cardGroup);
-    this.drawSlots(pass);
+  // Everything the visibility buffer passes read (binding order of propData).
+  get visibilityResources() {
+    return [...this.cardViews, this.vertexBuffer, this.indexBuffer, this.instanceBuffer, this.slotBuffer, this.startBuffer];
   }
 
   drawShadow(pass, frameGroup, cascadeGroup, cascade) {

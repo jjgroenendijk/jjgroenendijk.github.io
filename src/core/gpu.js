@@ -38,7 +38,7 @@ const VFC = () => GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderSta
 const VF = () => GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
 export const entry = {
   uniform: (dynamic = false, visibility = VFC()) => ({ visibility, buffer: { type: 'uniform', hasDynamicOffset: dynamic } }),
-  storage: (readOnly = false) => ({ visibility: GPUShaderStage.COMPUTE, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } }),
+  storage: (readOnly = false, visibility = GPUShaderStage.COMPUTE) => ({ visibility, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } }),
   texture: (sampleType = 'float', viewDimension = '2d', visibility = VF()) => ({ visibility, texture: { sampleType, viewDimension } }),
   storageTexture: (format, viewDimension = '2d') => ({ visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format, viewDimension } }),
   sampler: (type = 'filtering', visibility = VF()) => ({ visibility, sampler: { type } }),

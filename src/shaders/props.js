@@ -1,8 +1,9 @@
 import { frameStruct, commonLib, shadowLib, hizLib } from './common.js';
 import { cacheLib } from './terrain.js';
+import { flockReadLib } from './flock.js';
 import { TYPE, MAT, CARD_VIEWS } from '../scene/catalog.js';
 
-export const scatterWGSL = frameStruct + commonLib + hizLib + cacheLib + /* wgsl */ `
+export const scatterWGSL = frameStruct + commonLib + hizLib + cacheLib + flockReadLib(1, 4) + /* wgsl */ `
 struct SP {
   cell: f32, radius: f32, maxDist: f32, minDist: f32,
   kind: u32, count: u32, flags: u32, p0: u32,      // flags: 1 = heights from the clipmap cache
@@ -41,8 +42,8 @@ fn emit(rel: vec3f, a: vec4f, b: vec4f, dist: f32) {
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   let kind = P.kind;
   let t = F.camPos.w;
-  if (kind == ${TYPE.fish}u) { fish(gid.x + gid.y * 64u, t); return; }
-  if (kind == ${TYPE.bird}u) { bird(gid.x + gid.y * 64u, t); return; }
+  if (kind == ${TYPE.fish}u) { fish(gid.x + gid.y * 64u); return; }
+  if (kind == ${TYPE.bird}u) { bird(gid.x + gid.y * 64u); return; }
   if (kind == ${TYPE.manta}u || kind == ${TYPE.turtle}u) { cruiser(gid.x + gid.y * 64u, kind, t); return; }
   if (kind == ${TYPE.dolphin}u) { dolphin(gid.x + gid.y * 64u, t); return; }
   if (kind == ${TYPE.butterfly}u) { butterfly(gid.x + gid.y * 64u, t); return; }
@@ -225,12 +226,12 @@ fn crab(i: u32, t: f32) {
 // scarlet macaws crossing over the jungle canopy
 fn parrot(i: u32, t: f32) {
   if (i >= P.count || F.extra.z < 0.05 || F.sunDir.y < 0.02) { return; }
-  let flock = i / 4u;
+  let pod = i / 4u;
   let j = i % 4u;
   let period = 45.0;
-  let k = floor(t / period + f32(flock) * 0.33);
-  let ph = fract(t / period + f32(flock) * 0.33);
-  let sh = hashu(u32(k) * 7919u + flock * 31u);
+  let k = floor(t / period + f32(pod) * 0.33);
+  let ph = fract(t / period + f32(pod) * 0.33);
+  let sh = hashu(u32(k) * 7919u + pod * 31u);
   let side = select(-1.0, 1.0, hf(sh) > 0.5);
   let z0 = F.camPos.z + 30.0 + hf(sh + 1u) * 60.0;
   let x = pathX(z0) + side * (ph - 0.5) * 220.0;
@@ -243,34 +244,17 @@ fn parrot(i: u32, t: f32) {
   emit(rel, vec4f(pos, 0.75), vec4f(select(-PI * 0.5, PI * 0.5, side > 0.0), 0.0, 0.85 + hf(sh + 3u) * 0.1, f32(i) * 11.0), dist);
 }
 
-fn fish(i: u32, t: f32) {
+// schooling fish and flocking birds come from the flock simulation
+fn fish(i: u32) {
   if (i >= P.count || F.extra.x < 0.01) { return; }
-  let per = 32u;
-  let s = i / per;
-  let j = i % per;
-  let spacing = 14.0;
-  let zc = floor(F.camPos.z / spacing);
-  let zi = zc + f32(s) - 4.0;
-  let sh = hashu(u32(i32(zi) + 100000) * 977u);
-  let ax = pathX(zi * spacing) + (hf(sh) - 0.5) * 18.0;
-  let az = zi * spacing + hf(sh + 1u) * spacing;
-  let ground = terrainHeight(vec2f(ax, az));
-  if (ground > -2.5) { return; }
-  let ay = min(ground + 2.0 + hf(sh + 2u) * 3.0, -1.6);
-  let rad = 2.5 + hf(sh + 3u) * 4.0;
-  let dirS = select(-1.0, 1.0, hf(sh + 4u) > 0.5);
-  let ang = t * 0.25 * dirS / max(rad * 0.3, 1.0) + f32(j) * 0.07;
-  let center = vec3f(ax + cos(ang) * rad, ay + sin(t * 0.3 + hf(sh) * 6.0) * 0.6, az + sin(ang) * rad);
-  let fj = hashu(i * 7u + 3u);
-  let off = (vec3f(hf(fj), hf(fj + 1u), hf(fj + 2u)) - 0.5) * vec3f(3.0, 1.2, 3.0);
-  let wob = vec3f(sin(t * 1.3 + f32(j)), sin(t * 1.7 + f32(j) * 2.0) * 0.4, cos(t * 1.1 + f32(j))) * 0.25;
-  let pos = center + off + wob;
-  let yaw = atan2(-sin(ang) * dirS, cos(ang) * dirS);
-  let rel = pos - F.camPos.xyz;
+  let f = agentAt(i);
+  if (f.key == 0u) { return; }
+  let rel = f.pos - F.camPos.xyz;
   let dist = length(rel);
   if (dist > P.maxDist) { return; }
-  let sc = mix(0.09, 0.22, hf(sh + 5u)) * (0.85 + 0.3 * hf(fj + 3u));
-  emit(rel, vec4f(pos, sc), vec4f(yaw, 0.0, hf(sh + 6u), hf(fj) * 100.0), dist);
+  let fj = hashu(i * 7u + 3u);
+  let sc = mix(0.09, 0.22, hf(f.key + 5u)) * (0.85 + 0.3 * hf(fj + 3u));
+  emit(rel, vec4f(f.pos, sc), vec4f(atan2(f.vel.x, f.vel.z), 0.0, hf(f.key + 6u), hf(fj) * 100.0), dist);
 }
 
 // manta rays and turtles: slow, wide circles along the reef
@@ -420,43 +404,52 @@ fn landmark(i: u32, kind: u32, t: f32) {
   emit(rel, vec4f(pos, 1.0), vec4f(yaw, tilt, hf(ch + 6u), hf(ch + 7u) * 100.0), dist);
 }
 
-fn bird(i: u32, t: f32) {
+fn bird(i: u32) {
   if (i >= P.count || F.camFwd.w > 0.5) { return; }
-  let per = 6u;
-  let s = i / per;
-  let j = i % per;
-  let cell = 260.0;
-  let cc = floor(F.camPos.xz / cell);
-  let ci = cc + vec2f(f32(s % 3u) - 1.0, f32(s / 3u) - 0.0);
-  let sh = hashu(u32(i32(ci.x) + 5000) * 131u + hashu(u32(i32(ci.y) + 5000)));
-  let center = (ci + vec2f(hf(sh), hf(sh + 1u))) * cell;
-  let rad = 30.0 + hf(sh + 2u) * 50.0;
-  let alt = 28.0 + hf(sh + 3u) * 50.0 + max(terrainHeight(center), 0.0);
-  let dirS = select(-1.0, 1.0, hf(sh + 4u) > 0.5);
-  let ang = t * dirS * 9.0 / rad + f32(j) * 0.35 + hf(sh + 5u) * TAU;
-  let fj = hashu(i * 13u + 1u);
-  let r = rad + (hf(fj) - 0.5) * 14.0;
-  let pos = vec3f(center.x + cos(ang) * r, alt + (hf(fj + 1u) - 0.5) * 8.0 + sin(t * 0.4 + f32(j)) * 2.0, center.y + sin(ang) * r);
-  let yaw = atan2(-sin(ang) * dirS, cos(ang) * dirS);
-  let rel = pos - F.camPos.xyz;
+  let b = agentAt(FISH_COUNT + i);
+  if (b.key == 0u) { return; }
+  let rel = b.pos - F.camPos.xyz;
   let dist = length(rel);
   if (dist > P.maxDist) { return; }
-  emit(rel, vec4f(pos, 0.9 + hf(fj + 2u) * 0.4), vec4f(yaw, -0.25 * dirS, hf(sh + 6u), hf(fj) * 100.0), dist);
+  let fj = hashu(i * 13u + 1u);
+  emit(rel, vec4f(b.pos, 0.9 + hf(fj + 2u) * 0.4), vec4f(atan2(b.vel.x, b.vel.z), b.bank, hf(b.key + 6u), hf(fj) * 100.0), dist);
 }
 `;
 
-export const clampWGSL = /* wgsl */ `
+// After the scatter: clamp each slot's instance count to its capacity and lay
+// the slots end to end (triangle corners), so the visibility pass draws every
+// prop with one non-indexed draw.
+export const slotInfoLib = /* wgsl */ `
+struct SlotInfo { firstIndex: u32, baseVertex: u32, indexCount: u32, instBase: u32 };
+`;
+export const MAX_SLOTS = 64;
+export const finalizeWGSL = slotInfoLib + /* wgsl */ `
 @group(0) @binding(0) var<storage, read_write> args: array<u32>;
 @group(0) @binding(1) var<storage, read> caps: array<u32>;
-@compute @workgroup_size(32)
-fn main(@builtin(global_invocation_id) gid: vec3u) {
-  let i = gid.x;
-  if (i >= arrayLength(&caps)) { return; }
-  args[i * 5u + 1u] = min(args[i * 5u + 1u], caps[i]);
+@group(0) @binding(2) var<storage, read> slots: array<SlotInfo>;
+@group(0) @binding(3) var<storage, read_write> starts: array<u32>;  // first corner of each slot, then the total
+@group(0) @binding(4) var<storage, read_write> draw: array<u32, 4>; // drawIndirect arguments
+var<workgroup> corners: array<u32, ${MAX_SLOTS}>;
+@compute @workgroup_size(${MAX_SLOTS})
+fn main(@builtin(local_invocation_index) i: u32) {
+  let n = arrayLength(&caps);
+  var c = 0u;
+  if (i < n) {
+    let k = min(args[i * 5u + 1u], caps[i]);
+    args[i * 5u + 1u] = k;
+    c = k * slots[i].indexCount;
+  }
+  corners[i] = c;
+  workgroupBarrier();
+  if (i != 0u) { return; }
+  var total = 0u;
+  for (var j = 0u; j < n; j++) { starts[j] = total; total += corners[j]; }
+  starts[n] = total;
+  draw = array<u32, 4>(total, 1u, 0u, 0u);
 }
 `;
 
-const propVS = /* wgsl */ `
+export const propVS = /* wgsl */ `
 /*CARD_FRAMES*/
 struct PV {
   @builtin(position) pos: vec4f,
@@ -557,7 +550,7 @@ fn propVertex(pos: vec3f, nrm: vec3f, ex: vec4f, a: vec4f, b: vec4f) -> PV {
 }
 `;
 
-const propSurface = /* wgsl */ `
+export const propSurface = /* wgsl */ `
 fn fishColor(h: f32, lp: vec3f) -> vec3f {
   let belly = sat(lp.y * 6.0 + 0.3);
   if (h < 0.16) { return mix(vec3f(0.95, 0.78, 0.08), vec3f(0.98, 0.88, 0.35), belly); }            // yellow tang
@@ -599,6 +592,20 @@ fn coralColor(h: f32) -> vec3f {
 struct Surf { alb: vec3f, n: vec3f, trans: f32, spec: f32, rough: f32, emissive: vec3f };
 
 // Material of a prop surface point (shared by the main pass and the impostor bake).
+// sea fan lattice and the holes in the wreck's rotten planks
+fn seaFanGap(in: PV) -> bool {
+  let q = in.lp.xy * 55.0;
+  let lat = min(abs(sin(q.x + sin(q.y * 0.5))), abs(sin(q.y * 1.2 + sin(q.x * 0.4))));
+  return lat > 0.55 && in.ex.z > 0.15;
+}
+fn wreckHoles(lp: vec3f) -> f32 { return vnoise3(lp * 1.7) * 0.6 + vnoise3(lp * 7.0) * 0.4; }
+// true where a (non-card) surface is cut away
+fn propClip(in: PV) -> bool {
+  if (in.mat == 10u) { return seaFanGap(in); }
+  if (in.mat == 19u) { return wreckHoles(in.lp) > 0.66; }
+  return false;
+}
+
 fn surface(in: PV, ff: bool) -> Surf {
   let pw = in.rel + F.camPos.xyz;
   var n = normalize(in.n);
@@ -658,9 +665,6 @@ fn surface(in: PV, ff: bool) -> Surf {
       alb = coralColor(fract(hue + 0.37)) * mix(0.5, 1.1, smoothstep(0.1, 0.6, rdg));
     }
     case 10u: {
-      let q = lp.xy * 55.0;
-      let lat = min(abs(sin(q.x + sin(q.y * 0.5))), abs(sin(q.y * 1.2 + sin(q.x * 0.4))));
-      if (lat > 0.55 && in.ex.z > 0.15) { discard; }
       alb = mix(vec3f(0.55, 0.12, 0.35), vec3f(0.85, 0.35, 0.20), hue);
       trans = 0.5;
     }
@@ -713,8 +717,7 @@ fn surface(in: PV, ff: bool) -> Surf {
       trans = 0.3;
     }
     case 19u: {
-      let nz = vnoise3(lp * 1.7) * 0.6 + vnoise3(lp * 7.0) * 0.4;
-      if (nz > 0.66) { discard; }
+      let nz = wreckHoles(lp);
       alb = mix(vec3f(0.14, 0.13, 0.09), vec3f(0.22, 0.27, 0.16), vnoise3(lp * 3.0 + 4.0));
       alb = mix(alb, coralColor(fract(nz * 3.0)) * 0.6, smoothstep(0.55, 0.64, nz) * 0.7);
     }
@@ -810,49 +813,22 @@ fn surface(in: PV, ff: bool) -> Surf {
 }
 `;
 
-export const propWGSL = frameStruct + commonLib + shadowLib + propVS + propSurface + /* wgsl */ `
-@group(2) @binding(0) var cardAlb: texture_2d_array<f32>;
-@group(2) @binding(1) var cardNrm: texture_2d_array<f32>;
-
-@vertex fn vs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) ex: vec4f,
-              @location(3) a: vec4f, @location(4) b: vec4f) -> PV {
-  var o = propVertex(pos, nrm, ex, a, b);
-  o.pos = F.viewProj * vec4f(o.rel, 1.0);
-  return o;
-}
-
-fn cardSurface(in: PV, gx: vec2f, gy: vec2f) -> Surf {
-  let lay = i32(in.lp.z + 0.5);
-  let c = textureSampleGrad(cardAlb, linSmp, in.lp.xy, lay, gx, gy);
-  // dithered alpha test: TAA turns the thinning of distant mips into soft coverage
-  if (c.a < 0.25 + 0.5 * ign(in.pos.xy, F.misc.x)) { discard; }
-  let nt = textureSampleGrad(cardNrm, linSmp, in.lp.xy, lay, gx, gy);
-  let nl = nt.xyz / max(c.a, 1e-3) * 2.0 - 1.0;
-  let n = normalize(rotY(nl, in.n.x));
-  let alb = c.rgb / max(c.a, 1e-3) * (0.85 + 0.3 * in.ex.w);
-  return Surf(alb, n, nt.w / max(c.a, 1e-3), 0.15, 0.5, vec3f(0.0));
-}
-
-@fragment fn fs(in: PV, @builtin(front_facing) ff: bool) -> @location(0) vec4f {
-  // derivatives must be taken before any (non-uniform) branch
-  let gx = dpdx(in.lp.xy); let gy = dpdy(in.lp.xy);
-  var s: Surf;
-  if (in.mat == ${MAT.card}u) { s = cardSurface(in, gx, gy); } else { s = surface(in, ff); }
+// Lighting of a prop surface point (shared by the visibility buffer resolve).
+export const propShading = /* wgsl */ `
+fn shadeProp(in: PV, s: Surf, frag: vec2f) -> vec3f {
   let pw = in.rel + F.camPos.xyz;
-  let alb = s.alb; let n = s.n; let trans = s.trans; let spec = s.spec; let rough = s.rough; let emissive = s.emissive;
   let dist = length(in.rel);
   let V = -in.rel / max(dist, 1e-4);
   let L = F.lightDir.xyz;
-  let sh = shadowAt(in.rel, n, in.pos.xy) * cloudShadow(pw);
+  let sh = shadowAt(in.rel, s.n, frag) * cloudShadow(pw);
   let lc = lightAt(pw);
   let ao = in.ex.x;
-  var nl = max(dot(n, L), 0.0);
-  if (trans > 0.0) { nl = max((dot(n, L) + 0.35) / 1.35, 0.0); }
-  var col = alb * (lc * nl * sh + ambientAt(n, pw) * ao);
-  col += alb * lc * trans * pow(sat(dot(V, -L)), 4.0) * 1.1 * sh;
-  col += lc * ggx(n, V, L, rough) * spec * sh * nl;
-  col = applyFog(col + emissive, in.rel);
-  return vec4f(col, 1.0);
+  var nl = max(dot(s.n, L), 0.0);
+  if (s.trans > 0.0) { nl = max((dot(s.n, L) + 0.35) / 1.35, 0.0); }
+  var col = s.alb * (lc * nl * sh + ambientAt(s.n, pw) * ao);
+  col += s.alb * lc * s.trans * pow(sat(dot(V, -L)), 4.0) * 1.1 * sh;
+  col += lc * ggx(s.n, V, L, s.rough) * s.spec * sh * nl;
+  return applyFog(col + s.emissive, in.rel);
 }
 `;
 
@@ -880,6 +856,7 @@ struct BakeU { right: vec4f, dir: vec4f, yr: vec4f };   // right.w half width, d
 }
 struct BO { @location(0) alb: vec4f, @location(1) nrm: vec4f };
 @fragment fn fs(in: PV, @builtin(front_facing) ff: bool) -> BO {
+  if (propClip(in)) { discard; }
   let s = surface(in, ff);
   return BO(vec4f(s.alb, 1.0), vec4f(s.n * 0.5 + 0.5, s.trans));
 }
