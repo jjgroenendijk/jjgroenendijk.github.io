@@ -103,14 +103,14 @@ export class Renderer {
       waterLevel: shot.water, width: t.width, height: t.height, jitter, resetHistory: this.resetHistory, noOcclusion: cut,
       frame: this.frame, cycleU: shot.u, quality: this.quality.level, splits: [...SPLITS, 0],
       cascades: this.shadows.matrices, frustum, levels: levels.data,
-      modes: shot.modes, cacheMask: levels.mask, fade, vegDist: this.props.vegDist,
+      modes: shot.modes, fade, vegDist: this.props.vegDist,
       cloudMap: this.cloudMap.origin(pos, env.lightDir),
     });
 
 
     const encoder = this.device.createCommandEncoder();
     const on = (name) => !this.skip.has(name);
-    if (levels.mask && on('bake')) {
+    if (on('bake')) {
       const pass = encoder.beginComputePass({ label: 'terrain-bake' });
       this.terrain.bake(pass, this.cacheGroup);
       pass.end();

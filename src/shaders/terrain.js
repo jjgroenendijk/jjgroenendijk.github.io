@@ -5,37 +5,66 @@ export const SIDE = GRID_M * 2 + 1; // vertices per level side
 export const TILES = 4; // each level is split into TILES x TILES clusters for culling
 export const TILE = (GRID_M * 2) / TILES;
 
-// Terrain height as drawn: bilinear lookup in the finest clipmap level that
-// covers the point (used to place distant instances without any noise).
+// The clipmap cache is addressed toroidally: a world lattice point keeps its
+// texel while its level moves, so a move only re-bakes the rows and columns
+// that scrolled into view (see terrainCacheWGSL).
 export const cacheLib = /* wgsl */ `
 @group(0) @binding(1) var cacheTex: texture_2d_array<f32>;
+// texel of grid point g (-GRID_M..GRID_M around the level centre) of a level
+fn cacheTexel(lvl: u32, g: vec2i) -> vec2i {
+  let Lv = F.levels[lvl];
+  let G = vec2i(round(Lv.xy / Lv.z)) + clamp(g, vec2i(-${GRID_M}), vec2i(${GRID_M}));
+  return ((G % ${SIDE}) + ${SIDE}) % ${SIDE};
+}
+fn cacheFetch(lvl: u32, g: vec2i) -> vec4f { return textureLoad(cacheTex, cacheTexel(lvl, g), lvl, 0); }
+
+// Terrain height as drawn: bilinear lookup in the finest clipmap level that
+// covers the point (used to place distant instances without any noise).
 fn cacheHeight(p: vec2f) -> f32 {
   for (var l = 0u; l < ${LEVELS}u; l++) {
     let Lv = F.levels[l];
-    let g = (p - Lv.xy) / Lv.z + ${GRID_M}.0;
-    if (any(g < vec2f(1.0)) || any(g > vec2f(${GRID_M * 2 - 1}.0))) { continue; }
+    let g = (p - Lv.xy) / Lv.z;
+    if (any(abs(g) > vec2f(${GRID_M - 1}.0))) { continue; }
     let i = vec2i(floor(g)); let f = g - floor(g);
-    let h00 = textureLoad(cacheTex, i, l, 0).x;
-    let h10 = textureLoad(cacheTex, i + vec2i(1, 0), l, 0).x;
-    let h01 = textureLoad(cacheTex, i + vec2i(0, 1), l, 0).x;
-    let h11 = textureLoad(cacheTex, i + vec2i(1, 1), l, 0).x;
+    let h00 = cacheFetch(l, i).x;
+    let h10 = cacheFetch(l, i + vec2i(1, 0)).x;
+    let h01 = cacheFetch(l, i + vec2i(0, 1)).x;
+    let h11 = cacheFetch(l, i + vec2i(1, 1)).x;
     return mix(mix(h00, h10, f.x), mix(h01, h11, f.x), f.y);
   }
   return terrainHeight(p);
 }
 `;
 
-// Compute: bake heights, normals and far horizon shadows into a clipmap texture array.
+// Compute: bake heights, normals and far horizon shadows into a clipmap texture
+// array. Only texels that are new to a level's window are computed, plus a band
+// of rows per frame that is refreshed so horizon shadows follow the sun.
+export const BAKE_BYTES = (LEVELS + 1) * 16;
 export const terrainCacheWGSL = frameStruct + commonLib + /* wgsl */ `
 @group(0) @binding(1) var cacheOut: texture_storage_2d_array<rgba32float, write>;
+struct Bake {
+  prev: array<vec4f, ${LEVELS}>, // xy previous level centre, z mode (0 keep, 1 new texels, 2 everything)
+  band: vec4f,                   // refresh: x level, rows [y, z)
+};
+@group(0) @binding(2) var<uniform> B: Bake;
+
+fn needsBake(lvl: u32, row: u32, g: vec2f) -> bool {
+  let Lv = F.levels[lvl];
+  let pv = B.prev[lvl];
+  if (pv.z > 1.5) { return true; }
+  if (u32(B.band.x) == lvl && f32(row) >= B.band.y && f32(row) < B.band.z) { return true; }
+  if (pv.z < 0.5) { return false; }
+  let old = round((Lv.xy - pv.xy) / Lv.z) + g; // the same point in the previous window
+  return any(abs(old) > vec2f(${GRID_M}.0));
+}
 
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   let lvl = gid.z;
-  let mask = u32(F.extra.w);
-  if (((mask >> lvl) & 1u) == 0u || gid.x > ${GRID_M * 2}u || gid.y > ${GRID_M * 2}u) { return; }
-  let Lv = F.levels[lvl];
+  if (gid.x > ${GRID_M * 2}u || gid.y > ${GRID_M * 2}u) { return; }
   let g = vec2f(f32(gid.x), f32(gid.y)) - ${GRID_M}.0;
+  if (!needsBake(lvl, gid.y, g)) { return; }
+  let Lv = F.levels[lvl];
   let p = Lv.xy + g * Lv.z;
   let h = terrainHeight(p);
   let e = max(Lv.z, 0.35);
@@ -59,12 +88,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       if (t > 4000.0 || sh < 0.01) { break; }
     }
   }
-  textureStore(cacheOut, vec2i(gid.xy), i32(lvl), vec4f(h, n.x, n.z, sh));
+  let G = vec2i(round(Lv.xy / Lv.z)) + vec2i(g);
+  textureStore(cacheOut, ((G % ${SIDE}) + ${SIDE}) % ${SIDE}, i32(lvl), vec4f(h, n.x, n.z, sh));
 }
 `;
 
-const terrainVS = /* wgsl */ `
-@group(0) @binding(1) var cacheTex: texture_2d_array<f32>;
+const terrainVS = cacheLib + /* wgsl */ `
 
 struct TV {
   @builtin(position) pos: vec4f,
@@ -82,18 +111,14 @@ fn gridPoint(vi: u32) -> vec3f {
   return vec3f(f32(k % ${SIDE}u) - ${GRID_M}.0, f32(k / ${SIDE}u) - ${GRID_M}.0, f32(lvl));
 }
 
-fn fetchC(lvl: u32, g: vec2i) -> vec4f {
-  return textureLoad(cacheTex, clamp(g + vec2i(${GRID_M}), vec2i(0), vec2i(${GRID_M * 2})), lvl, 0);
-}
-
 fn terrainVertex(g: vec2f, lvl: u32) -> TV {
   let Lv = F.levels[lvl];
   let a = max(abs(g.x), abs(g.y)) / ${GRID_M}.0;
   var morph = smoothstep(0.70, 0.90, a);
   if (Lv.w > 0.5) { morph = 0.0; }
   let odd = g - 2.0 * floor(g * 0.5);
-  let t0 = fetchC(lvl, vec2i(g));
-  let t1 = fetchC(lvl, vec2i(g - odd));
+  let t0 = cacheFetch(lvl, vec2i(g));
+  let t1 = cacheFetch(lvl, vec2i(g - odd));
   let tt = mix(t0, t1, morph);
   let gm = g - odd * morph;
   let xz = Lv.xy + gm * Lv.z;
@@ -213,24 +238,48 @@ struct Cascade { vp: mat4x4f };
 `;
 
 // Cluster culling: one workgroup per terrain tile finds the tile's exact height
-// range in the cache, then tests the box against the frustum and last frame's
-// depth pyramid and writes the tile's indirect draw (zero indices if hidden).
-export const terrainCullWGSL = frameStruct + commonLib + hizLib + /* wgsl */ `
-@group(0) @binding(1) var cacheTex: texture_2d_array<f32>;
+// range in the cache and tests the box against the frustum and last frame's
+// depth pyramid. Visible tiles append their indices (made absolute: the level
+// is folded into the vertex index) to one compact list, so the whole terrain,
+// and the water on the same grid, is a single indexed indirect draw.
+export const terrainCullWGSL = frameStruct + commonLib + hizLib + cacheLib + /* wgsl */ `
 struct Cluster { first: u32, count: u32, level: u32, tile: u32 };
 @group(1) @binding(0) var<storage, read> clusters: array<Cluster>;
-@group(1) @binding(1) var<storage, read_write> args: array<u32>;
+@group(1) @binding(1) var<storage, read_write> args: array<atomic<u32>>; // indexed indirect args, cleared each frame
 @group(1) @binding(2) var hiz: texture_2d<f32>;
+@group(1) @binding(3) var<storage, read> gridIdx: array<u32>;
+@group(1) @binding(4) var<storage, read_write> drawIdx: array<u32>;
 var<workgroup> lo: array<f32, 64>;
 var<workgroup> hi: array<f32, 64>;
+var<workgroup> dst: u32;
 const T: u32 = ${TILE}u;
+const HIDDEN: u32 = 0xffffffffu;
+
+fn tileVisible(cl: Cluster, t0: vec2u, hmin: f32, hmax: f32) -> bool {
+  let Lv = F.levels[cl.level];
+  // waves (the water uses the same tiles) and the raised canopy shell
+  let y0 = min(hmin, -3.0) - 1.0;
+  let y1 = max(hmax, 3.0) + 23.0;
+  let x0 = Lv.xy + (vec2f(t0) - ${GRID_M}.0) * Lv.z - F.camPos.xz;
+  let x1 = x0 + f32(T) * Lv.z;
+  let c = vec3f((x0.x + x1.x) * 0.5, (y0 + y1) * 0.5 - F.camPos.y, (x0.y + x1.y) * 0.5);
+  let e = vec3f((x1.x - x0.x) * 0.5, (y1 - y0) * 0.5, (x1.y - x0.y) * 0.5);
+  for (var i = 0; i < 6; i++) {
+    let pl = F.frustum[i];
+    if (dot(pl.xyz, c) + dot(abs(pl.xyz), e) + pl.w < 0.0) { return false; }
+  }
+  // demand clearance: a wrongly hidden tile would leave a hole, not a missing plant
+  return !occludedBox(hiz, c, e, 1.05);
+}
+
 @compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u32) {
   let cl = clusters[wg.x];
   let t0 = vec2u(cl.tile % ${TILES}u, cl.tile / ${TILES}u) * T;
   var mn = 1e9; var mx = -1e9;
   for (var i = li; i < (T + 1u) * (T + 1u); i += 64u) {
-    let h = textureLoad(cacheTex, vec2i(t0 + vec2u(i % (T + 1u), i / (T + 1u))), cl.level, 0).x;
+    let g = vec2i(t0 + vec2u(i % (T + 1u), i / (T + 1u))) - ${GRID_M};
+    let h = cacheFetch(cl.level, g).x;
     mn = min(mn, h); mx = max(mx, h);
   }
   lo[li] = mn; hi[li] = mx;
@@ -238,27 +287,16 @@ fn main(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
     workgroupBarrier();
     if (li < s) { lo[li] = min(lo[li], lo[li + s]); hi[li] = max(hi[li], hi[li + s]); }
   }
-  if (li != 0u) { return; }
-  let Lv = F.levels[cl.level];
-  // waves (the water uses the same tiles) and the raised canopy shell
-  let y0 = min(lo[0], -3.0) - 1.0;
-  let y1 = max(hi[0], 3.0) + 23.0;
-  let x0 = Lv.xy + (vec2f(t0) - ${GRID_M}.0) * Lv.z - F.camPos.xz;
-  let x1 = x0 + f32(T) * Lv.z;
-  let c = vec3f((x0.x + x1.x) * 0.5, (y0 + y1) * 0.5 - F.camPos.y, (x0.y + x1.y) * 0.5);
-  let e = vec3f((x1.x - x0.x) * 0.5, (y1 - y0) * 0.5, (x1.y - x0.y) * 0.5);
-  var vis = true;
-  for (var i = 0; i < 6; i++) {
-    let pl = F.frustum[i];
-    if (dot(pl.xyz, c) + dot(abs(pl.xyz), e) + pl.w < 0.0) { vis = false; }
+  if (li == 0u) {
+    dst = HIDDEN;
+    if (cl.count > 0u && tileVisible(cl, t0, lo[0], hi[0])) {
+      dst = atomicAdd(&args[0], cl.count);
+      atomicStore(&args[1], 1u);
+    }
   }
-  // demand clearance: a wrongly hidden tile would leave a hole, not a missing plant
-  if (vis && occludedBox(hiz, c, e, 1.05)) { vis = false; }
-  let o = wg.x * 5u;
-  args[o] = select(0u, cl.count, vis);
-  args[o + 1u] = 1u;
-  args[o + 2u] = cl.first;
-  args[o + 3u] = cl.level * ${SIDE * SIDE}u;
-  args[o + 4u] = 0u;
+  let base = workgroupUniformLoad(&dst);
+  if (base == HIDDEN) { return; }
+  let vbase = cl.level * ${SIDE * SIDE}u;
+  for (var i = li; i < cl.count; i += 64u) { drawIdx[base + i] = gridIdx[cl.first + i] + vbase; }
 }
 `;

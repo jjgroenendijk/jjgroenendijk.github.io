@@ -47,7 +47,7 @@ struct Frame {
   frustum: array<vec4f, 6>,
   levels: array<vec4f, ${LEVELS}>,
   cloud: vec4f,       // xy wind offset, z coverage, w unused
-  extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight, w cache mask
+  extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight, w unused
   fx: vec4f,          // x rainbow, y morning mist, z vegetation draw distance, w unused
   cloudMap: vec4f,    // xy cloud shadow map origin (cloud plane), z 1/span, w unused
 };
