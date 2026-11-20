@@ -7,6 +7,17 @@ import { W } from '../world/noise.js';
 export const CASCADES = 3;
 export const SPLITS = [16, 60, 280];
 const CASTER_RANGE = 700; // how far towards the light casters are captured
+// shadow cache: maximum age in frames per cascade, and what forces a re-render
+const MAX_AGE = [1, 2, 8];
+const LIGHT_COS = Math.cos((0.3 * Math.PI) / 180);
+const FWD_COS = Math.cos((1 * Math.PI) / 180);
+const MOVE_FRACTION = 0.02; // of the cascade radius
+
+// shortest offset in the wrapping world
+function wrapped(d) {
+  for (const k of [0, 2]) d[k] -= Math.round(d[k] / W) * W;
+  return d;
+}
 
 export class ShadowPass {
   constructor(device, shared, size, cloudMapView) {
@@ -24,20 +35,23 @@ export class ShadowPass {
     this.matrices = Array.from({ length: CASCADES }, () => mat4.identity());
   }
 
-  // The far cascade changes slowly, so it is only re-rendered every other frame.
-  active(frame) { return [true, true, frame % 2 === 0]; }
+  // Cached cascades: a cascade is re-rendered when it is older than its
+  // maximum age or the view / light moved noticeably; otherwise last render's
+  // map is reused with its matrix shifted by the camera's movement.
+  plan(camera, L, frame) {
+    this.rendered ||= [];
+    return Array.from({ length: CASCADES }, (_, c) => {
+      const r = this.rendered[c];
+      if (!r || frame === 0 || frame - r.frame >= MAX_AGE[c]) return true;
+      if (vec3.dot(L, r.light) < LIGHT_COS || vec3.dot(camera.fwd, r.fwd) < FWD_COS) return true;
+      return vec3.length(wrapped(vec3.sub(camera.pos, r.pos))) > r.radius * MOVE_FRACTION;
+    });
+  }
 
-  // camera: { pos (world), right, up, fwd, fov, aspect }, light: unit vector towards the light
+  // camera: { pos (world), fwd, fov, aspect }, light: unit vector towards the light
   update(camera, light, frame) {
-    const active = this.active(frame);
-    // the far cascade's matrix is kept relative to the camera of the frame it was rendered in
-    if (!active[2] && this.lastPos) {
-      const d = vec3.sub(camera.pos, this.lastPos);
-      for (const k of [0, 2]) d[k] -= Math.round(d[k] / W) * W; // the world wraps
-      this.matrices[2] = mat4.multiply(this.rendered2, mat4.translation(d[0], d[1], d[2]));
-      this.device.queue.writeBuffer(this.buffers[2], 0, this.matrices[2]);
-    }
     const L = vec3.normalize(light);
+    this.active = this.plan(camera, L, frame);
     const helper = Math.abs(L[1]) > 0.99 ? [1, 0, 0] : [0, 1, 0];
     const lx = vec3.normalize(vec3.cross(helper, L));
     const ly = vec3.cross(L, lx);
@@ -45,8 +59,15 @@ export class ShadowPass {
     let near = 0.1;
     for (let c = 0; c < CASCADES; c++) {
       const far = SPLITS[c];
-      if (!active[c]) { near = far; continue; }
       const mid = (near + far) / 2;
+      near = far;
+      if (!this.active[c]) {
+        const r = this.rendered[c];
+        const d = wrapped(vec3.sub(camera.pos, r.pos));
+        this.matrices[c] = mat4.multiply(r.matrix, mat4.translation(d[0], d[1], d[2]));
+        this.device.queue.writeBuffer(this.buffers[c], 0, this.matrices[c]);
+        continue;
+      }
       const hFar = far * tanV, wFar = hFar * camera.aspect;
       // bounding sphere of the slice (radius depends only on fov and split => stable)
       const radius = Math.ceil(Math.hypot(far - mid, hFar, wFar));
@@ -63,16 +84,14 @@ export class ShadowPass {
       const view = mat4.multiply(mat4.viewFromBasis(lx, ly, vec3.scale(L, -1)), mat4.translation(-eye[0], -eye[1], -eye[2]));
       const proj = mat4.ortho(-radius, radius, -radius, radius, 0.5, CASTER_RANGE + radius);
       this.matrices[c] = mat4.multiply(proj, view);
-      if (c === 2) { this.rendered2 = this.matrices[c]; this.lastPos = [...camera.pos]; }
+      this.rendered[c] = { matrix: this.matrices[c], pos: [...camera.pos], fwd: [...camera.fwd], light: L, radius, frame };
       this.device.queue.writeBuffer(this.buffers[c], 0, this.matrices[c]);
-      near = far;
     }
   }
 
-  encode(encoder, frameGroup, terrain, props, frame) {
-    const active = this.active(frame);
+  encode(encoder, frameGroup, terrain, props) {
     for (let c = 0; c < CASCADES; c++) {
-      if (!active[c]) continue;
+      if (!this.active[c]) continue;
       const pass = encoder.beginRenderPass({
         label: `shadow-${c}`,
         colorAttachments: [],

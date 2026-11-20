@@ -1,17 +1,19 @@
-import { frameStruct, commonLib, shadowLib } from './common.js';
-import { TYPE } from '../scene/catalog.js';
+import { frameStruct, commonLib, shadowLib, hizLib } from './common.js';
+import { cacheLib } from './terrain.js';
+import { TYPE, MAT, CARD_VIEWS } from '../scene/catalog.js';
 
-export const scatterWGSL = frameStruct + commonLib + /* wgsl */ `
+export const scatterWGSL = frameStruct + commonLib + hizLib + cacheLib + /* wgsl */ `
 struct SP {
-  cell: f32, radius: f32, maxDist: f32, lodDist: f32,
-  kind: u32, slot0: u32, slot1: u32, base0: u32,
-  base1: u32, cap0: u32, cap1: u32, count: u32,
-  bound: f32, keepDist: f32, reach: f32, lod2Dist: f32,
-  slot2: u32, base2: u32, cap2: u32, p0: u32,
+  cell: f32, radius: f32, maxDist: f32, minDist: f32,
+  kind: u32, count: u32, flags: u32, p0: u32,      // flags: 1 = heights from the clipmap cache
+  bound: f32, keepDist: f32, reach: f32, fadeDist: f32,
+  lods: vec4f,                                      // distances where the next LOD slot takes over
+  slot: vec4u, base: vec4u, cap: vec4u,
 };
 @group(1) @binding(0) var<uniform> P: SP;
 @group(1) @binding(1) var<storage, read_write> inst: array<vec4f>;
 @group(1) @binding(2) var<storage, read_write> args: array<atomic<u32>>;
+@group(1) @binding(3) var hiz: texture_2d<f32>;
 
 fn emit(rel: vec3f, a: vec4f, b: vec4f, dist: f32) {
   // frustum culling (camera relative planes)
@@ -22,14 +24,17 @@ fn emit(rel: vec3f, a: vec4f, b: vec4f, dist: f32) {
     let pl = F.frustum[i];
     if (dot(pl.xyz, c) + pl.w < -r) { vis = false; }
   }
-  if (!vis && dist > P.keepDist) { return; }
-  var slot = P.slot0; var base = P.base0; var cap = P.cap0;
-  if (dist > P.lod2Dist) { slot = P.slot2; base = P.base2; cap = P.cap2; }
-  else if (dist > P.lodDist) { slot = P.slot1; base = P.base1; cap = P.cap1; }
+  if (dist > P.keepDist) {
+    // off screen, or hidden behind what was drawn last frame (and too far to cast a shadow)
+    if (!vis || occludedBox(hiz, c, vec3f(r), 1.0)) { return; }
+  }
+  let k = u32(dist > P.lods.x) + u32(dist > P.lods.y) + u32(dist > P.lods.z);
+  let slot = P.slot[k];
   let idx = atomicAdd(&args[slot * 5u + 1u], 1u);
-  if (idx >= cap) { return; }
-  inst[(base + idx) * 2u] = a;
-  inst[(base + idx) * 2u + 1u] = b;
+  if (idx >= P.cap[k]) { return; }
+  let o = (P.base[k] + idx) * 2u;
+  inst[o] = a;
+  inst[o + 1u] = b;
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -66,7 +71,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let p = (vec2f(c) + vec2f(r1, r2) * 0.9 + 0.05) * cs;
   let rel2 = p - F.camPos.xz;
   let dist = length(rel2);
-  if (dist > P.maxDist) { return; }
+  if (dist > P.maxDist || dist <= P.minDist) { return; }
   // cheap frustum test on a vertical column before evaluating any terrain noise
   if (P.reach > 0.0 && dist > P.keepDist) {
     let y0 = -60.0 - F.camPos.y;
@@ -77,7 +82,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       if (e < -P.reach) { return; }
     }
   }
-  let h = terrainHeight(p);
+  // far layers sit on the terrain as it is drawn (cheap cache lookup instead of noise)
+  let h = select(terrainHeight(p), cacheHeight(p), (P.flags & 1u) != 0u);
   let d = abs(p.x - pathX(p.y));
   var prob = 0.0;
   var scale = 1.0;
@@ -152,7 +158,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let cor = corridorAt(p.y);
   if (cor.y > 0.01 && d < excl * max(cor.y, 0.25)) { return; }
   // shrink near max distance to avoid popping
-  scale *= 1.0 - smoothstep(P.maxDist * 0.8, P.maxDist, dist);
+  scale *= 1.0 - smoothstep(P.fadeDist * 0.8, P.fadeDist, dist);
   if (scale < 0.02) { return; }
   if (kind == ${TYPE.clownfish}u) {
     // a pair of clownfish hovering over their anemone
@@ -193,27 +199,27 @@ fn jelly(i: u32, t: f32) {
   emit(rel, vec4f(pos, mix(0.3, 0.6, hf(sh + 4u))), vec4f(hf(sh + 5u) * TAU, (hf(sh + 6u) - 0.5) * 0.3, hf(sh + 7u), hf(sh + 8u) * 100.0), dist);
 }
 
-// crabs scuttling sideways on the beaches
+// crabs scuttling sideways on every beach: a 4 m lattice around the camera,
+// about a third of the cells on the sand band hold a crab
 fn crab(i: u32, t: f32) {
-  if (i >= P.count || F.camPos.y > 25.0 || F.camFwd.w > 0.5) { return; }
-  let spacing = 5.0;
-  let zi = floor(F.camPos.z / spacing) + f32(i % 12u) - 3.0;
-  let sh = hashu(u32(i32(zi) + 100000) * 193u + i / 12u * 17u);
-  var x = pathX(zi * spacing) + (hf(sh) - 0.5) * 26.0;
-  let z = zi * spacing + hf(sh + 1u) * spacing;
+  let n = 45u;
+  if (i >= n * n || F.camFwd.w > 0.5) { return; }
+  let cell = 4.0;
+  let c = vec2i(floor(F.camPos.xz / cell)) + vec2i(i32(i % n), i32(i / n)) - i32(n / 2u);
+  let sh = hashu(u32(c.x + 100000) * 193u + u32(c.y + 100000) * 7919u);
+  if (hf(sh + 6u) > 0.35) { return; }
   let ph = hf(sh + 2u) * TAU;
   let yaw = hf(sh + 3u) * TAU;
   // walk sideways in bursts, then pause
-  let burst = smoothstep(0.2, 0.5, sin(t * 0.7 + ph));
-  let stride = sin(t * 0.35 + ph) * 1.4;
-  let pos2 = vec2f(x, z) + vec2f(cos(yaw), -sin(yaw)) * stride;
-  let h = terrainHeight(pos2);
-  if (h < 0.15 || h > 2.6) { return; }
-  let pos = vec3f(pos2.x, h, pos2.y);
-  let rel = pos - F.camPos.xyz;
-  let dist = length(rel);
+  let stride = sin(t * 0.35 + ph) * 1.2;
+  let pos2 = (vec2f(c) + 0.15 + vec2f(hf(sh), hf(sh + 1u)) * 0.7) * cell + vec2f(cos(yaw), -sin(yaw)) * stride;
+  let rel2 = pos2 - F.camPos.xz;
+  let dist = length(rel2);
   if (dist > P.maxDist) { return; }
-  emit(rel, vec4f(pos, mix(0.09, 0.15, hf(sh + 4u))), vec4f(yaw, 0.0, hf(sh + 5u), ph * 10.0 + burst * 0.0), dist);
+  let h = terrainHeight(pos2);
+  if (h < 0.25 || h > 2.4) { return; }
+  let pos = vec3f(pos2.x, h, pos2.y);
+  emit(pos - F.camPos.xyz, vec4f(pos, mix(0.16, 0.26, hf(sh + 4u))), vec4f(yaw, 0.0, hf(sh + 5u), ph * 10.0), dist);
 }
 
 // scarlet macaws crossing over the jungle canopy
@@ -451,6 +457,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 `;
 
 const propVS = /* wgsl */ `
+/*CARD_FRAMES*/
 struct PV {
   @builtin(position) pos: vec4f,
   @location(0) rel: vec3f,
@@ -462,8 +469,30 @@ struct PV {
 fn rotY(v: vec3f, a: f32) -> vec3f { let c = cos(a); let s = sin(a); return vec3f(c * v.x + s * v.z, v.y, -s * v.x + c * v.z); }
 fn rotX(v: vec3f, a: f32) -> vec3f { let c = cos(a); let s = sin(a); return vec3f(v.x, c * v.y - s * v.z, s * v.y + c * v.z); }
 
+// Impostor card: a camera-facing quad showing the nearest of 8 baked views.
+// ex.y = species; the quad spans x in [-1, 1], y in [0, 1].
+fn cardVertex(pos: vec3f, ex: vec4f, a: vec4f, b: vec4f) -> PV {
+  let sp = u32(ex.y + 0.5);
+  let fr = CARD[sp]; // half width, y min, y max (mesh units)
+  let d = normalize(F.camPos.xz - a.xz + vec2f(1e-4, 0.0));
+  let right = vec3f(d.y, 0.0, -d.x);
+  // camera direction in the plant's own frame picks the baked view
+  let cy = cos(b.x); let sy = sin(b.x);
+  let th = atan2(cy * d.x - sy * d.y, sy * d.x + cy * d.y);
+  let view = u32(i32(round(th / (TAU / ${CARD_VIEWS}.0))) + ${CARD_VIEWS}) % ${CARD_VIEWS}u;
+  let p = right * pos.x * fr.x + vec3f(0.0, mix(fr.y, fr.z, pos.y), 0.0);
+  var o: PV;
+  o.rel = a.xyz - F.camPos.xyz + p * a.w;
+  o.n = vec3f(b.x, 0.0, 0.0); // the plant's yaw, to turn baked normals into world space
+  o.lp = vec3f(pos.x * 0.5 + 0.5, 1.0 - pos.y, f32(sp * ${CARD_VIEWS}u + view));
+  o.mat = ${MAT.card}u;
+  o.ex = vec4f(1.0, 0.0, 0.0, b.z);
+  return o;
+}
+
 fn propVertex(pos: vec3f, nrm: vec3f, ex: vec4f, a: vec4f, b: vec4f) -> PV {
   let mat = u32(ex.x + 0.5);
+  if (mat == ${MAT.card}u) { return cardVertex(pos, ex, a, b); }
   let t = F.camPos.w;
   var p = pos; var n = nrm;
   let flex = ex.z;
@@ -528,14 +557,7 @@ fn propVertex(pos: vec3f, nrm: vec3f, ex: vec4f, a: vec4f, b: vec4f) -> PV {
 }
 `;
 
-export const propWGSL = frameStruct + commonLib + shadowLib + propVS + /* wgsl */ `
-@vertex fn vs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) ex: vec4f,
-              @location(3) a: vec4f, @location(4) b: vec4f) -> PV {
-  var o = propVertex(pos, nrm, ex, a, b);
-  o.pos = F.viewProj * vec4f(o.rel, 1.0);
-  return o;
-}
-
+const propSurface = /* wgsl */ `
 fn fishColor(h: f32, lp: vec3f) -> vec3f {
   let belly = sat(lp.y * 6.0 + 0.3);
   if (h < 0.16) { return mix(vec3f(0.95, 0.78, 0.08), vec3f(0.98, 0.88, 0.35), belly); }            // yellow tang
@@ -574,7 +596,10 @@ fn coralColor(h: f32) -> vec3f {
   }
 }
 
-@fragment fn fs(in: PV, @builtin(front_facing) ff: bool) -> @location(0) vec4f {
+struct Surf { alb: vec3f, n: vec3f, trans: f32, spec: f32, rough: f32, emissive: vec3f };
+
+// Material of a prop surface point (shared by the main pass and the impostor bake).
+fn surface(in: PV, ff: bool) -> Surf {
   let pw = in.rel + F.camPos.xyz;
   var n = normalize(in.n);
   if (!ff) { n = -n; }
@@ -781,6 +806,40 @@ fn coralColor(h: f32) -> vec3f {
     case 24u: { alb = vec3f(0.30, 0.32, 0.24) * (0.7 + 0.5 * vnoise3(lp * 30.0)); }
     default: {}
   }
+  return Surf(alb, n, trans, spec, rough, emissive);
+}
+`;
+
+export const propWGSL = frameStruct + commonLib + shadowLib + propVS + propSurface + /* wgsl */ `
+@group(2) @binding(0) var cardAlb: texture_2d_array<f32>;
+@group(2) @binding(1) var cardNrm: texture_2d_array<f32>;
+
+@vertex fn vs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) ex: vec4f,
+              @location(3) a: vec4f, @location(4) b: vec4f) -> PV {
+  var o = propVertex(pos, nrm, ex, a, b);
+  o.pos = F.viewProj * vec4f(o.rel, 1.0);
+  return o;
+}
+
+fn cardSurface(in: PV, gx: vec2f, gy: vec2f) -> Surf {
+  let lay = i32(in.lp.z + 0.5);
+  let c = textureSampleGrad(cardAlb, linSmp, in.lp.xy, lay, gx, gy);
+  // dithered alpha test: TAA turns the thinning of distant mips into soft coverage
+  if (c.a < 0.25 + 0.5 * ign(in.pos.xy, F.misc.x)) { discard; }
+  let nt = textureSampleGrad(cardNrm, linSmp, in.lp.xy, lay, gx, gy);
+  let nl = nt.xyz / max(c.a, 1e-3) * 2.0 - 1.0;
+  let n = normalize(rotY(nl, in.n.x));
+  let alb = c.rgb / max(c.a, 1e-3) * (0.85 + 0.3 * in.ex.w);
+  return Surf(alb, n, nt.w / max(c.a, 1e-3), 0.15, 0.5, vec3f(0.0));
+}
+
+@fragment fn fs(in: PV, @builtin(front_facing) ff: bool) -> @location(0) vec4f {
+  // derivatives must be taken before any (non-uniform) branch
+  let gx = dpdx(in.lp.xy); let gy = dpdy(in.lp.xy);
+  var s: Surf;
+  if (in.mat == ${MAT.card}u) { s = cardSurface(in, gx, gy); } else { s = surface(in, ff); }
+  let pw = in.rel + F.camPos.xyz;
+  let alb = s.alb; let n = s.n; let trans = s.trans; let spec = s.spec; let rough = s.rough; let emissive = s.emissive;
   let dist = length(in.rel);
   let V = -in.rel / max(dist, 1e-4);
   let L = F.lightDir.xyz;
@@ -804,5 +863,46 @@ struct Cascade { vp: mat4x4f };
               @location(3) a: vec4f, @location(4) b: vec4f) -> @builtin(position) vec4f {
   let o = propVertex(pos, nrm, ex, a, b);
   return CS.vp * vec4f(o.rel, 1.0);
+}
+`;
+
+// Impostor bake: one orthographic view of a plant into the card atlas
+// (premultiplied albedo + coverage, premultiplied normal + translucency).
+export const cardBakeWGSL = frameStruct + commonLib + propVS + propSurface + /* wgsl */ `
+struct BakeU { right: vec4f, dir: vec4f, yr: vec4f };   // right.w half width, dir.w radius, yr.xy height range
+@group(1) @binding(0) var<uniform> B: BakeU;
+@vertex fn vs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) ex: vec4f) -> PV {
+  var o = propVertex(pos, nrm, ex, vec4f(F.camPos.xyz, 1.0), vec4f(0.0, 0.0, 0.5, 0.0));
+  let p = o.rel;
+  o.pos = vec4f(dot(p, B.right.xyz) / B.right.w, (p.y - B.yr.x) / (B.yr.y - B.yr.x) * 2.0 - 1.0,
+                0.5 - 0.5 * dot(p, B.dir.xyz) / B.dir.w, 1.0);
+  return o;
+}
+struct BO { @location(0) alb: vec4f, @location(1) nrm: vec4f };
+@fragment fn fs(in: PV, @builtin(front_facing) ff: bool) -> BO {
+  let s = surface(in, ff);
+  return BO(vec4f(s.alb, 1.0), vec4f(s.n * 0.5 + 0.5, s.trans));
+}
+`;
+
+// Mip chain of the card atlas: coverage weighted, so leaf colour does not
+// bleed into the transparent background.
+export const cardMipWGSL = /* wgsl */ `
+@group(0) @binding(0) var srcA: texture_2d_array<f32>;
+@group(0) @binding(1) var srcN: texture_2d_array<f32>;
+@group(0) @binding(2) var dstA: texture_storage_2d_array<rgba8unorm, write>;
+@group(0) @binding(3) var dstN: texture_storage_2d_array<rgba8unorm, write>;
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) gid: vec3u) {
+  let d = textureDimensions(dstA);
+  if (gid.x >= d.x || gid.y >= d.y) { return; }
+  var a = vec4f(0.0); var n = vec4f(0.0);
+  for (var i = 0u; i < 4u; i++) {
+    let q = vec2i(gid.xy * 2u + vec2u(i & 1u, i >> 1u));
+    a += textureLoad(srcA, q, gid.z, 0);
+    n += textureLoad(srcN, q, gid.z, 0);
+  }
+  textureStore(dstA, vec2i(gid.xy), gid.z, a * 0.25);
+  textureStore(dstN, vec2i(gid.xy), gid.z, n * 0.25);
 }
 `;

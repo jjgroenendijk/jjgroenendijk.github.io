@@ -1,24 +1,18 @@
 // Terrain: geometry clipmap whose heights are baked on the GPU into a
 // texture-array cache (one layer per level), re-baked only when a level moves.
-import { shader, bufferWithData, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { terrainCacheWGSL, terrainWGSL, terrainShadowWGSL, GRID_M } from '../shaders/terrain.js';
+import { shader, buffer, bufferWithData, bindLayout, bindGroup, entry } from '../core/gpu.js';
+import { terrainCacheWGSL, terrainWGSL, terrainShadowWGSL, terrainCullWGSL, GRID_M, SIDE, TILES, TILE } from '../shaders/terrain.js';
 import { HDR, DEPTH, depthState } from './layouts.js';
 import { LEVELS } from '../shaders/common.js';
 
 export { LEVELS };
 
 const BASE_CELL = 0.5;
-const SIDE = GRID_M * 2 + 1;
-const TILES = 4; // each level is split into TILES x TILES blocks for culling
-const TILE = (GRID_M * 2) / TILES;
 const Y_RANGE = [-70, 450]; // conservative terrain height range (incl. waves and canopy shell)
 
+// Index buffer of the clipmap grid. There is no vertex buffer: the shaders
+// derive each vertex from vertex_index (base vertex = level * SIDE^2).
 function buildGrid() {
-  const verts = new Float32Array(SIDE * SIDE * 2);
-  for (let z = 0; z < SIDE; z++) for (let x = 0; x < SIDE; x++) {
-    verts[(z * SIDE + x) * 2] = x - GRID_M;
-    verts[(z * SIDE + x) * 2 + 1] = z - GRID_M;
-  }
   const idx = (x, z) => (z + GRID_M) * SIDE + (x + GRID_M);
   // indices are grouped by tile so every tile is one contiguous range
   const build = (hole) => {
@@ -41,7 +35,7 @@ function buildGrid() {
   indices.set(full.indices);
   indices.set(ring.indices, full.indices.length);
   const off = full.indices.length;
-  return { verts, indices, full: full.ranges, ring: ring.ranges.map(([f, c]) => [f + off, c]) };
+  return { indices, full: full.ranges, ring: ring.ranges.map(([f, c]) => [f + off, c]) };
 }
 
 // is the box [lo, hi] (camera relative) at least partly inside all planes?
@@ -58,7 +52,6 @@ export class TerrainPass {
     this.device = device;
     const grid = buildGrid();
     const U = GPUBufferUsage;
-    this.vertexBuffer = bufferWithData(device, grid.verts, U.VERTEX, 'grid-verts');
     this.indexBuffer = bufferWithData(device, grid.indices, U.INDEX, 'grid-indices');
     this.tileRanges = [grid.full, grid.ring];
     this.levelData = new Float32Array(LEVELS * 4);
@@ -77,7 +70,23 @@ export class TerrainPass {
       compute: { module: shader(device, terrainCacheWGSL, 'terrain-cache'), entryPoint: 'main' },
     });
 
-    const vertexBuffers = [{ arrayStride: 8, attributes: [{ shaderLocation: 0, offset: 0, format: 'float32x2' }] }];
+    const vertexBuffers = [];
+
+    // GPU cluster culling: one indirect draw per (level, tile)
+    const clusters = [];
+    for (let l = 0; l < LEVELS; l++) {
+      this.tileRanges[l === 0 ? 0 : 1].forEach(([first, count], t) => clusters.push(first, count, l, t));
+    }
+    this.clusterCount = clusters.length / 4;
+    this.clusterBuffer = bufferWithData(device, new Uint32Array(clusters), U.STORAGE, 'terrain-clusters');
+    this.drawArgs = buffer(device, this.clusterCount * 20, U.STORAGE | U.INDIRECT, 'terrain-draws');
+    this.cullLayout = bindLayout(device, 'terrain-cull', [entry.storage(true), entry.storage(),
+      entry.texture('unfilterable-float', '2d', GPUShaderStage.COMPUTE)]);
+    this.cullPipeline = device.createComputePipeline({
+      label: 'terrain-cull',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.cullLayout] }),
+      compute: { module: shader(device, terrainCullWGSL, 'terrain-cull'), entryPoint: 'main' },
+    });
     const main = shader(device, terrainWGSL, 'terrain');
     this.pipeline = device.createRenderPipeline({
       label: 'terrain',
@@ -160,16 +169,35 @@ export class TerrainPass {
   }
 
   drawGrid(pass, draws) {
-    pass.setVertexBuffer(0, this.vertexBuffer);
     pass.setIndexBuffer(this.indexBuffer, 'uint32');
-    for (const [first, count, l] of draws) pass.drawIndexed(count, 1, first, 0, l);
+    for (const [first, count, l] of draws) pass.drawIndexed(count, 1, first, l * SIDE * SIDE, 0);
   }
 
-  draw(pass, frameGroup, shadowGroup, draws) {
+  setHiZ(view) {
+    this.cullGroup = bindGroup(this.device, this.cullLayout, [this.clusterBuffer, this.drawArgs, view], 'terrain-cull');
+  }
+
+  // Exact per-tile height bounds, frustum and occlusion test on the GPU.
+  cull(encoder, frameGroup) {
+    const pass = encoder.beginComputePass({ label: 'terrain-cull' });
+    pass.setPipeline(this.cullPipeline);
+    pass.setBindGroup(0, frameGroup);
+    pass.setBindGroup(1, this.cullGroup);
+    pass.dispatchWorkgroups(this.clusterCount);
+    pass.end();
+  }
+
+  // Draws every cluster through the arguments written by cull().
+  drawCulled(pass) {
+    pass.setIndexBuffer(this.indexBuffer, 'uint32');
+    for (let i = 0; i < this.clusterCount; i++) pass.drawIndexedIndirect(this.drawArgs, i * 20);
+  }
+
+  draw(pass, frameGroup, shadowGroup) {
     pass.setPipeline(this.pipeline);
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, shadowGroup);
-    this.drawGrid(pass, draws);
+    this.drawCulled(pass);
   }
 
   drawShadow(pass, frameGroup, cascadeGroup, draws) {

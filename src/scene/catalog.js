@@ -7,7 +7,13 @@ export const MAT = {
   coralBranch: 8, coralBrain: 9, seaFan: 10, seagrass: 11, fish: 12, bird: 13, bush: 14, stem: 15,
   wood: 16, sail: 17, flag: 18, wreck: 19, gold: 20, iron: 21, manta: 22, shell: 23, skin: 24, deck: 25, dolphin: 26, petal: 27, butterfly: 28, leaf: 29,
   shark: 30, jelly: 31, starfish: 32, crab: 33, anemone: 34, sponge: 35, softCoral: 36,
+  card: 40, // impostor quad, textured from the baked card atlas
 };
+
+// Baked views per impostor species (around the vertical axis)
+export const CARD_VIEWS = 8;
+// Species with an impostor card, in atlas order: [card mesh, mesh baked into it]
+export const CARDS = [['palmCard', 'palm0'], ['treeCard', 'tree0']];
 
 // Placement rule ids (interpreted by the scatter compute shader)
 export const TYPE = {
@@ -24,9 +30,21 @@ export const TYPE = {
 //   lods     distances beyond which the 2nd / 3rd mesh is used
 //   reach    radius of the largest instance, enables a cheap frustum pre-cull
 //   keep     instances this close are kept even when off screen (shadow casters)
+//   minDist  instances this close belong to another layer
+//   fadeDist distance over which instances shrink away (default maxDist)
+//   every    re-scatter only every n-th frame (phase picks which); the
+//            previous instances are drawn in between
+//   cacheHeight  read ground heights from the terrain clipmap cache
+//   lodBase  LOD number of the first mesh (for shadow caster selection)
 export const LAYERS = [
-  { type: 'palm', cell: 8, maxDist: 1500, lods: [90, 320], meshes: ['palm0', 'palm1', 'palm2'], caps: [500, 3000, 12000], keep: 60, reach: 16 },
-  { type: 'tree', cell: 8, maxDist: 1800, lods: [110, 340], meshes: ['tree0', 'tree1', 'tree2'], caps: [600, 7000, 30000], keep: 60, reach: 28 },
+  // palms and trees come in a near layer (every frame, exact heights) and a far
+  // layer (every other frame, heights from the terrain cache, impostor cards)
+  { type: 'palm', cell: 8, maxDist: 320, fadeDist: 1500, lods: [90], meshes: ['palm0', 'palm1'], caps: [500, 3000], keep: 60, reach: 16 },
+  { type: 'palm', cell: 8, minDist: 320, maxDist: 1500, lods: [650], meshes: ['palm2', 'palmCard'], caps: [5000, 12000], keep: 0, reach: 16,
+    every: 2, phase: 0, cacheHeight: true, lodBase: 2 },
+  { type: 'tree', cell: 8, maxDist: 340, fadeDist: 1800, lods: [110], meshes: ['tree0', 'tree1'], caps: [600, 7000], keep: 60, reach: 28 },
+  { type: 'tree', cell: 8, minDist: 340, maxDist: 1800, lods: [700], meshes: ['tree2', 'treeCard'], caps: [8000, 30000], keep: 0, reach: 28,
+    every: 2, phase: 1, cacheHeight: true, lodBase: 2 },
   { type: 'bush', cell: 4, maxDist: 160, meshes: ['bush'], caps: [4000], keep: 30 },
   { type: 'flowers', cell: 4, maxDist: 110, meshes: ['flowers'], caps: [1500], keep: 15 },
   { type: 'butterfly', count: 24, maxDist: 60, meshes: ['butterfly'], caps: [24], keep: 0 },
@@ -49,7 +67,7 @@ export const LAYERS = [
   { type: 'shark', count: 4, maxDist: 90, meshes: ['shark'], caps: [4], keep: 0 },
   { type: 'ray', count: 6, maxDist: 70, meshes: ['manta'], caps: [6], keep: 0 },
   { type: 'jelly', count: 16, maxDist: 60, meshes: ['jelly'], caps: [16], keep: 0 },
-  { type: 'crab', count: 24, maxDist: 50, meshes: ['crab'], caps: [24], keep: 0 },
+  { type: 'crab', count: 2025, maxDist: 85, meshes: ['crab'], caps: [500], keep: 0 },
   { type: 'parrot', count: 12, maxDist: 300, meshes: ['bird'], caps: [12], keep: 0 },
   { type: 'manta', count: 4, maxDist: 90, meshes: ['manta'], caps: [4], keep: 0 },
   { type: 'dolphin', count: 6, maxDist: 400, meshes: ['dolphin'], caps: [6], keep: 0 },

@@ -1,9 +1,10 @@
 import { frameStruct, commonLib, shadowLib, shadowLibSimple } from './common.js';
-import { GRID_M } from './terrain.js';
+import { GRID_M, SIDE } from './terrain.js';
 
 export const waterWGSL = frameStruct + commonLib + shadowLib + /* wgsl */ `
 @group(2) @binding(0) var sceneTex: texture_2d<f32>;
 @group(2) @binding(1) var depthTex: texture_depth_2d;
+@group(2) @binding(2) var reflTex: texture_2d<f32>;
 
 @group(0) @binding(1) var cacheTex: texture_2d_array<f32>;
 
@@ -19,7 +20,11 @@ fn groundAt(lvl: u32, g: vec2i) -> f32 {
   return textureLoad(cacheTex, clamp(g + vec2i(${GRID_M}), vec2i(0), vec2i(${GRID_M * 2})), lvl, 0).x;
 }
 
-@vertex fn vs(@location(0) g: vec2f, @builtin(instance_index) lvl: u32) -> WV2 {
+@vertex fn vs(@builtin(vertex_index) vi: u32) -> WV2 {
+  // same grid layout as the terrain (see gridPoint)
+  let lvl = vi / ${SIDE * SIDE}u;
+  let k = vi - lvl * ${SIDE * SIDE}u;
+  let g = vec2f(f32(k % ${SIDE}u) - ${GRID_M}.0, f32(k / ${SIDE}u) - ${GRID_M}.0);
   let Lv = F.levels[lvl];
   let a = max(abs(g.x), abs(g.y)) / ${GRID_M}.0;
   var morph = smoothstep(0.70, 0.90, a);
@@ -116,38 +121,16 @@ fn waterScatter() -> vec3f {
   let T = exp(-WATER_EXT * min(thick, 400.0) * 1.1);
   var refrC = behind * T + waterScatter() * (1.0 - T);
 
-  // reflection: screen space march with sky fallback
+  // reflection: traced at half resolution against the smooth swell (see
+  // reflectionWGSL); the ripples here only shift where it is looked up
   var R = reflect(rd, n);
   R.y = abs(R.y);
-  var refl = skyBase(R);
-  var hit = false;
-  var st = 0.6;
-  var tt = st;
-  for (var i = 0; i < 18; i++) {
-    let q = in.rel + R * tt;
-    let s = toScreen(q);
-    if (s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0 || s.z < 0.0) { break; }
-    let sdq = sceneDist(vec2i(s.xy * F.res.xy));
-    let lq = length(q);
-    if (sdq < lq && sdq > lq - tt * 0.35 - 1.0) {
-      let edge = sat(min(min(s.x, 1.0 - s.x), min(s.y, 1.0 - s.y)) * 8.0);
-      refl = mix(refl, sceneAt(s.xy), edge);
-      hit = true;
-      break;
-    }
-    st *= 1.38;
-    tt += st;
-  }
-  if (!hit) {
-    let s = toScreen(R * 8000.0);
-    if (s.z > 0.0 && s.x > 0.0 && s.x < 1.0 && s.y > 0.0 && s.y < 1.0) {
-      let d = textureLoad(depthTex, vec2i(s.xy * F.res.xy), 0);
-      if (d <= 0.0) {
-        let edge = sat(min(min(s.x, 1.0 - s.x), min(s.y, 1.0 - s.y)) * 6.0);
-        refl = mix(refl, sceneAt(s.xy), edge);
-      }
-    }
-  }
+  var Rs = reflect(rd, normalize(in.n));
+  Rs.y = abs(Rs.y);
+  let D = clamp(dist * 0.3, 4.0, 40.0);
+  let shift = clamp(toScreen(in.rel + R * D).xy - toScreen(in.rel + Rs * D).xy, vec2f(-0.04), vec2f(0.04));
+  let rt = textureSampleLevel(reflTex, linSmp, uv + shift, 0.0);
+  let refl = mix(skyBase(R), rt.rgb, rt.a);
   let fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
   var col = mix(refrC, refl, fres);
   let sh = shadowAt(in.rel, vec3f(0.0, 1.0, 0.0), in.pos.xy) * cloudShadow(pw);
@@ -172,6 +155,72 @@ fn waterScatter() -> vec3f {
 `;
 
 // Floating particles: marine snow underwater, sunlit dust motes in the jungle.
+// Half resolution reflection trace: each pixel's view ray is intersected with
+// the swell (sea plane + large Gerstner waves) and marched through the depth
+// buffer. Output: reflected colour and confidence (0 = use the sky).
+export const reflectionWGSL = frameStruct + commonLib + /* wgsl */ `
+@group(1) @binding(0) var sceneTex: texture_2d<f32>;
+@group(1) @binding(1) var depthTex: texture_depth_2d;
+@group(1) @binding(2) var smp: sampler;
+
+@vertex fn vs(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+  return vec4f(f32(i & 1u) * 4.0 - 1.0, f32(i >> 1u) * 4.0 - 1.0, 0.0, 1.0);
+}
+fn sceneDist(px: vec2i) -> f32 {
+  let d = textureLoad(depthTex, px, 0);
+  if (d <= 0.0) { return 1e6; }
+  let uv = (vec2f(px) + 0.5) * F.res.zw;
+  let w = F.invViewProj * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, d, 1.0);
+  return length(w.xyz / w.w);
+}
+fn toScreen(rel: vec3f) -> vec3f {
+  let c = F.viewProj * vec4f(rel, 1.0);
+  let n = c.xyz / c.w;
+  return vec3f(n.x * 0.5 + 0.5, 0.5 - n.y * 0.5, c.w);
+}
+fn sceneAt(uv: vec2f) -> vec3f { return textureSampleLevel(sceneTex, smp, uv, 0.0).rgb; }
+
+@fragment fn fs(@builtin(position) fp: vec4f) -> @location(0) vec4f {
+  let t = F.camPos.w;
+  if (F.camPos.y < waveY(F.camPos.xz, t) - 0.02 || F.camFwd.w > 0.5) { return vec4f(0.0); }
+  let uv = fp.xy / vec2f(textureDimensions(sceneTex)) * 2.0;
+  let w = F.invViewProj * vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, 1e-4, 1.0);
+  let rd = normalize(w.xyz / w.w);
+  if (rd.y > -1e-4) { return vec4f(0.0); }
+  let dist = -F.camPos.y / rd.y;
+  // the sea is hidden here by something in front of it
+  if (sceneDist(vec2i(uv * F.res.xy)) < dist * 0.97 - 2.0) { return vec4f(0.0); }
+  let q0 = rd * dist;
+  let wv = gerstner(q0.xz + F.camPos.xz, t, dist);
+  let rel = q0 + vec3f(0.0, wv.disp.y, 0.0);
+  var R = reflect(rd, wv.n);
+  R.y = abs(R.y);
+  var st = 0.6;
+  var tt = st;
+  for (var i = 0; i < 18; i++) {
+    let q = rel + R * tt;
+    let s = toScreen(q);
+    if (s.x < 0.0 || s.x > 1.0 || s.y < 0.0 || s.y > 1.0 || s.z < 0.0) { break; }
+    let sdq = sceneDist(vec2i(s.xy * F.res.xy));
+    let lq = length(q);
+    if (sdq < lq && sdq > lq - tt * 0.35 - 1.0) {
+      let edge = sat(min(min(s.x, 1.0 - s.x), min(s.y, 1.0 - s.y)) * 8.0);
+      return vec4f(sceneAt(s.xy), edge);
+    }
+    st *= 1.38;
+    tt += st;
+  }
+  // nothing hit: the sky as drawn (clouds included) where it is on screen
+  let s = toScreen(R * 8000.0);
+  if (s.z > 0.0 && s.x > 0.0 && s.x < 1.0 && s.y > 0.0 && s.y < 1.0) {
+    if (textureLoad(depthTex, vec2i(s.xy * F.res.xy), 0) <= 0.0) {
+      return vec4f(sceneAt(s.xy), sat(min(min(s.x, 1.0 - s.x), min(s.y, 1.0 - s.y)) * 6.0));
+    }
+  }
+  return vec4f(0.0);
+}
+`;
+
 export const particleWGSL = frameStruct + commonLib + /* wgsl */ `
 @group(1) @binding(0) var shadowTex: texture_depth_2d_array;
 @group(1) @binding(1) var shadowSmp: sampler_comparison;

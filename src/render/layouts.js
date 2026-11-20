@@ -4,7 +4,7 @@ import { bindLayout, entry } from '../core/gpu.js';
 export function createShared(device) {
   const frame = bindLayout(device, 'frame', [
     entry.uniform(),
-    entry.texture('unfilterable-float', '2d-array'), // terrain clipmap cache
+    entry.texture('unfilterable-float', '2d-array', GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE), // terrain clipmap cache
   ]);
   const shadow = bindLayout(device, 'shadow', [
     entry.texture('depth', '2d-array'),

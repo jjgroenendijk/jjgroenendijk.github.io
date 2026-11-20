@@ -28,7 +28,7 @@ export class FrameUniforms {
     v4(96, e.fog);
     v4(100, e.waterFog, 1);
     v4(104, [f.width, f.height, 1 / f.width, 1 / f.height]);
-    v4(108, [f.jitter[0], f.jitter[1], f.resetHistory ? 1 : 0, 0]);
+    v4(108, [f.jitter[0], f.jitter[1], f.resetHistory ? 1 : 0, f.noOcclusion ? 1 : 0]);
     v4(112, [f.frame % 4096, f.cycleU, f.time % 10000, f.quality]);
     v4(116, f.splits);
     f.cascades.forEach((m, i) => d.set(m, 120 + i * 16));

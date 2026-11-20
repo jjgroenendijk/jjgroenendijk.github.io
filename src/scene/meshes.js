@@ -5,6 +5,15 @@ import { rock, coralBranch, coralBrain, seaFan, seagrass, coralTable, tubeSponge
 import { fish, bird, manta, turtle, dolphin, butterfly, shark, jellyfish, crab } from './fauna.js';
 import { galleon, wreck, chest, rowboat, barrel } from './pirates.js';
 
+import { MAT } from './catalog.js';
+
+// Impostor quad (x in [-1, 1], y in [0, 1]); extra.y selects the card species.
+function card(species) {
+  const v = [];
+  for (const [x, y] of [[-1, 0], [1, 0], [1, 1], [-1, 1]]) v.push(x, y, 0, 0, 0, 1, MAT.card, species, 0, 0);
+  return { v: new Float32Array(v), i: new Uint32Array([0, 1, 2, 0, 2, 3]) };
+}
+
 export function buildMeshes() {
   return {
     palm0: { ...palm(0), bound: 0.75 },
@@ -13,6 +22,8 @@ export function buildMeshes() {
     tree0: { ...tree(0), bound: 0.6 },
     tree1: { ...tree(1), bound: 0.6 },
     tree2: { ...tree(2), bound: 0.6 },
+    palmCard: { ...card(0), bound: 0.75 },
+    treeCard: { ...card(1), bound: 0.6 },
     bush: { ...bush(), bound: 0.8 },
     fern: { ...fern(), bound: 0.9 },
     flowers: { ...flowerBush(), bound: 0.8 },

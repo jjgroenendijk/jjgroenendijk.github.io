@@ -40,7 +40,7 @@ struct Frame {
   fog: vec4f,         // x density, y height falloff, z jungle haze, w sky intensity
   waterFog: vec4f,    // rgb in-scatter colour, w visibility scale
   res: vec4f,         // w, h, 1/w, 1/h
-  jitter: vec4f,
+  jitter: vec4f,      // xy TAA jitter, z reset history, w no occlusion history
   misc: vec4f,        // x frame, y cycle u, z wind time, w quality
   cascadeSplits: vec4f,
   lightVP: array<mat4x4f, 3>,
@@ -342,6 +342,39 @@ fn ggx(n: vec3f, v: vec3f, l: vec3f, rough: f32) -> f32 {
   let k = a * 0.5;
   let G = nl / (nl * (1.0 - k) + k) * nv / (nv * (1.0 - k) + k);
   return D * G / (4.0 * nv);
+}
+`;
+
+// Hi-Z occlusion test against last frame's depth pyramid (min depth per texel,
+// reverse-Z so smaller is farther). A camera-relative box is projected with
+// last frame's matrix; it is hidden if its nearest point lies behind the
+// farthest depth of every texel it covers. bias > 1 demands extra clearance.
+export const hizLib = /* wgsl */ `
+fn occludedBox(hiz: texture_2d<f32>, c: vec3f, e: vec3f, bias: f32) -> bool {
+  if (F.jitter.w > 0.5) { return false; } // no usable history (first frame, camera cut)
+  var lo = vec2f(1e9); var hi = vec2f(-1e9); var zmax = 0.0;
+  for (var i = 0u; i < 8u; i++) {
+    let o = vec3f(select(-e.x, e.x, (i & 1u) != 0u), select(-e.y, e.y, (i & 2u) != 0u), select(-e.z, e.z, (i & 4u) != 0u));
+    let q = F.prevViewProj * vec4f(c + o, 1.0);
+    if (q.w <= 0.1) { return false; }
+    let n = q.xyz / q.w;
+    lo = min(lo, n.xy); hi = max(hi, n.xy); zmax = max(zmax, n.z);
+  }
+  // partly outside last frame's view: nothing is known about the hidden part
+  if (any(lo < vec2f(-1.0)) || any(hi > vec2f(1.0))) { return false; }
+  let dims = vec2f(textureDimensions(hiz, 0));
+  let p0 = vec2f(lo.x * 0.5 + 0.5, 0.5 - hi.y * 0.5) * dims - 0.5;
+  let p1 = vec2f(hi.x * 0.5 + 0.5, 0.5 - lo.y * 0.5) * dims + 0.5;
+  let ext = max(p1.x - p0.x, p1.y - p0.y);
+  let lvl = u32(clamp(ceil(log2(max(ext, 1.0))), 0.0, f32(textureNumLevels(hiz) - 1u)));
+  let s = 1.0 / f32(1u << lvl);
+  if (ext * s > 1.0) { return false; } // larger than the coarsest mip covers with 2x2 texels
+  let ld = vec2i(textureDimensions(hiz, lvl)) - 1;
+  let a = clamp(vec2i(floor(p0 * s)), vec2i(0), ld);
+  let b = clamp(vec2i(floor(p1 * s)), vec2i(0), ld);
+  let z = min(min(textureLoad(hiz, a, lvl).x, textureLoad(hiz, vec2i(b.x, a.y), lvl).x),
+              min(textureLoad(hiz, vec2i(a.x, b.y), lvl).x, textureLoad(hiz, b, lvl).x));
+  return zmax * bias < z;
 }
 `;
 
