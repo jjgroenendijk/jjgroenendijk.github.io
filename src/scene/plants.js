@@ -1,6 +1,6 @@
-// Vegetation: coconut palms, rainforest canopy trees, shrubs, ferns, banana plants.
+// Vegetation: coconut palms, shrubs, ferns, banana plants (trees are in trees.js).
 import { MAT } from './catalog.js';
-import { MeshBuilder as MB, add, sub, mul, cross, norm, len, dot, rng, vnoise, icosphere } from './geometry.js';
+import { MeshBuilder as MB, add, sub, mul, cross, norm, rng } from './geometry.js';
 
 // ------------------------------------------------------------------ palms
 export function palm(lod) {
@@ -59,71 +59,6 @@ export function palm(lod) {
         }
         prev = row;
       }
-    }
-  }
-  return mb.build();
-}
-
-// ------------------------------------------------------------------ rainforest canopy tree
-function blobDeform(center, crownC, amp, freq) {
-  return (p, v) => {
-    const nz = vnoise(p[0] * freq + 3.1, p[1] * freq, p[2] * freq + 7.7) - 0.5;
-    const nz2 = vnoise(p[0] * freq * 2.7, p[1] * freq * 2.7 + 1.3, p[2] * freq * 2.7) - 0.5;
-    const pp = add(p, mul(v, (nz + nz2 * 0.5) * amp));
-    const radial = norm(sub(pp, crownC));
-    return { p: pp, n: norm(add(mul(v, 0.55), mul(radial, 0.45))) };
-  };
-}
-export function tree(lod) {
-  const mb = new MB();
-  const R = rng(lod === 0 ? 21 : 22);
-  const H = 0.62;
-  const trunk = (t) => [0.015 * Math.sin(t * 4), t * H, 0.01 * Math.cos(t * 3)];
-  mb.tube(trunk, (t, a) => 0.016 * (1 - 0.35 * t) * (1 + 2.6 * Math.exp(-t * 22) * Math.pow(0.5 + 0.5 * Math.cos(5 * a), 3)),
-    [10, 4, 2][lod], [10, 5, 3][lod], (t) => [MAT.bark, 0.35 + 0.5 * t, 0, t]);
-  const crownC = [0, 0.8, 0];
-  const nb = [11, 6, 4][lod];
-  const blobs = [];
-  for (let k = 0; k < nb; k++) {
-    const a = k * 2.39996 + R() * 0.6;
-    const r = k === 0 ? 0 : 0.08 + Math.sqrt(k / nb) * 0.2 + R() * 0.04;
-    const y = 0.86 - r * 0.55 + (R() - 0.5) * 0.06;
-    blobs.push([[Math.cos(a) * r, y, Math.sin(a) * r], [0.085, 0.11, 0.135][lod] + R() * 0.05]);
-  }
-  // branches
-  if (lod === 0) for (let k = 1; k < nb; k++) {
-    const [c] = blobs[k];
-    const s = trunk(0.85);
-    mb.tube((t) => add(s, mul(sub(add(c, [0, -0.04, 0]), s), t)), (t) => 0.007 * (1 - 0.6 * t), 3, 4, (t) => [MAT.bark, 0.5, 0, 0.8 + 0.2 * t]);
-  }
-  for (const [c, r] of blobs) {
-    // a dense core keeps the crown opaque...
-    mb.ico(c, lod === 0 ? r * 0.82 : r, lod === 2 ? 0 : 1, (p, v) => {
-      const out = Math.min(1, len(sub(p, crownC)) / 0.25);
-      return [MAT.canopy, Math.min(1, (lod === 0 ? 0.2 : 0.3) + 0.45 * (v[1] * 0.5 + 0.5) + 0.35 * out), 1, p[1]];
-    }, (p, v) => {
-      const d = blobDeform(c, crownC, r * 0.7, 22)(p, v);
-      d.p[1] = c[1] + (d.p[1] - c[1]) * 0.78;
-      return d;
-    });
-    if (lod !== 0) continue;
-    // ...and individual leaf clusters break up its silhouette and catch the light
-    for (let k = 0; k < 70; k++) {
-      const z = R() * 2 - 1, a = R() * Math.PI * 2;
-      const v = [Math.sqrt(1 - z * z) * Math.cos(a), z * 0.8 + 0.2, Math.sqrt(1 - z * z) * Math.sin(a)];
-      const pos = add(c, mul(norm(v), r * (0.85 + 0.35 * R())));
-      pos[1] = c[1] + (pos[1] - c[1]) * 0.8;
-      const ln = norm(add(norm(v), [R() - 0.5, R() - 0.3, R() - 0.5]));
-      const t1 = norm(cross(ln, Math.abs(ln[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
-      const t2 = cross(ln, t1);
-      const sz = 0.026 * (0.7 + 0.6 * R());
-      const radial = norm(sub(pos, crownC));
-      const n = norm(add(mul(radial, 0.65), mul(ln, 0.35)));
-      const ao = 0.5 + 0.5 * (norm(v)[1] * 0.5 + 0.5);
-      const e = [MAT.canopy, ao, 1, pos[1]];
-      const q = [add(pos, mul(t1, sz)), add(pos, mul(t2, sz * 0.55)), add(pos, mul(t1, -sz)), add(pos, mul(t2, -sz * 0.55))];
-      const i0 = mb.vert(q[0], n, e), i1 = mb.vert(q[1], n, e), i2 = mb.vert(q[2], n, e), i3 = mb.vert(q[3], n, e);
-      mb.quad(i0, i1, i2, i3);
     }
   }
   return mb.build();

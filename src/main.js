@@ -48,7 +48,8 @@ async function main() {
   let time = num('t', 0);
   let last = performance.now();
   let frameTimes = [];
-  let started = performance.now();
+  // set when the first frame is done: the scene fades in after the loader (captures skip the fade)
+  let started = capture ? 0 : Infinity;
 
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, quality.dprCap);
@@ -80,8 +81,15 @@ async function main() {
     shot.underwater = shot.pos[1] < shot.water;
     const e = env.update(freeze ? 0 : dt, time, shot);
     audio.update(dt, shot, e);
-    const fade = Math.min(1, (now - started) / 2500);
+    const fade = Math.min(1, Math.max(0, now - started) / 2500);
     renderer.render(shot, e, time, fade * fade * (3 - 2 * fade));
+    if (renderer.frame === 1) {
+      // the first frame carries the start-up bakes: hide the loader once it is done
+      gpu.device.queue.onSubmittedWorkDone().then(() => {
+        document.body.classList.add('ready');
+        if (!capture) started = performance.now();
+      });
+    }
     // ?sync waits for the GPU each frame (useful for software renderers)
     if (capture && renderer.frame >= capture) { captureToCanvas(gpu.device, gpu.context, canvas); return; }
     if (sync) gpu.device.queue.onSubmittedWorkDone().then(() => requestAnimationFrame(frame));

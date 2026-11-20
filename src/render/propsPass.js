@@ -5,13 +5,14 @@
 // (PropsVisibility); the shadow cascades draw slot by slot.
 import { shader, buffer, bufferWithData, bindLayout, bindGroup, entry } from '../core/gpu.js';
 import { scatterWGSL, finalizeWGSL, propShadowWGSL, cardBakeWGSL, cardMipWGSL, MAX_SLOTS } from '../shaders/props.js';
-import { LAYERS, TYPE, CARDS, CARD_VIEWS } from '../scene/catalog.js';
+import { LAYERS, TYPE, CARDS, CARD_GRID, CARD_VIEWS, CARD_SIZE } from '../scene/catalog.js';
+import { LeafTextures } from './leafTextures.js';
 import { DEPTH } from './layouts.js';
 
 const PARAM_STRIDE = 256;
 const INSTANCE_BYTES = 32;
-const PARAM_BYTES = 112;
-const CARD_SIZE = 128;
+const PARAM_BYTES = 128;
+const FADE_BAND = 0.08; // LOD cross-fade overlap, as a fraction of the switch distance
 
 function mergeMeshes(meshes) {
   const ranges = {};
@@ -29,9 +30,12 @@ function mergeMeshes(meshes) {
 }
 
 export class PropsPass {
-  constructor(device, shared, meshes, quality, flockState) {
+  constructor(device, shared, meshes, quality, flockState, leaves) {
     this.device = device;
     this.flockState = flockState;
+    this.leaves = leaves;
+    this.leafLayout = bindLayout(device, 'leaves', LeafTextures.entries(GPUShaderStage.FRAGMENT));
+    this.leafGroup = bindGroup(device, this.leafLayout, leaves.resources, 'leaves');
     const U = GPUBufferUsage;
     const merged = mergeMeshes(meshes);
     // also read as storage by the visibility buffer passes
@@ -51,10 +55,11 @@ export class PropsPass {
         return slot;
       });
       const scale = layer.count ? 1 : quality.distance;
-      this.layers.push({ ...layer, slots, maxDist: layer.maxDist * scale,
+      this.layers.push({ ...layer, slots, variants: layer.variants || 1, maxDist: layer.maxDist * scale,
         minDist: layer.minDist ? layer.minDist * scale : -1,
         fadeDist: (layer.fadeDist ?? layer.maxDist) * scale, lods: layer.lods || [] });
     }
+    this.setFades();
     // how far the forest reaches (the terrain fakes a canopy beyond it)
     this.vegDist = Math.max(...this.layers.filter((l) => l.type === 'tree').map((l) => l.maxDist));
     this.instanceBuffer = buffer(device, base * INSTANCE_BYTES, U.STORAGE | U.VERTEX, 'prop-instances');
@@ -65,7 +70,12 @@ export class PropsPass {
     this.capsBuffer = bufferWithData(device, new Uint32Array(this.slots.map((s) => s.cap)), U.STORAGE, 'prop-caps');
     if (this.slots.length > MAX_SLOTS) throw new Error(`too many prop slots: ${this.slots.length} > ${MAX_SLOTS}`);
     // per slot: where its mesh and instances live (struct SlotInfo)
-    this.slotBuffer = bufferWithData(device, new Uint32Array(this.slots.flatMap((s) => [s.range.firstIndex, s.range.baseVertex, s.range.indexCount, s.base])), U.STORAGE, 'prop-slots');
+    const slotData = new ArrayBuffer(this.slots.length * SLOT_BYTES);
+    this.slots.forEach((s, k) => {
+      new Uint32Array(slotData, k * SLOT_BYTES, 4).set([s.range.firstIndex, s.range.baseVertex, s.range.indexCount, s.base]);
+      new Float32Array(slotData, k * SLOT_BYTES + 16, 4).set(s.fade);
+    });
+    this.slotBuffer = bufferWithData(device, new Uint32Array(slotData), U.STORAGE, 'prop-slots');
     // first triangle corner of each slot in the merged draw, then the total
     this.startBuffer = buffer(device, (this.slots.length + 1) * 4, U.STORAGE, 'prop-slot-starts');
     this.drawArgs = buffer(device, 16, U.STORAGE | U.INDIRECT, 'prop-draw');
@@ -77,13 +87,14 @@ export class PropsPass {
       const u = new Uint32Array(params, k * PARAM_STRIDE, PARAM_BYTES / 4);
       const radius = layer.count ? 0 : Math.ceil(layer.maxDist / layer.cell);
       f[0] = layer.cell || 1; f[1] = radius; f[2] = layer.maxDist; f[3] = layer.minDist;
-      u[4] = TYPE[layer.type]; u[5] = layer.count || 0;
-      f[8] = layer.slots[0].range.bound; f[9] = layer.keep; f[10] = layer.reach || 0; f[11] = layer.fadeDist;
+      u[4] = TYPE[layer.type]; u[5] = layer.count || 0; u[6] = layer.variants; u[7] = layer.slots.length / layer.variants;
+      f[8] = Math.max(...layer.slots.map((sl) => sl.range.bound)); f[9] = layer.keep; f[10] = layer.reach || 0; f[11] = layer.fadeDist;
       for (let j = 0; j < 4; j++) {
         const sl = layer.slots[Math.min(j, layer.slots.length - 1)];
         f[12 + j] = layer.lods[j] ?? 1e9;
         u[16 + j] = sl.index; u[20 + j] = sl.base; u[24 + j] = sl.cap;
       }
+      f[28] = FADE_BAND;
       layer.groups = layer.count ? [8, Math.ceil(layer.count / 64)] : [Math.ceil((2 * radius + 1) / 8), Math.ceil((2 * radius + 1) / 8)];
     });
     this.paramBuffer = bufferWithData(device, new Uint8Array(params), U.UNIFORM, 'scatter-params');
@@ -113,18 +124,18 @@ export class PropsPass {
         { shaderLocation: 3, offset: 0, format: 'float32x4' },
         { shaderLocation: 4, offset: 16, format: 'float32x4' }] },
     ];
-    // impostor framing: half width and height range of each baked species
+    // impostor framing: bounding sphere (centre height, radius) of each baked species
     const frames = CARDS.map(([, src]) => {
       const m = meshes[src];
-      let hw = 0, y0 = 1e9, y1 = -1e9;
-      for (let j = 0; j < m.v.length; j += 10) {
-        hw = Math.max(hw, Math.hypot(m.v[j], m.v[j + 2]));
-        y0 = Math.min(y0, m.v[j + 1]); y1 = Math.max(y1, m.v[j + 1]);
-      }
-      return { hw: hw * 1.04, y0, y1: y1 + (y1 - y0) * 0.02, r: Math.hypot(hw, Math.max(Math.abs(y0), Math.abs(y1))) * 1.05 };
+      let y0 = 1e9, y1 = -1e9;
+      for (let j = 0; j < m.v.length; j += 10) { y0 = Math.min(y0, m.v[j + 1]); y1 = Math.max(y1, m.v[j + 1]); }
+      const cy = (y0 + y1) / 2;
+      let r = 0;
+      for (let j = 0; j < m.v.length; j += 10) r = Math.max(r, Math.hypot(m.v[j], m.v[j + 1] - cy, m.v[j + 2]));
+      return { r: r * 1.03, cy };
     });
     this.cardFrames = frames;
-    const cardConst = `const CARD = array<vec4f, ${frames.length}>(${frames.map((c) => `vec4f(${c.hw}, ${c.y0}, ${c.y1}, 0.0)`).join(', ')});`;
+    const cardConst = `const CARD = array<vec4f, ${frames.length}>(${frames.map((c) => `vec4f(${c.r}, ${c.cy}, 0.0, 0.0)`).join(', ')});`;
     // shaders that include propVS need the framing of every impostor species
     const withCards = (code) => code.replace('/*CARD_FRAMES*/', cardConst);
     this.withCards = withCards;
@@ -133,14 +144,16 @@ export class PropsPass {
     const sh = shader(device, withCards(propShadowWGSL), 'props-shadow');
     this.shadowPipeline = device.createRenderPipeline({
       label: 'props-shadow',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.cascade] }),
+      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.cascade, this.leafLayout] }),
       vertex: { module: sh, entryPoint: 'vs', buffers: vertexBuffers },
+      fragment: { module: sh, entryPoint: 'fs', targets: [] },
       primitive: { topology: 'triangle-list', cullMode: 'none' },
       depthStencil: { format: DEPTH, depthWriteEnabled: true, depthCompare: 'less', depthBias: 2, depthBiasSlopeScale: 2.0 },
     });
   }
 
-  // Impostor atlas: CARD_VIEWS orthographic views per species, rendered once.
+  // Impostor atlas: CARD_VIEWS orthographic views per species, rendered once,
+  // from the directions of a hemi-octahedral grid (see cardImpostor).
   setupCards(device, shared, merged, withCards) {
     const layers = CARDS.length * CARD_VIEWS;
     const mips = Math.log2(CARD_SIZE) - 1; // down to 4x4
@@ -157,7 +170,7 @@ export class PropsPass {
     const bake = shader(device, withCards(cardBakeWGSL), 'card-bake');
     this.bakePipeline = device.createRenderPipeline({
       label: 'card-bake',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.bakeLayout] }),
+      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.bakeLayout, this.leafLayout] }),
       vertex: { module: bake, entryPoint: 'vs', buffers: [{ arrayStride: 40, attributes: [
         { shaderLocation: 0, offset: 0, format: 'float32x3' },
         { shaderLocation: 1, offset: 12, format: 'float32x3' },
@@ -183,8 +196,8 @@ export class PropsPass {
     const data = new Float32Array(PARAM_STRIDE / 4 * layers);
     this.cardFrames.forEach((c, sp) => {
       for (let k = 0; k < CARD_VIEWS; k++) {
-        const th = (k * 2 * Math.PI) / CARD_VIEWS;
-        data.set([Math.cos(th), 0, -Math.sin(th), c.hw, Math.sin(th), 0, Math.cos(th), c.r, c.y0, c.y1, 0, 0], (sp * CARD_VIEWS + k) * PARAM_STRIDE / 4);
+        const { right, up, dir } = cardBasis(k % CARD_GRID, Math.floor(k / CARD_GRID));
+        data.set([...right, c.r, ...up, c.cy, ...dir, 0], (sp * CARD_VIEWS + k) * PARAM_STRIDE / 4);
       }
     });
     device.queue.writeBuffer(this.bakeBuffer, 0, data);
@@ -208,6 +221,7 @@ export class PropsPass {
         pass.setPipeline(this.bakePipeline);
         pass.setBindGroup(0, frameGroup);
         pass.setBindGroup(1, this.bakeGroup, [layer * PARAM_STRIDE]);
+        pass.setBindGroup(2, this.leafGroup);
         pass.setVertexBuffer(0, this.vertexBuffer);
         pass.setIndexBuffer(this.indexBuffer, 'uint32');
         pass.drawIndexed(r.indexCount, 1, r.firstIndex, r.baseVertex, 0);
@@ -268,17 +282,54 @@ export class PropsPass {
 
   // Everything the visibility buffer passes read (binding order of propData).
   get visibilityResources() {
-    return [...this.cardViews, this.vertexBuffer, this.indexBuffer, this.instanceBuffer, this.slotBuffer, this.startBuffer];
+    return [...this.cardViews, this.vertexBuffer, this.indexBuffer, this.instanceBuffer, this.slotBuffer, this.startBuffer, ...this.leaves.resources];
+  }
+
+  // Cross-fade distances of every slot (struct SlotInfo.fade): a LOD fades in
+  // over the band below where it takes over and fades out over the band below
+  // where the next takes over, also across a near layer and the far layer
+  // that continues it. Matches the overlap the scatter emits (see emit).
+  setFades() {
+    const NONE_IN = [-2, -1], NONE_OUT = [1e9, 2e9];
+    const band = (d) => [d * (1 - FADE_BAND), d];
+    for (const layer of this.layers) {
+      const per = layer.slots.length / layer.variants;
+      const next = this.layers.some((l) => l.type === layer.type && l.minDist === layer.maxDist);
+      layer.slots.forEach((slot, j) => {
+        const k = j % per;
+        const lo = k > 0 ? layer.lods[k - 1] : layer.minDist > 0 ? layer.minDist : null;
+        const hi = k < per - 1 ? layer.lods[k] : next ? layer.maxDist : null;
+        slot.fade = [...(lo ? band(lo) : NONE_IN), ...(hi ? band(hi) : NONE_OUT)];
+      });
+    }
   }
 
   drawShadow(pass, frameGroup, cascadeGroup, cascade) {
     pass.setPipeline(this.shadowPipeline);
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, cascadeGroup);
+    pass.setBindGroup(2, this.leafGroup);
     // the near cascade gets every nearby caster, the far cascades only the big
     // ones; distant LODs and impostor cards lie beyond the last cascade and never cast
     this.drawSlots(pass, (s) => s.shadow && (cascade === 0 ? s.lod === 0 : BIG.has(s.mesh) && s.lod < cascade));
   }
 }
 
-const BIG = new Set(['palm0', 'palm1', 'tree0', 'tree1', 'rock', 'banana', 'bush', 'galleon', 'wreck', 'rowboat']);
+const BIG = new Set(['palm0', 'palm1', 'treeA0', 'treeA1', 'treeB0', 'treeB1', 'emergent0', 'emergent1', 'understory0',
+  'rock', 'banana', 'bush', 'galleon', 'wreck', 'rowboat']);
+const SLOT_BYTES = 32; // struct SlotInfo
+
+// Image axes of impostor view (i, j): dir points from the plant towards the
+// viewer (the hemi-octahedral grid direction), right and up span the image.
+function cardBasis(i, j) {
+  const e = [((i + 0.5) / CARD_GRID) * 2 - 1, ((j + 0.5) / CARD_GRID) * 2 - 1];
+  const px = (e[0] + e[1]) / 2, pz = (e[0] - e[1]) / 2;
+  const dir = normalize([px, 1 - Math.abs(px) - Math.abs(pz), pz]);
+  const right = normalize([dir[2], 0, -dir[0]]); // cross(up, dir)
+  const up = [dir[1] * right[2] - dir[2] * right[1], dir[2] * right[0] - dir[0] * right[2], dir[0] * right[1] - dir[1] * right[0]];
+  return { right, up, dir };
+}
+function normalize(v) {
+  const l = Math.hypot(...v);
+  return v.map((x) => x / l);
+}
