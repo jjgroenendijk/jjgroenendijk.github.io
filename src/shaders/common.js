@@ -53,7 +53,7 @@ const PI: f32 = 3.14159265;
 const TAU: f32 = 6.28318531;
 const WATER_EXT: vec3f = vec3f(0.20, 0.058, 0.034);
 // lighting attenuation is kept gentler than view extinction so reefs stay colourful
-const LIGHT_EXT: vec3f = vec3f(0.11, 0.04, 0.032);
+const LIGHT_EXT: vec3f = vec3f(0.075, 0.035, 0.03);
 ${knotArr}
 ${waveArr('WV', WAVES)}
 ${waveArr('RP', RIPPLES)}
@@ -132,8 +132,9 @@ fn baseHeight(p: vec2f) -> f32 {
   let r2 = 1.0 - abs(gnoise(p * (128.0 / W), 128, 41u));
   let ridge = r * r * 0.7 + r2 * r2 * 0.3;
   var h: f32;
-  if (e > 0.0) { h = e * 40.0 + pow(max(e - 0.06, 0.0), 1.5) * 900.0 * (0.35 + 0.65 * ridge); }
-  else { h = e * 90.0; }
+  // gentle profile around sea level gives wide beaches and shallow shelves
+  if (e > 0.0) { h = min(e, 0.12) * 14.0 + max(e - 0.12, 0.0) * 45.0 + pow(max(e - 0.14, 0.0), 1.5) * 950.0 * (0.35 + 0.65 * ridge); }
+  else { h = max(e, -0.08) * 30.0 + min(e + 0.08, 0.0) * 90.0; }
   return max(h, -48.0 + 8.0 * n);
 }
 fn terrainHeight(p: vec2f) -> f32 {
@@ -161,7 +162,7 @@ fn region(p: vec2f) -> vec2f {
 fn forestDensity(p: vec2f) -> f32 {
   return smoothstep(-0.28, 0.05, fbm(p, 64, 3, 97u)) * (1.0 - 0.75 * region(p).x);
 }
-fn reefMask(p: vec2f) -> f32 { return smoothstep(-0.05, 0.18, fbm(p, 256, 3, 113u)); }
+fn reefMask(p: vec2f) -> f32 { return smoothstep(-0.22, 0.08, fbm(p, 256, 3, 113u)); }
 
 // ------------------------------------------------------------ waves
 struct WaveOut { disp: vec3f, n: vec3f };

@@ -5,12 +5,19 @@ export const waterWGSL = frameStruct + commonLib + shadowLib + /* wgsl */ `
 @group(2) @binding(0) var sceneTex: texture_2d<f32>;
 @group(2) @binding(1) var depthTex: texture_depth_2d;
 
+@group(0) @binding(1) var cacheTex: texture_2d_array<f32>;
+
 struct WV2 {
   @builtin(position) pos: vec4f,
   @location(0) rel: vec3f,
   @location(1) n: vec3f,
   @location(2) crest: f32,
+  @location(3) surf: f32,
 };
+
+fn groundAt(lvl: u32, g: vec2i) -> f32 {
+  return textureLoad(cacheTex, clamp(g + vec2i(${GRID_M}), vec2i(0), vec2i(${GRID_M * 2})), lvl, 0).x;
+}
 
 @vertex fn vs(@location(0) g: vec2f, @builtin(instance_index) lvl: u32) -> WV2 {
   let Lv = F.levels[lvl];
@@ -21,11 +28,25 @@ struct WV2 {
   let gm = g - odd * morph;
   let xz = Lv.xy + gm * Lv.z;
   let dist = length(xz - F.camPos.xz);
-  let w = gerstner(xz, F.camPos.w, dist);
+  let t = F.camPos.w;
+  var w = gerstner(xz, t, dist);
+  // the water knows how deep it is (from the terrain cache)
+  let ground = mix(groundAt(lvl, vec2i(g)), groundAt(lvl, vec2i(g - odd)), morph);
+  let depth = max(-ground, 0.0);
+  // waves die out in very shallow water and steepen where they start to feel the bottom
+  let shoal = smoothstep(0.0, 2.2, depth);
+  let steep = 1.0 + 0.7 * (1.0 - smoothstep(1.5, 9.0, depth));
+  w.disp = vec3f(w.disp.x * shoal, w.disp.y * shoal * steep, w.disp.z * shoal);
+  // rolling surf: crests marching towards the beach and breaking
+  let jitter = gnoise(xz * (512.0 / W), 512, 311u) * 3.0;
+  let ph = depth * 1.5 + t * 1.15 + jitter;
+  let surf = pow(sat(sin(ph) * 0.5 + 0.5), 5.0) * smoothstep(4.5, 1.4, depth) * smoothstep(0.05, 0.6, depth);
+  w.disp.y += surf * 0.4;
   var o: WV2;
   o.rel = vec3f(xz.x + w.disp.x - F.camPos.x, w.disp.y - F.camPos.y, xz.y + w.disp.z - F.camPos.z);
-  o.n = w.n;
+  o.n = normalize(mix(vec3f(0.0, 1.0, 0.0), w.n, max(shoal, 0.15)));
   o.crest = w.disp.y;
+  o.surf = surf;
   o.pos = F.viewProj * vec4f(o.rel, 1.0);
   return o;
 }
@@ -136,10 +157,15 @@ fn waterScatter() -> vec3f {
   let fn1 = fbm(pw.xz + vec2f(t * 0.6, t * 0.4) % 512.0, 2048, 3, 301u);
   let shore = 1.0 - smoothstep(0.0, 0.35, vdepth + fn1 * 0.25);
   let bands = pow(sat(sin(vdepth * 9.0 - t * 1.4 + fn1 * 6.0) * 0.5 + 0.5), 4.0) * (1.0 - smoothstep(0.0, 0.6, vdepth));
-  let crest = smoothstep(0.3, 0.5, in.crest + fn1 * 0.25) * near;
-  let foam = sat(max(shore * (0.4 + 0.6 * smoothstep(0.0, 0.4, fn1 + 0.25)), bands * 0.45) + crest * 0.3) * smoothstep(0.0, 0.03, thick);
+  let crest = smoothstep(0.6, 0.95, in.crest + fn1 * 0.3) * (1.0 - smoothstep(50.0, 140.0, dist));
+  let surfFoam = smoothstep(0.25, 0.8, in.surf + fn1 * 0.4) * (0.6 + 0.4 * smoothstep(-0.1, 0.3, fn1));
+  let foam = sat(max(shore * (0.4 + 0.6 * smoothstep(0.0, 0.4, fn1 + 0.25)), bands * 0.45) + crest * 0.35 + surfFoam * 0.85) * smoothstep(0.0, 0.03, thick);
+  // lacy foam texture: a network of thin bright strands with holes in between
+  let fq = pw.xz * (16384.0 / W) + vec2f(t * 0.25, -t * 0.18) % 16384.0;
+  let lace = smoothstep(0.55, 0.9, 1.0 - abs(gnoise(fq, 16384, 321u)) - 0.5 * abs(gnoise(fq * 2.3 + 7.0, 32768, 323u)));
+  let foamTex = mix(0.3, 1.0, lace);
   let foamLit = (F.lightColor.rgb * max(L.y, 0.0) * sh + F.skyAmb.rgb) * 0.85;
-  col = mix(col, foamLit, foam * 0.9);
+  col = mix(col, foamLit, sat(foam * foamTex) * 0.9);
   col = applyFog(col, in.rel);
   return vec4f(col, 1.0);
 }

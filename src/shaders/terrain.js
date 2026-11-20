@@ -133,7 +133,7 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   let rock = mix(mix(vec3f(0.30, 0.27, 0.24), vec3f(0.22, 0.20, 0.19), sat(mn * 2.0 + 0.5)), vec3f(0.09, 0.085, 0.085), rg.y);
   let canopy = mix(vec3f(0.035, 0.09, 0.025), vec3f(0.09, 0.16, 0.04), sat(gnoise(pw.xz * (2048.0 / W), 2048, 217u) * 1.6 + 0.5));
 
-  let beachH = 1.6 + mn * 1.5 + big * 1.0;
+  let beachH = 2.2 + mn * 1.2 + big * 0.8;
   var alb: vec3f;
   if (h < -0.4) {
     let reef = reefMask(pw.xz);

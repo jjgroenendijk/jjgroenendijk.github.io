@@ -39,6 +39,13 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (kind == ${TYPE.manta}u || kind == ${TYPE.turtle}u) { cruiser(gid.x + gid.y * 64u, kind, t); return; }
   if (kind == ${TYPE.dolphin}u) { dolphin(gid.x + gid.y * 64u, t); return; }
   if (kind == ${TYPE.butterfly}u) { butterfly(gid.x + gid.y * 64u, t); return; }
+  if (kind == ${TYPE.shark}u || kind == ${TYPE.ray}u) { cruiser(gid.x + gid.y * 64u, kind, t); return; }
+  if (kind == ${TYPE.jelly}u) { jelly(gid.x + gid.y * 64u, t); return; }
+  if (kind == ${TYPE.crab}u) { crab(gid.x + gid.y * 64u, t); return; }
+  if (kind == ${TYPE.parrot}u) { parrot(gid.x + gid.y * 64u, t); return; }
+  // reef life is only worth placing when the camera is near the water
+  let reefLife = isCoral(kind) || kind == ${TYPE.seagrass}u || kind == ${TYPE.anemone}u || kind == ${TYPE.clownfish}u || kind == ${TYPE.starfish}u;
+  if (reefLife && F.camPos.y > 45.0) { return; }
   if (kind >= ${TYPE.ship}u && kind <= ${TYPE.barrel}u) { landmark(gid.x + gid.y * 64u, kind, t); return; }
   let R = i32(P.radius);
   if (gid.x > u32(2 * R) || gid.y > u32(2 * R)) { return; }
@@ -49,7 +56,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let cw = vec2i(wrapi(c.x, ncell), wrapi(c.y, ncell));
   // coral types share one cell lattice so they never overlap
   var tseed = kind;
-  if (kind == ${TYPE.coralB}u || kind == ${TYPE.coralC}u) { tseed = ${TYPE.coralA}u; }
+  if (isCoral(kind)) { tseed = ${TYPE.coralA}u; }
+  if (kind == ${TYPE.clownfish}u) { tseed = ${TYPE.anemone}u; }
   let seed = hashu(u32(cw.x) * 7919u + hashu(u32(cw.y) * 104729u + tseed * 1013u));
   let r1 = hf(seed); let r2 = hf(seed + 1u); let r3 = hf(seed + 2u);
   let r4 = hf(seed + 3u); let r5 = hf(seed + 4u); let r6 = hf(seed + 5u);
@@ -101,16 +109,24 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     tilt = (r6 - 0.5) * 0.6;
     excl = 2.6;
     sink = 0.35;
-  } else if (kind == ${TYPE.coralA}u || kind == ${TYPE.coralB}u || kind == ${TYPE.coralC}u) {
+  } else if (isCoral(kind)) {
     let reef = reefMask(p);
-    let k = u32(r3 * 3.0);
-    let mine = k == kind - ${TYPE.coralA}u;
-    prob = select(0.0, 0.25 + reef * 0.75, mine && h < -1.3 && h > -18.0);
-    scale = mix(0.9, 2.4, r5);
-    if (kind == ${TYPE.coralC}u) { scale = mix(0.9, 2.2, r5); }
+    let mine = u32(r3 * 6.0) == coralIndex(kind);
+    prob = select(0.0, 0.2 + reef * 0.75, mine && h < -1.3 && h > -18.0);
+    scale = mix(0.8, 2.2, r5);
+    if (kind == ${TYPE.coralE}u || kind == ${TYPE.coralF}u) { scale = mix(0.6, 1.4, r5); }
     tilt = (r6 - 0.5) * 0.35;
     excl = 1.9;
-    sink = 0.12;
+    sink = 0.1;
+  } else if (kind == ${TYPE.anemone}u || kind == ${TYPE.clownfish}u) {
+    prob = select(0.0, 0.12 + reefMask(p) * 0.25, h < -1.5 && h > -14.0);
+    scale = mix(0.9, 1.4, r5);
+    excl = 2.2;
+  } else if (kind == ${TYPE.starfish}u) {
+    prob = select(0.0, 0.07 * (1.0 - reefMask(p) * 0.6), h < -0.8 && h > -16.0);
+    scale = mix(0.18, 0.32, r5);
+    excl = 1.0;
+    sink = -0.02;
   } else if (kind == ${TYPE.seagrass}u) {
     let reef = reefMask(p);
     let meadow = smoothstep(0.0, 0.15, fbm(p, 512, 2, 223u));
@@ -118,16 +134,95 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     scale = mix(0.6, 1.3, r5);
     excl = 1.2;
   }
-  if (r3 * 0.999 > prob && !(kind >= ${TYPE.coralA}u && kind <= ${TYPE.coralC}u)) { return; }
-  if ((kind >= ${TYPE.coralA}u && kind <= ${TYPE.coralC}u) && r1 * 0.5 + r2 * 0.5 > prob) { return; }
+  if (isCoral(kind)) { if (r1 * 0.5 + r2 * 0.5 > prob) { return; } }
+  else if (r3 * 0.999 > prob) { return; }
   // keep the camera corridor clear
   let cor = corridorAt(p.y);
   if (cor.y > 0.01 && d < excl * max(cor.y, 0.25)) { return; }
   // shrink near max distance to avoid popping
   scale *= 1.0 - smoothstep(P.maxDist * 0.8, P.maxDist, dist);
   if (scale < 0.02) { return; }
+  if (kind == ${TYPE.clownfish}u) {
+    // a pair of clownfish hovering over their anemone
+    for (var j = 0u; j < 2u; j++) {
+      let a = t * (0.5 + f32(j) * 0.3) + r6 * TAU + f32(j) * 2.5;
+      let fp = vec3f(p.x + cos(a) * 0.35 * scale, h + 0.3 * scale + sin(t * 1.3 + f32(j)) * 0.06, p.y + sin(a) * 0.35 * scale);
+      emit(fp - F.camPos.xyz, vec4f(fp, 0.09), vec4f(a + PI * 0.5, 0.0, 0.97, r1 * 100.0 + f32(j) * 7.0), dist);
+    }
+    return;
+  }
   let rel = vec3f(rel2.x, h - F.camPos.y - sink * scale, rel2.y);
   emit(rel, vec4f(p.x, h - sink * scale, p.y, scale), vec4f(yaw, tilt, r6, r1 * 100.0), dist);
+}
+
+fn isCoral(kind: u32) -> bool {
+  return (kind >= ${TYPE.coralA}u && kind <= ${TYPE.coralC}u) || (kind >= ${TYPE.coralD}u && kind <= ${TYPE.coralF}u);
+}
+fn coralIndex(kind: u32) -> u32 {
+  if (kind <= ${TYPE.coralC}u) { return kind - ${TYPE.coralA}u; }
+  return kind - ${TYPE.coralD}u + 3u;
+}
+
+// jellyfish drifting through the water column
+fn jelly(i: u32, t: f32) {
+  if (i >= P.count || F.extra.x < 0.01) { return; }
+  let spacing = 9.0;
+  let zi = floor(F.camPos.z / spacing) + f32(i % 8u) - 2.0;
+  let sh = hashu(u32(i32(zi) + 100000) * 97u + i / 8u * 13u);
+  let x = pathX(zi * spacing) + (hf(sh) - 0.5) * 22.0 + sin(t * 0.05 + hf(sh) * 9.0) * 2.0;
+  let z = zi * spacing + hf(sh + 1u) * spacing;
+  let ground = terrainHeight(vec2f(x, z));
+  if (ground > -3.0) { return; }
+  let y = mix(ground + 1.5, -1.2, hf(sh + 2u)) + sin(t * 0.25 + hf(sh + 3u) * 6.0) * 0.6;
+  let pos = vec3f(x, y, z);
+  let rel = pos - F.camPos.xyz;
+  let dist = length(rel);
+  if (dist > P.maxDist) { return; }
+  emit(rel, vec4f(pos, mix(0.3, 0.6, hf(sh + 4u))), vec4f(hf(sh + 5u) * TAU, (hf(sh + 6u) - 0.5) * 0.3, hf(sh + 7u), hf(sh + 8u) * 100.0), dist);
+}
+
+// crabs scuttling sideways on the beaches
+fn crab(i: u32, t: f32) {
+  if (i >= P.count || F.camPos.y > 25.0 || F.camFwd.w > 0.5) { return; }
+  let spacing = 5.0;
+  let zi = floor(F.camPos.z / spacing) + f32(i % 12u) - 3.0;
+  let sh = hashu(u32(i32(zi) + 100000) * 193u + i / 12u * 17u);
+  var x = pathX(zi * spacing) + (hf(sh) - 0.5) * 26.0;
+  let z = zi * spacing + hf(sh + 1u) * spacing;
+  let ph = hf(sh + 2u) * TAU;
+  let yaw = hf(sh + 3u) * TAU;
+  // walk sideways in bursts, then pause
+  let burst = smoothstep(0.2, 0.5, sin(t * 0.7 + ph));
+  let stride = sin(t * 0.35 + ph) * 1.4;
+  let pos2 = vec2f(x, z) + vec2f(cos(yaw), -sin(yaw)) * stride;
+  let h = terrainHeight(pos2);
+  if (h < 0.15 || h > 2.6) { return; }
+  let pos = vec3f(pos2.x, h, pos2.y);
+  let rel = pos - F.camPos.xyz;
+  let dist = length(rel);
+  if (dist > P.maxDist) { return; }
+  emit(rel, vec4f(pos, mix(0.09, 0.15, hf(sh + 4u))), vec4f(yaw, 0.0, hf(sh + 5u), ph * 10.0 + burst * 0.0), dist);
+}
+
+// scarlet macaws crossing over the jungle canopy
+fn parrot(i: u32, t: f32) {
+  if (i >= P.count || F.extra.z < 0.05 || F.sunDir.y < 0.02) { return; }
+  let flock = i / 4u;
+  let j = i % 4u;
+  let period = 45.0;
+  let k = floor(t / period + f32(flock) * 0.33);
+  let ph = fract(t / period + f32(flock) * 0.33);
+  let sh = hashu(u32(k) * 7919u + flock * 31u);
+  let side = select(-1.0, 1.0, hf(sh) > 0.5);
+  let z0 = F.camPos.z + 30.0 + hf(sh + 1u) * 60.0;
+  let x = pathX(z0) + side * (ph - 0.5) * 220.0;
+  let z = z0 + sin(ph * 3.0 + f32(j)) * 6.0 + f32(j) * 2.5;
+  let alt = max(terrainHeight(vec2f(x, z)), 0.0) + 24.0 + hf(sh + 2u) * 10.0 + f32(j) * 1.2;
+  let pos = vec3f(x, alt, z);
+  let rel = pos - F.camPos.xyz;
+  let dist = length(rel);
+  if (dist > P.maxDist) { return; }
+  emit(rel, vec4f(pos, 0.75), vec4f(select(-PI * 0.5, PI * 0.5, side > 0.0), 0.0, 0.85 + hf(sh + 3u) * 0.1, f32(i) * 11.0), dist);
 }
 
 fn fish(i: u32, t: f32) {
@@ -135,9 +230,9 @@ fn fish(i: u32, t: f32) {
   let per = 32u;
   let s = i / per;
   let j = i % per;
-  let spacing = 22.0;
+  let spacing = 14.0;
   let zc = floor(F.camPos.z / spacing);
-  let zi = zc + f32(s) - 1.0;
+  let zi = zc + f32(s) - 4.0;
   let sh = hashu(u32(i32(zi) + 100000) * 977u);
   let ax = pathX(zi * spacing) + (hf(sh) - 0.5) * 18.0;
   let az = zi * spacing + hf(sh + 1u) * spacing;
@@ -164,7 +259,9 @@ fn fish(i: u32, t: f32) {
 fn cruiser(i: u32, kind: u32, t: f32) {
   if (i >= P.count || F.extra.x < 0.01) { return; }
   let isManta = kind == ${TYPE.manta}u;
-  let spacing = select(45.0, 70.0, isManta);
+  let isShark = kind == ${TYPE.shark}u;
+  let isRay = kind == ${TYPE.ray}u;
+  let spacing = select(select(45.0, 70.0, isManta), 60.0, isShark || isRay);
   let zi = floor(F.camPos.z / spacing) + f32(i % 3u) - 1.0 + f32(i / 3u) * 0.5;
   let sh = hashu(u32(i32(zi * 2.0) + 100000) * 613u + kind);
   let side = select(-1.0, 1.0, hf(sh) > 0.5);
@@ -173,10 +270,14 @@ fn cruiser(i: u32, kind: u32, t: f32) {
   let ground = terrainHeight(vec2f(ax, az));
   if (ground > -3.5) { return; }
   let rad = 9.0 + hf(sh + 2u) * 9.0;
-  let speed = select(0.55, 1.1, isManta);
+  var speed = select(0.55, 1.1, isManta);
+  if (isShark) { speed = 1.6; }
+  if (isRay) { speed = 0.7; }
   let dirS = select(-1.0, 1.0, hf(sh + 3u) > 0.5);
   let ang = t * speed * dirS / rad + hf(sh + 4u) * TAU;
-  let lift = select(1.6, 3.2, isManta) + hf(sh + 5u) * 2.0;
+  var lift = select(1.6, 3.2, isManta) + hf(sh + 5u) * 2.0;
+  if (isRay) { lift = 0.35; }
+  if (isShark) { lift = 2.0 + hf(sh + 5u) * 3.0; }
   let x = ax + cos(ang) * rad;
   let z = az + sin(ang) * rad;
   let y = min(terrainHeight(vec2f(x, z)) + lift + sin(t * 0.2 + hf(sh) * 9.0) * 0.6, -1.8);
@@ -185,8 +286,11 @@ fn cruiser(i: u32, kind: u32, t: f32) {
   let dist = length(rel);
   if (dist > P.maxDist) { return; }
   let yaw = atan2(-sin(ang) * dirS, cos(ang) * dirS);
-  let sc = select(mix(0.8, 1.15, hf(sh + 6u)), mix(2.4, 3.6, hf(sh + 6u)), isManta);
-  emit(rel, vec4f(pos, sc), vec4f(yaw, sin(t * 0.3 + hf(sh) * 5.0) * 0.08, hf(sh + 7u), hf(sh + 8u) * 100.0), dist);
+  var sc = select(mix(0.8, 1.15, hf(sh + 6u)), mix(2.4, 3.6, hf(sh + 6u)), isManta);
+  var hue = hf(sh + 7u);
+  if (isShark) { sc = mix(1.5, 2.1, hf(sh + 6u)); }
+  if (isRay) { sc = mix(0.9, 1.4, hf(sh + 6u)); hue = 0.8 + hue * 0.2; } else if (isManta) { hue *= 0.5; }
+  emit(rel, vec4f(pos, sc), vec4f(yaw, sin(t * 0.3 + hf(sh) * 5.0) * 0.08, hue, hf(sh + 8u) * 100.0), dist);
 }
 
 // butterflies flutter along the jungle path by day
@@ -375,11 +479,21 @@ fn propVertex(pos: vec3f, nrm: vec3f, ex: vec4f, a: vec4f, b: vec4f) -> PV {
     p.x += wig;
   }
   if (mat == 13u) {
-    let flap = smoothstep(0.2, 0.7, sin(t * 0.5 + ph));
+    var flap = smoothstep(0.2, 0.7, sin(t * 0.5 + ph));
+    if (b.z > 0.8) { flap = 1.0; }
     p.y += sin(t * 7.0 + ph) * abs(p.x) * 0.7 * flex * flap;
   }
   if (mat == 17u) { p.z += sin(t * 0.7 + ph) * 0.25 * flex; }
   if (mat == 18u) { p.x += sin(t * 6.0 + ph - p.z * 1.8) * 0.28 * flex; }
+  if (mat == 30u) { p.x += sin(t * 3.0 + ph - p.z * 4.0) * 0.06 * flex; }
+  if (mat == 31u) {
+    let pulse = sin(t * 1.6 + ph);
+    if (ex.w < 0.9) { p.x *= 1.0 + pulse * 0.08; p.z *= 1.0 + pulse * 0.08; p.y *= 1.0 - pulse * 0.1; }
+    p.x += sin(t * 0.9 + ph + p.y * 2.0) * 0.08 * flex;
+    p.z += cos(t * 0.7 + ph + p.y * 1.7) * 0.08 * flex;
+  }
+  if (mat == 33u) { p.y += abs(sin(t * 14.0 + ph + p.z * 9.0)) * 0.04 * flex * smoothstep(0.2, 0.5, sin(t * 0.7 + ph * 0.1)); }
+  if (mat == 34u || mat == 36u) { p += vec3f(sin(t * 0.9 + ph + p.y * 4.0), 0.0, cos(t * 0.8 + ph + p.x * 3.0)) * 0.05 * flex * flex; }
   if (mat == 28u) { p.y += sin(t * 15.0 + ph) * abs(p.x) * 1.1 * flex; }
   if (mat == 27u) { p += vec3f(sin(t * 1.6 + ph + p.x * 9.0), 0.0, cos(t * 1.3 + ph)) * 0.008; }
   if (mat == 26u) { p.y += sin(t * 4.0 + ph) * 0.05 * flex; }
@@ -408,6 +522,32 @@ export const propWGSL = frameStruct + commonLib + shadowLib + propVS + /* wgsl *
   var o = propVertex(pos, nrm, ex, a, b);
   o.pos = F.viewProj * vec4f(o.rel, 1.0);
   return o;
+}
+
+fn fishColor(h: f32, lp: vec3f) -> vec3f {
+  let belly = sat(lp.y * 6.0 + 0.3);
+  if (h < 0.16) { return mix(vec3f(0.95, 0.78, 0.08), vec3f(0.98, 0.88, 0.35), belly); }            // yellow tang
+  if (h < 0.32) { return mix(vec3f(0.10, 0.35, 0.85), vec3f(0.55, 0.75, 0.95), belly); }            // chromis
+  if (h < 0.48) {                                                                                     // blue tang
+    var c = vec3f(0.05, 0.25, 0.85);
+    c = mix(c, vec3f(0.02, 0.02, 0.06), step(0.6, sin(lp.z * 9.0 + lp.y * 12.0) * 0.5 + 0.5) * step(0.0, lp.y));
+    return mix(c, vec3f(0.98, 0.80, 0.10), step(lp.z, -0.38));
+  }
+  if (h < 0.64) {                                                                                     // sergeant major
+    let bars = step(0.72, fract(lp.z * 5.5));
+    return mix(mix(vec3f(0.85, 0.85, 0.75), vec3f(0.95, 0.88, 0.40), belly), vec3f(0.05), bars);
+  }
+  if (h < 0.80) { return mix(vec3f(0.10, 0.60, 0.55), vec3f(0.90, 0.45, 0.60), step(0.5, fract(lp.z * 4.0 + lp.y * 6.0))); } // parrotfish
+  if (h < 0.92) {                                                                                     // butterflyfish
+    let c = mix(vec3f(0.98, 0.97, 0.92), vec3f(0.98, 0.85, 0.15), smoothstep(-0.05, -0.3, lp.z));
+    return mix(c, vec3f(0.03), step(abs(lp.z - 0.3), 0.04));
+  }
+  // clownfish: orange with three white bands edged in black
+  let z = lp.z;
+  let band = min(min(abs(z - 0.28), abs(z + 0.02)), abs(z + 0.36));
+  var c = vec3f(0.98, 0.42, 0.04);
+  c = mix(c, vec3f(0.02), step(band, 0.075));
+  return mix(c, vec3f(0.98), step(band, 0.055));
 }
 
 fn coralColor(h: f32) -> vec3f {
@@ -488,16 +628,15 @@ fn coralColor(h: f32) -> vec3f {
       trans = 0.5;
     }
     case 11u: { alb = mix(vec3f(0.18, 0.32, 0.10), vec3f(0.35, 0.40, 0.14), in.ex.z) * (0.8 + 0.4 * hue); trans = 0.6; }
-    case 12u: {
-      var c1 = vec3f(0.95, 0.80, 0.10);
-      var c2 = vec3f(0.95, 0.85, 0.30);
-      if (hue > 0.33) { c1 = vec3f(0.10, 0.35, 0.85); c2 = vec3f(0.55, 0.75, 0.95); }
-      if (hue > 0.66) { c1 = vec3f(0.95, 0.55, 0.15); c2 = vec3f(0.98, 0.98, 0.95); }
-      let stripe = step(0.5, fract(lp.z * 9.0 + 0.2));
-      alb = mix(c1, c2, select(sat(lp.y * 6.0 + 0.3), stripe, hue > 0.66));
-      spec = 0.6; rough = 0.3;
-    }
+    case 12u: { alb = fishColor(hue, lp); spec = 0.6; rough = 0.3; }
     case 13u: {
+      if (hue > 0.8) {
+        // scarlet macaw: red body, yellow and blue wings
+        let wx = abs(lp.x);
+        alb = mix(vec3f(0.80, 0.06, 0.04), vec3f(0.95, 0.75, 0.08), smoothstep(0.1, 0.25, wx));
+        alb = mix(alb, vec3f(0.05, 0.25, 0.85), smoothstep(0.35, 0.5, wx));
+        break;
+      }
       alb = mix(vec3f(0.85, 0.85, 0.82), vec3f(0.12, 0.12, 0.13), smoothstep(0.5, 0.9, abs(lp.x) * 1.4) * 0.8 + 0.1 * hue);
     }
     case 15u: { alb = vec3f(0.30, 0.36, 0.14) * (0.8 + 0.3 * vnoise3(lp * 30.0)); }
@@ -550,6 +689,11 @@ fn coralColor(h: f32) -> vec3f {
     }
     case 21u: { alb = vec3f(0.10, 0.10, 0.11) * (0.8 + 0.4 * vnoise3(lp * 9.0)); spec = 0.4; rough = 0.45; }
     case 22u: {
+      if (hue > 0.8) {
+        // stingray: sandy, spotted back
+        alb = select(vec3f(0.85, 0.82, 0.78), vec3f(0.36, 0.30, 0.22) * (0.8 + 0.4 * vnoise3(lp * 40.0)), n.y > 0.0 || in.ex.z > 0.5);
+        break;
+      }
       alb = select(vec3f(0.92, 0.92, 0.9), vec3f(0.07, 0.08, 0.10), n.y > 0.0 || in.ex.z > 0.5);
       spec = 0.2;
     }
@@ -580,6 +724,42 @@ fn coralColor(h: f32) -> vec3f {
         alb = mix(vec3f(0.95, 0.48, 0.06), vec3f(0.03), max(vein, smoothstep(0.42, 0.48, length(lp.xz))));
       }
       alb = mix(alb, vec3f(0.04), step(abs(lp.x), 0.02));
+      trans = 0.4;
+    }
+    case 30u: {
+      // reef shark: grey back, white belly, black fin tips
+      alb = mix(vec3f(0.85, 0.85, 0.83), vec3f(0.36, 0.38, 0.40), smoothstep(-0.03, 0.03, lp.y));
+      alb = mix(alb, vec3f(0.03), smoothstep(0.6, 0.9, in.ex.z) * step(0.5, in.ex.z));
+      spec = 0.4; rough = 0.35;
+    }
+    case 31u: {
+      // jellyfish: pale translucent bell with a faint glow
+      let c = mix(vec3f(0.75, 0.80, 0.95), vec3f(0.95, 0.60, 0.85), hue);
+      alb = c * 0.5;
+      trans = 1.0;
+      emissive = c * (0.15 + 0.35 * pow(1.0 - abs(dot(n, normalize(-in.rel))), 3.0)) * (F.lightColor.rgb * 0.2 + F.waterFog.rgb * 4.0);
+    }
+    case 32u: {
+      var c = vec3f(0.90, 0.35, 0.10);
+      if (hue > 0.4) { c = vec3f(0.85, 0.15, 0.20); }
+      if (hue > 0.75) { c = vec3f(0.15, 0.35, 0.85); }
+      alb = c * (0.75 + 0.5 * vnoise3(lp * 60.0));
+    }
+    case 33u: { alb = mix(vec3f(0.75, 0.22, 0.08), vec3f(0.85, 0.55, 0.25), hue) * (0.8 + 0.3 * vnoise3(lp * 30.0)); spec = 0.4; rough = 0.4; }
+    case 34u: {
+      let c = select(vec3f(0.65, 0.25, 0.75), vec3f(0.35, 0.75, 0.35), hue > 0.5);
+      alb = mix(c * 0.5, c * 1.2 + 0.1, in.ex.z);
+      trans = 0.5;
+    }
+    case 35u: {
+      var c = vec3f(0.55, 0.20, 0.60);
+      if (hue > 0.35) { c = vec3f(0.95, 0.55, 0.15); }
+      if (hue > 0.7) { c = vec3f(0.85, 0.80, 0.25); }
+      alb = c * (0.55 + 0.45 * in.ex.x) * (0.85 + 0.3 * vnoise3(lp * 25.0));
+    }
+    case 36u: {
+      let c = coralColor(fract(hue + 0.55));
+      alb = mix(c * 0.6, min(c * 1.3, vec3f(1.0)), in.ex.y);
       trans = 0.4;
     }
     case 26u: {

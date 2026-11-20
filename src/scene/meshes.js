@@ -1,8 +1,8 @@
 // Registry of every procedural mesh. `bound` is the bounding radius in mesh
 // units, used for GPU frustum culling.
 import { palm, tree, bush, fern, banana, flowerBush } from './plants.js';
-import { rock, coralBranch, coralBrain, seaFan, seagrass } from './reef.js';
-import { fish, bird, manta, turtle, dolphin, butterfly } from './fauna.js';
+import { rock, coralBranch, coralBrain, seaFan, seagrass, coralTable, tubeSponge, softCoral, anemone, starfish } from './reef.js';
+import { fish, bird, manta, turtle, dolphin, butterfly, shark, jellyfish, crab } from './fauna.js';
 import { galleon, wreck, chest, rowboat, barrel } from './pirates.js';
 
 export function buildMeshes() {
@@ -21,6 +21,14 @@ export function buildMeshes() {
     coralB: { ...coralBrain(), bound: 0.7 },
     coralC: { ...seaFan(), bound: 1.0 },
     seagrass: { ...seagrass(), bound: 1.2 },
+    coralD: { ...coralTable(), bound: 0.8 },
+    coralE: { ...tubeSponge(), bound: 1.1 },
+    coralF: { ...softCoral(), bound: 1.0 },
+    anemone: { ...anemone(), bound: 0.5 },
+    starfish: { ...starfish(), bound: 0.6 },
+    shark: { ...shark(), bound: 0.7 },
+    jelly: { ...jellyfish(), bound: 1.4 },
+    crab: { ...crab(), bound: 0.8 },
     fish: { ...fish(), bound: 0.8 },
     bird: { ...bird(), bound: 0.8 },
     manta: { ...manta(), bound: 0.7 },
