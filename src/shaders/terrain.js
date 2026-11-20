@@ -1,4 +1,5 @@
 import { frameStruct, commonLib, shadowLib, hizLib, LEVELS } from './common.js';
+import { shoreLib } from './shore.js';
 
 export const GRID_M = 96; // half-size of a clipmap level in cells
 export const SIDE = GRID_M * 2 + 1; // vertices per level side
@@ -103,8 +104,8 @@ struct TV {
   @location(3) region: vec2f, // dry / volcanic (large scale, so per vertex is plenty)
 };
 
-// Grid vertex from vertex_index: draws pass level * SIDE^2 as base vertex, so
-// no vertex buffer (and no first-instance support) is needed.
+// Grid vertex from vertex_index: indices carry the level (level * SIDE^2 +
+// local index), so no vertex buffer is needed.
 fn gridPoint(vi: u32) -> vec3f {
   let lvl = vi / ${SIDE * SIDE}u;
   let k = vi - lvl * ${SIDE * SIDE}u;
@@ -142,7 +143,7 @@ fn terrainVertex(g: vec2f, lvl: u32) -> TV {
 }
 `;
 
-export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* wgsl */ `
+export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + shoreLib + /* wgsl */ `
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> TV {
   let gp = gridPoint(vi);
   var o = terrainVertex(gp.xy, u32(gp.z));
@@ -195,6 +196,16 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   let canopy = mix(vec3f(0.035, 0.09, 0.025), vec3f(0.09, 0.16, 0.04), sat(gnoise(pw.xz * (2048.0 / W), 2048, 217u) * 1.6 + 0.5));
 
   let beachH = 2.2 + mn * 1.2 + big * 0.8;
+  let swash = swashAt(pw.xz, h);
+  // footprints on the dry sand near the camera (the swash washes them away)
+  let sandy = (1.0 - smoothstep(beachH - 0.8, beachH - 0.3, h)) * smoothstep(-0.2, 0.3, h) * (1.0 - rg.y);
+  var printK = 0.0;
+  if (dist < 70.0 && sandy > 0.0 && abs(pw.x - pathX(pw.z) - 2.2) < 1.5) {
+    let fp = footprints(pw.xz);
+    let k = sandy * (1.0 - swash.wet) * (1.0 - smoothstep(35.0, 70.0, dist));
+    n = normalize(n + vec3f(fp.x, 0.0, fp.y) * k * 1.6);
+    printK = fp.z * k;
+  }
   var alb: vec3f;
   if (h < -0.4) {
     let reef = reefMask(pw.xz);
@@ -202,7 +213,7 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
     alb = mix(alb, rock * 0.8, smoothstep(0.35, 0.6, slope));
   } else {
     let landW = smoothstep(beachH - 0.4, beachH + 0.6, h);
-    let wet = 1.0 - smoothstep(0.1, 0.9, h);
+    let wet = max(swash.wet, printK * 0.4);
     var land = mix(grass, floorC, forest * (1.0 - shell) * 0.9);
     land = mix(land, canopy, sat(shell * forest * 1.2));
     land = mix(land, rock, smoothstep(0.42, 0.62, slope + mn * 0.2));
@@ -217,9 +228,17 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   let nl = max(dot(n, L), 0.0);
   let ao = 1.0 - 0.3 * forest * (1.0 - shell) * smoothstep(1.0, 5.0, h);
   var col = alb * crownShade * (lightAt(pw) * nl * sh + ambientAt(n, pw) * ao);
-  // wet sand sheen
-  let wetS = (1.0 - smoothstep(0.0, 0.7, h)) * step(-0.4, h);
+  // wet sand sheen, and the thin sheet of a running-up wave with its foam edge
+  let wetS = swash.wet * step(-0.4, h);
   col += lightAt(pw) * ggx(n, V, L, 0.25) * wetS * 0.25 * sh;
+  if (swash.sheet > 0.0 && h > -0.4) {
+    let nf = normalize(mix(n, vec3f(0.0, 1.0, 0.0), 0.8));
+    let fres = 0.02 + 0.98 * pow(1.0 - max(dot(nf, V), 0.0), 5.0);
+    col = mix(col, col * vec3f(0.75, 0.88, 0.9), swash.sheet * 0.5);
+    col += (skyBase(reflect(-V, nf)) * fres + lightAt(pw) * ggx(nf, V, L, 0.08) * sh) * swash.sheet * 0.8;
+    let foam = swash.edge * smoothstep(0.35, 0.65, gnoise(pw.xz * (16384.0 / W) * 2.0, 32768, 331u) + 0.5);
+    col = mix(col, (lightAt(pw) * max(L.y, 0.0) * sh + ambientAt(vec3f(0.0, 1.0, 0.0), pw)) * 0.8, foam * 0.8);
+  }
   // canopy translucency glow at grazing light (far forest)
   col += canopy * F.lightColor.rgb * pow(max(dot(-rd, -L), 0.0), 3.0) * shell * forest * 0.6 * sh;
   col = applyFog(col, in.rel);

@@ -35,6 +35,9 @@ async function main() {
   const renderer = new Renderer(gpu, quality);
   const startU = num('u', 0.02);
   const director = new Director(startU, num('cycle', Math.floor(Math.random() * 8)));
+  // debugging aid: look=yawDeg,pitchDeg offsets the camera (decays like a drag)
+  const look = (params.get('look') || '').split(',').map(Number);
+  if (look.length === 2) [director.lookYaw, director.lookPitch] = look.map((d) => (d * Math.PI) / 180);
   const env = new Environment({ tod: num('tod', 0.69), seed: num('seed', Math.random()) });
   const audio = new Ambience();
   attachControls(canvas, director, audio);
