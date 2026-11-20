@@ -51,6 +51,13 @@ export class Environment {
     const s = this.seed * 100;
     const coverage = -0.05 + 0.08 * Math.sin(t / 530 + s) + 0.07 * Math.sin(t / 233 + s * 1.7) + 0.04 * Math.sin(t / 97 + s * 2.3);
     const wind = [(t * 7 + s * 1000) % W, (t * 3 + s * 700) % W];
+    // passing showers leave a rainbow opposite a low sun now and then
+    const shower = Math.max(0, Math.sin(t / 151 + s * 3.1)) * smoothstep(-0.05, 0.08, coverage);
+    const rainbow = Math.pow(shower, 3) * smoothstep(0.03, 0.12, sun[1]) * smoothstep(0.75, 0.4, sun[1]);
+    // mist settles before sunrise and burns off in the morning; stronger on some days
+    const dayIndex = Math.floor((t + this.tod * 1320) / 1320);
+    const mistDay = 0.4 + 0.6 * ((Math.sin(dayIndex * 12.9898 + s) * 43758.5453) % 1 + 1) % 1;
+    const mist = mistDay * smoothstep(-0.25, -0.02, sun[1]) * smoothstep(0.3, 0.06, sun[1]) * (this.tod < 0.5 ? 1 : 0);
 
     // exposure from the light actually falling on the scene
     // (the constant light term accounts for low suns glaring straight into view)
@@ -71,7 +78,7 @@ export class Environment {
       stars: smoothstep(-0.05, -0.25, sun[1]),
       skyAmb, groundAmb, exposure: this.exposure,
       fog: [0.000055 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
-      waterFog, coverage, wind,
+      waterFog, coverage, wind, rainbow, mist,
     };
   }
 }

@@ -36,6 +36,7 @@ export class FrameUniforms {
     d.set(f.levels, 192);
     v4(224, [e.wind[0], e.wind[1], e.coverage, f.fade]);
     v4(228, [f.modes.und, f.modes.aer, f.modes.land, f.cacheMask]);
+    v4(232, [e.rainbow, e.mist, 0, 0]);
     this.device.queue.writeBuffer(this.buffer, 0, d);
   }
 }

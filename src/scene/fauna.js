@@ -108,3 +108,19 @@ export function dolphin() {
   for (const s of [-1, 1]) mb.flatTri([s * 0.08, -0.06, 0.22], [s * 0.22, -0.12, 0.1], [s * 0.08, -0.07, 0.12], e(0.1), e(0.1), e(0.1));
   return mb.build();
 }
+
+// butterfly: wingspan 1 unit; flex marks how far from the body (flapping)
+export function butterfly() {
+  const mb = new MB();
+  const e = (x) => [MAT.butterfly, 1, Math.min(Math.abs(x) * 2.2, 1), x < 0 ? 1 : 0];
+  for (const s of [-1, 1]) {
+    const fore = [[0, 0, 0.05], [s * 0.5, 0.02, 0.22], [s * 0.46, 0.01, -0.02], [0, 0, -0.03]];
+    const hind = [[0, 0, -0.02], [s * 0.36, 0.0, -0.08], [s * 0.22, -0.01, -0.3], [0, 0, -0.12]];
+    for (const q of [fore, hind]) {
+      mb.flatTri(q[0], q[1], q[2], e(q[0][0]), e(q[1][0]), e(q[2][0]));
+      mb.flatTri(q[0], q[2], q[3], e(q[0][0]), e(q[2][0]), e(q[3][0]));
+    }
+  }
+  mb.tube((t) => [0, 0, 0.1 - t * 0.28], () => 0.015, 2, 4, () => [MAT.butterfly, 0.6, 0, 0.5]);
+  return mb.build();
+}

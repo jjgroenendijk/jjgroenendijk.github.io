@@ -122,6 +122,27 @@ fn stars(rd: vec3f) -> vec3f {
   return tint * b;
 }
 
+// an occasional shooting star on clear nights
+fn meteor(rd: vec3f) -> vec3f {
+  let period = 23.0;
+  let k = floor(F.camPos.w / period);
+  let m = fract(F.camPos.w / period);
+  if (m > 0.06) { return vec3f(0.0); }
+  let h = hashu(u32(k) * 2654435761u);
+  let az = hf(h) * TAU;
+  let el = 0.35 + hf(h + 1u) * 0.6;
+  let a = vec3f(cos(az) * cos(el), sin(el), sin(az) * cos(el));
+  let dir = normalize(cross(a, vec3f(hf(h + 2u) - 0.5, -1.0, hf(h + 3u) - 0.5)));
+  let head = normalize(a + dir * m * 4.0);
+  let tail = normalize(a + dir * max(m * 4.0 - 0.12, 0.0));
+  let seg = head - tail;
+  let v = rd - tail;
+  let s = clamp(dot(v, seg) / max(dot(seg, seg), 1e-6), 0.0, 1.0);
+  let d = length(v - seg * s);
+  let fade = sin(m / 0.06 * PI);
+  return vec3f(0.9, 0.95, 1.0) * exp(-d * d / 2e-7) * s * fade * 0.4;
+}
+
 @fragment fn fs(in: FSO) -> @location(0) vec4f {
   let rd = viewRay(in.uv);
   if (F.camFwd.w > 0.5) {
@@ -148,11 +169,22 @@ fn stars(rd: vec3f) -> vec3f {
     // faint halo around the moon
     col += vec3f(0.35, 0.4, 0.5) * pow(max(md, 0.0), 600.0) * 0.15 * F.sunDir.w;
     col += stars(rd) * F.moonDir.w * smoothstep(0.0, 0.15, rd.y);
+    col += meteor(rd) * F.moonDir.w;
     // smooth upsample of the reduced resolution cloud layer
     let ct = 0.5 / vec2f(textureDimensions(cloudTex));
     let c = (textureSampleLevel(cloudTex, smp, in.uv + vec2f(-ct.x, -ct.y), 0.0) + textureSampleLevel(cloudTex, smp, in.uv + vec2f(ct.x, -ct.y), 0.0)
            + textureSampleLevel(cloudTex, smp, in.uv + vec2f(-ct.x, ct.y), 0.0) + textureSampleLevel(cloudTex, smp, in.uv + vec2f(ct.x, ct.y), 0.0)) * 0.25;
     col = col * c.a + c.rgb;
+    // rainbow: 42 degrees around the antisolar point, red outside
+    if (F.fx.x > 0.001) {
+      let ang = acos(clamp(dot(rd, -F.sunDir.xyz), -1.0, 1.0));
+      let x = (ang - 0.722) / 0.035;
+      if (abs(x) < 1.5) {
+        let spec = vec3f(smoothstep(-0.2, 0.9, x) * (1.0 - smoothstep(0.9, 1.3, x)),
+                         exp(-x * x * 6.0), smoothstep(0.2, -0.9, x) * (1.0 - smoothstep(-0.9, -1.3, x)));
+        col += spec * F.lightColor.rgb * 0.12 * F.fx.x * smoothstep(0.0, 0.1, rd.y);
+      }
+    }
     // horizon haze
     col = mix(col, fogSkyColor(rd), (1.0 - smoothstep(0.0, 0.06, rd.y)) * 0.6);
   } else {

@@ -38,7 +38,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (kind == ${TYPE.bird}u) { bird(gid.x + gid.y * 64u, t); return; }
   if (kind == ${TYPE.manta}u || kind == ${TYPE.turtle}u) { cruiser(gid.x + gid.y * 64u, kind, t); return; }
   if (kind == ${TYPE.dolphin}u) { dolphin(gid.x + gid.y * 64u, t); return; }
-  if (kind >= ${TYPE.ship}u) { landmark(gid.x + gid.y * 64u, kind, t); return; }
+  if (kind == ${TYPE.butterfly}u) { butterfly(gid.x + gid.y * 64u, t); return; }
+  if (kind >= ${TYPE.ship}u && kind <= ${TYPE.barrel}u) { landmark(gid.x + gid.y * 64u, kind, t); return; }
   let R = i32(P.radius);
   if (gid.x > u32(2 * R) || gid.y > u32(2 * R)) { return; }
   let cs = P.cell;
@@ -82,6 +83,10 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     scale = mix(1.4, 3.2, r5);
     excl = 2.8;
     sink = 0.1;
+  } else if (kind == ${TYPE.flowers}u) {
+    prob = select(0.0, 0.35 * smoothstep(1.8, 4.0, h) * (1.0 - 0.5 * region(p).x), h > 1.8);
+    scale = mix(1.2, 2.0, r5);
+    excl = 2.4;
   } else if (kind == ${TYPE.fern}u) {
     prob = select(0.0, 0.8 * smoothstep(1.3, 3.0, h), h > 1.3);
     scale = mix(0.7, 1.5, r5);
@@ -182,6 +187,26 @@ fn cruiser(i: u32, kind: u32, t: f32) {
   let yaw = atan2(-sin(ang) * dirS, cos(ang) * dirS);
   let sc = select(mix(0.8, 1.15, hf(sh + 6u)), mix(2.4, 3.6, hf(sh + 6u)), isManta);
   emit(rel, vec4f(pos, sc), vec4f(yaw, sin(t * 0.3 + hf(sh) * 5.0) * 0.08, hf(sh + 7u), hf(sh + 8u) * 100.0), dist);
+}
+
+// butterflies flutter along the jungle path by day
+fn butterfly(i: u32, t: f32) {
+  if (i >= P.count || F.extra.z < 0.05 || F.sunDir.y < 0.05) { return; }
+  let spacing = 7.0;
+  let zi = floor(F.camPos.z / spacing) + f32(i % 12u) - 2.0;
+  let sh = hashu(u32(i32(zi) + 100000) * 31u + i / 12u * 7u);
+  let ax = pathX(zi * spacing) + (hf(sh) - 0.5) * 9.0;
+  let az = zi * spacing + hf(sh + 1u) * spacing;
+  let ground = terrainHeight(vec2f(ax, az));
+  if (ground < 1.5) { return; }
+  let ph = hf(sh + 2u) * TAU;
+  let wob = vec3f(sin(t * 0.6 + ph) * 1.8 + sin(t * 1.7 + ph * 2.0) * 0.3, sin(t * 2.3 + ph) * 0.35, cos(t * 0.45 + ph) * 1.8);
+  let vel = vec2f(cos(t * 0.6 + ph) * 1.08, -sin(t * 0.45 + ph) * 0.81);
+  let pos = vec3f(ax, ground + 0.9 + hf(sh + 3u) * 1.4, az) + wob;
+  let rel = pos - F.camPos.xyz;
+  let dist = length(rel);
+  if (dist > P.maxDist) { return; }
+  emit(rel, vec4f(pos, mix(0.11, 0.17, hf(sh + 4u))), vec4f(atan2(vel.x, vel.y), 0.0, hf(sh + 5u), ph * 10.0), dist);
 }
 
 // a pod of dolphins cruising the open water near the lagoon, leaping now and then
@@ -355,6 +380,8 @@ fn propVertex(pos: vec3f, nrm: vec3f, ex: vec4f, a: vec4f, b: vec4f) -> PV {
   }
   if (mat == 17u) { p.z += sin(t * 0.7 + ph) * 0.25 * flex; }
   if (mat == 18u) { p.x += sin(t * 6.0 + ph - p.z * 1.8) * 0.28 * flex; }
+  if (mat == 28u) { p.y += sin(t * 15.0 + ph) * abs(p.x) * 1.1 * flex; }
+  if (mat == 27u) { p += vec3f(sin(t * 1.6 + ph + p.x * 9.0), 0.0, cos(t * 1.3 + ph)) * 0.008; }
   if (mat == 26u) { p.y += sin(t * 4.0 + ph) * 0.05 * flex; }
   if (mat == 22u) { p.y += sin(t * 1.3 + ph - abs(p.x) * 2.0) * abs(p.x) * 0.45 * flex; }
   if (mat == 24u) { p.y += sin(t * 1.5 + ph + p.z * 2.0) * 0.22 * flex; p.z += cos(t * 1.5 + ph) * 0.06 * flex; }
@@ -531,6 +558,29 @@ fn coralColor(h: f32) -> vec3f {
       let cell = abs(fract(q.x + sin(q.y)) - 0.5) + abs(fract(q.y + sin(q.x * 0.7)) - 0.5);
       alb = mix(vec3f(0.18, 0.13, 0.07), vec3f(0.45, 0.33, 0.16), smoothstep(0.2, 0.7, cell) * (0.7 + 0.3 * vnoise3(lp * 20.0)));
       spec = 0.4; rough = 0.35;
+    }
+    case 27u: {
+      var pc = vec3f(0.85, 0.06, 0.10);
+      if (hue > 0.3) { pc = vec3f(0.96, 0.42, 0.06); }
+      if (hue > 0.5) { pc = vec3f(0.95, 0.38, 0.62); }
+      if (hue > 0.7) { pc = vec3f(0.98, 0.84, 0.18); }
+      if (hue > 0.88) { pc = vec3f(0.95, 0.93, 0.90); }
+      alb = mix(pc * vec3f(0.6, 0.15, 0.2), pc, smoothstep(0.0, 0.5, in.ex.z));
+      trans = 0.6; spec = 0.2; rough = 0.4;
+    }
+    case 28u: {
+      if (hue < 0.5) {
+        // blue morpho: iridescent blue above, brown below
+        let fres = pow(1.0 - abs(dot(n, normalize(-in.rel))), 2.0);
+        alb = mix(vec3f(0.02, 0.22, 0.85), vec3f(0.25, 0.70, 1.0), fres);
+        if (!ff) { alb = vec3f(0.25, 0.18, 0.10); }
+        spec = 1.2; rough = 0.25;
+      } else {
+        let vein = step(0.85, fract(abs(lp.x) * 14.0 + lp.z * 6.0));
+        alb = mix(vec3f(0.95, 0.48, 0.06), vec3f(0.03), max(vein, smoothstep(0.42, 0.48, length(lp.xz))));
+      }
+      alb = mix(alb, vec3f(0.04), step(abs(lp.x), 0.02));
+      trans = 0.4;
     }
     case 26u: {
       alb = mix(vec3f(0.62, 0.64, 0.66), vec3f(0.20, 0.23, 0.27), smoothstep(-0.03, 0.04, lp.y + lp.x * 0.1));

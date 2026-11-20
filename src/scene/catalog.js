@@ -5,14 +5,14 @@
 export const MAT = {
   palmBark: 0, palmFrond: 1, coconut: 2, bark: 3, canopy: 4, fern: 5, bananaLeaf: 6, rock: 7,
   coralBranch: 8, coralBrain: 9, seaFan: 10, seagrass: 11, fish: 12, bird: 13, bush: 14, stem: 15,
-  wood: 16, sail: 17, flag: 18, wreck: 19, gold: 20, iron: 21, manta: 22, shell: 23, skin: 24, deck: 25, dolphin: 26,
+  wood: 16, sail: 17, flag: 18, wreck: 19, gold: 20, iron: 21, manta: 22, shell: 23, skin: 24, deck: 25, dolphin: 26, petal: 27, butterfly: 28, leaf: 29,
 };
 
 // Placement rule ids (interpreted by the scatter compute shader)
 export const TYPE = {
   palm: 0, tree: 1, bush: 2, fern: 3, banana: 4, rock: 5,
   coralA: 6, coralB: 7, coralC: 8, seagrass: 9, fish: 10, bird: 11,
-  manta: 12, turtle: 13, dolphin: 19, ship: 14, wreck: 15, chest: 16, rowboat: 17, barrel: 18,
+  manta: 12, turtle: 13, dolphin: 19, flowers: 20, butterfly: 21, ship: 14, wreck: 15, chest: 16, rowboat: 17, barrel: 18,
 };
 
 // Scatter layers. Each layer fills one or two draw slots (near / far LOD).
@@ -24,6 +24,8 @@ export const LAYERS = [
   { type: 'palm', cell: 8, maxDist: 650, lodDist: 90, meshes: ['palm0', 'palm1'], caps: [500, 4000], keep: 60 },
   { type: 'tree', cell: 8, maxDist: 700, lodDist: 110, meshes: ['tree0', 'tree1'], caps: [600, 12000], keep: 60 },
   { type: 'bush', cell: 4, maxDist: 160, lodDist: 1e9, meshes: ['bush'], caps: [4000], keep: 30 },
+  { type: 'flowers', cell: 4, maxDist: 110, lodDist: 1e9, meshes: ['flowers'], caps: [1500], keep: 15 },
+  { type: 'butterfly', count: 24, maxDist: 60, lodDist: 1e9, meshes: ['butterfly'], caps: [24], keep: 0 },
   { type: 'fern', cell: 2, maxDist: 70, lodDist: 1e9, meshes: ['fern'], caps: [3000], keep: 15 },
   { type: 'banana', cell: 4, maxDist: 130, lodDist: 1e9, meshes: ['banana'], caps: [1500], keep: 25 },
   { type: 'rock', cell: 4, maxDist: 240, lodDist: 1e9, meshes: ['rock'], caps: [3000], keep: 20 },

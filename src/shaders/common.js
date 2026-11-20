@@ -14,7 +14,7 @@ var<private> KW: array<f32, ${KNOTS.length}> = array<f32, ${KNOTS.length}>(${KNO
 const waveArr = (name, list) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => `vec4f(${f(w[0])},${f(w[1])},${f(w[2])},${f(w[4])})`).join(',')});
 var<private> ${name}Q: array<f32, ${list.length}> = array<f32, ${list.length}>(${list.map((w) => f(w[3])).join(',')});`;
 
-export const FRAME_FLOATS = 232;
+export const FRAME_FLOATS = 236;
 
 export const frameStruct = /* wgsl */ `
 struct Frame {
@@ -40,7 +40,8 @@ struct Frame {
   frustum: array<vec4f, 6>,
   levels: array<vec4f, 8>,
   cloud: vec4f,       // xy wind offset, z coverage, w unused
-  extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight
+  extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight, w cache mask
+  fx: vec4f,          // x rainbow, y morning mist, z, w unused
 };
 @group(0) @binding(0) var<uniform> F: Frame;
 `;
@@ -150,7 +151,16 @@ fn terrainHeight(p: vec2f) -> f32 {
   }
   return h;
 }
-fn forestDensity(p: vec2f) -> f32 { return smoothstep(-0.28, 0.05, fbm(p, 64, 3, 97u)); }
+// Island character varies by region: x = dry (golden grass, sparse forest),
+// y = volcanic (black sand and basalt), the rest is lush with white sand.
+fn region(p: vec2f) -> vec2f {
+  let dry = smoothstep(0.06, 0.2, fbm(p, 8, 2, 251u));
+  let volc = smoothstep(0.08, 0.22, fbm(p, 8, 2, 257u)) * (1.0 - dry);
+  return vec2f(dry, volc);
+}
+fn forestDensity(p: vec2f) -> f32 {
+  return smoothstep(-0.28, 0.05, fbm(p, 64, 3, 97u)) * (1.0 - 0.75 * region(p).x);
+}
 fn reefMask(p: vec2f) -> f32 { return smoothstep(-0.05, 0.18, fbm(p, 256, 3, 113u)); }
 
 // ------------------------------------------------------------ waves
@@ -290,6 +300,16 @@ fn applyFog(col: vec3f, rel: vec3f) -> vec3f {
   let base = F.fog.x * exp(-hf * max(cy, 0.0));
   if (abs(dy) > 0.01) { od = base * (1.0 - exp(-hf * dy)) / (hf * dy) * dist; }
   else { od = base * dist; }
+  // low morning mist hugging the water and valleys
+  if (F.fx.y > 0.001) {
+    // exact integral of an exponential layer (scale height MH) along the ray
+    let MH = 18.0;
+    let ya = max(cy, 0.0);
+    let yb = max(cy + dy, 0.0);
+    var layer = exp(-ya / MH);
+    if (abs(yb - ya) > 0.01) { layer = MH * (exp(-ya / MH) - exp(-yb / MH)) / (yb - ya); }
+    od += F.fx.y * 0.0035 * min(dist, 6000.0) * layer;
+  }
   // jungle haze (near-field, only at ground level)
   od += F.fog.z * 0.005 * min(dist, 140.0) * exp(-max(cy + rel.y * 0.5, 0.0) * 0.02);
   let T = exp(-od * vec3f(0.75, 0.9, 1.15));
