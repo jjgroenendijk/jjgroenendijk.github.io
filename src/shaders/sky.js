@@ -36,12 +36,29 @@ fn cloudDensity(p: vec3f, detail: bool) -> f32 {
   let q = p * 0.0024 + vec3f(t * 0.004, -t * 0.003, t * 0.003);
   d += (vnoise3(q) - 0.55) * 0.22;
   if (detail) { d -= (1.0 - vnoise3(q * 3.7)) * 0.07 * (1.0 - hfr * 0.5); }
-  return sat(d * 3.0) * 0.03;
+  return sat(d * 2.2) * 0.03;
 }
 fn hg(mu: f32, g: f32) -> f32 { return (1.0 - g * g) / (4.0 * PI * pow(1.0 + g * g - 2.0 * g * mu, 1.5)); }
+@group(1) @binding(0) var prevClouds: texture_2d<f32>;
+@group(1) @binding(1) var smp: sampler;
 
 @fragment fn fs(in: FSO) -> @location(0) vec4f {
   let rd = viewRay(in.uv);
+  let cur = march(in, rd);
+  // temporal accumulation: clouds are far away, so reprojecting the view
+  // direction alone is accurate even while the camera flies
+  let pc = F.prevViewProj * vec4f(rd, 0.0);
+  if (pc.w > 0.0 && F.jitter.z < 0.5) {
+    let puv = vec2f(pc.x / pc.w * 0.5 + 0.5, 0.5 - pc.y / pc.w * 0.5);
+    if (all(puv > vec2f(0.0)) && all(puv < vec2f(1.0))) {
+      let prev = textureSampleLevel(prevClouds, smp, puv, 0.0);
+      return mix(cur, prev, 0.9);
+    }
+  }
+  return cur;
+}
+
+fn march(in: FSO, rd: vec3f) -> vec4f {
   if (rd.y < 0.015 || F.camFwd.w > 0.5) { return vec4f(0.0, 0.0, 0.0, 1.0); }
   let ro = F.camPos.xyz;
   let t0 = (CB - ro.y) / rd.y;
@@ -131,7 +148,10 @@ fn stars(rd: vec3f) -> vec3f {
     // faint halo around the moon
     col += vec3f(0.35, 0.4, 0.5) * pow(max(md, 0.0), 600.0) * 0.15 * F.sunDir.w;
     col += stars(rd) * F.moonDir.w * smoothstep(0.0, 0.15, rd.y);
-    let c = textureSampleLevel(cloudTex, smp, in.uv, 0.0);
+    // smooth upsample of the reduced resolution cloud layer
+    let ct = 0.5 / vec2f(textureDimensions(cloudTex));
+    let c = (textureSampleLevel(cloudTex, smp, in.uv + vec2f(-ct.x, -ct.y), 0.0) + textureSampleLevel(cloudTex, smp, in.uv + vec2f(ct.x, -ct.y), 0.0)
+           + textureSampleLevel(cloudTex, smp, in.uv + vec2f(-ct.x, ct.y), 0.0) + textureSampleLevel(cloudTex, smp, in.uv + vec2f(ct.x, ct.y), 0.0)) * 0.25;
     col = col * c.a + c.rgb;
     // horizon haze
     col = mix(col, fogSkyColor(rd), (1.0 - smoothstep(0.0, 0.06, rd.y)) * 0.6);

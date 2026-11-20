@@ -19,7 +19,10 @@ export function skyRadiance(rd, sun, E) {
   const g = 0.76;
   const pM = (1 - g * g) / (4 * Math.PI * Math.pow(1 + g * g - 2 * g * mu, 1.5));
   const mv = airmass(Math.max(rd[1], 0));
-  const Ts = sunTransmittance(sun[1]);
+  const Ts0 = sunTransmittance(sun[1]);
+  const thin = 1 - 0.7 * Math.min(Math.max(rd[1] * 1.6, 0), 1);
+  const fade = smoothstep(-0.12, 0.02, sun[1]);
+  const Ts = Ts0.map((v) => Math.pow(Math.max(v / Math.max(fade, 1e-6), 1e-6), thin) * fade);
   const out = [0, 0, 0];
   for (let i = 0; i < 3; i++) {
     const dR = 8000 * mv, dM = 1200 * mv;

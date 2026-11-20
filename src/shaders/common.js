@@ -204,7 +204,11 @@ fn scatterSky(rd: vec3f, sun: vec3f, E: f32, g: f32) -> vec3f {
   let dR = 8000.0 * mv; let dM = 1200.0 * mv;
   let ext = BR * dR + BM * dM;
   let sc = (BR * pR * dR + BM * pM * dM) / ext * (1.0 - exp(-ext));
-  var c = E * sunTrans(sun.y) * sc;
+  // light scattered towards the zenith comes from higher, thinner air, so it is
+  // reddened less than light near the horizon (keeps sunset zeniths blue)
+  let tsRaw = exp(-(BR * 8000.0 + BM * 1200.0) * airmass(sun.y));
+  let thin = mix(1.0, 0.3, sat(rd.y * 1.6));
+  var c = E * pow(tsRaw, vec3f(thin)) * smoothstep(-0.12, 0.02, sun.y) * sc;
   let tw = smoothstep(-0.25, 0.0, sun.y) * (1.0 - smoothstep(0.0, 0.25, sun.y));
   c += E * 0.012 * tw * vec3f(0.10, 0.07, 0.12) * (1.0 - rd.y * 0.5);
   return c;
@@ -212,7 +216,7 @@ fn scatterSky(rd: vec3f, sun: vec3f, E: f32, g: f32) -> vec3f {
 // full sky radiance without sun disc / stars / clouds
 fn skyBase(rd: vec3f) -> vec3f {
   let E = F.fog.w;
-  var c = scatterSky(rd, F.sunDir.xyz, E, 0.76);
+  var c = scatterSky(rd, F.sunDir.xyz, E, 0.72);
   // moon light sky (stylised, brighter than reality)
   c += scatterSky(rd, F.moonDir.xyz, E * 0.0035, 0.6) * vec3f(0.75, 0.85, 1.1);
   // night floor

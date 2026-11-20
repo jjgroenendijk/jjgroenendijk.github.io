@@ -58,7 +58,8 @@ export class Environment {
     // eyes adapt, but not fully: nights stay dark and blue
     let exposure = 0.5 / Math.pow(Math.max(sceneLum, 1e-5), 0.8) * Math.pow(0.4, 0.2);
     exposure = Math.min(exposure, 40);
-    if (shot.modes.und > 0.5) exposure *= 1.25;
+    // our eyes adapt to the shade under the canopy
+    exposure *= 1 + 0.9 * shot.modes.land + 0.3 * shot.modes.und;
     if (this.exposure === null) this.exposure = exposure;
     this.exposure *= Math.pow(exposure / this.exposure, 1 - Math.exp(-dt * 1.5));
 
@@ -69,7 +70,7 @@ export class Environment {
       tod: this.tod, sun, moon, lightDir, lightColor, isSun: useSun ? 1 : 0, night,
       stars: smoothstep(-0.05, -0.25, sun[1]),
       skyAmb, groundAmb, exposure: this.exposure,
-      fog: [0.00011 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
+      fog: [0.000055 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
       waterFog, coverage, wind,
     };
   }

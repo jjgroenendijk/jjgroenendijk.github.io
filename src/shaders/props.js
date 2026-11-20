@@ -430,7 +430,7 @@ fn coralColor(h: f32) -> vec3f {
       let jn = vec3f(vnoise3(lp * 45.0), vnoise3(lp * 45.0 + 11.0), vnoise3(lp * 45.0 + 23.0)) - 0.5;
       n = normalize(n + jn * 1.4);
       if (in.mat == 14u) { alb *= vec3f(0.9, 1.05, 0.8); }
-      trans = 0.7; spec = 0.15; rough = 0.5;
+      trans = 0.3; spec = 0.15; rough = 0.5;
     }
     case 5u: { alb = mix(vec3f(0.09, 0.24, 0.05), vec3f(0.20, 0.34, 0.07), hue) * (0.8 + 0.4 * in.ex.z); trans = 0.8; spec = 0.1; }
     case 6u: {
@@ -548,7 +548,7 @@ fn coralColor(h: f32) -> vec3f {
   var nl = max(dot(n, L), 0.0);
   if (trans > 0.0) { nl = max((dot(n, L) + 0.35) / 1.35, 0.0); }
   var col = alb * (lc * nl * sh + ambientAt(n, pw) * ao);
-  col += alb * lc * trans * pow(sat(dot(V, -L)), 4.0) * 1.6 * sh;
+  col += alb * lc * trans * pow(sat(dot(V, -L)), 4.0) * 1.1 * sh;
   col += lc * ggx(n, V, L, rough) * spec * sh * nl;
   col = applyFog(col + emissive, in.rel);
   return vec4f(col, 1.0);

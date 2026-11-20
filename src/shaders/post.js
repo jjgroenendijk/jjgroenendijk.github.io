@@ -57,7 +57,7 @@ fn hg(mu: f32, g: f32) -> f32 { return (1.0 - g * g) / (4.0 * PI * pow(1.0 + g *
     t += dt;
   }
   let ph = select(hg(mu, 0.55), hg(mu, 0.5), uw) * 4.0 * PI;
-  return vec4f(acc * ph * select(0.3, 0.3, uw), 1.0);
+  return vec4f(acc * ph * select(0.3, 0.14, uw), 1.0);
 }
 `;
 
@@ -215,7 +215,7 @@ fn toSRGB(c: vec3f) -> vec3f {
     textureSampleLevel(colTex, smp, uv, 0.0).g,
     textureSampleLevel(colTex, smp, uv + cc * ca, 0.0).b);
   let bl = textureSampleLevel(bloomTex, smp, uv, 0.0).rgb;
-  c = mix(c, bl, mix(0.045, 0.09, uw));
+  c = mix(c, bl, mix(0.03, 0.06, uw));
   c *= F.skyAmb.w;
   // night vision: desaturate and shift towards blue in the dark (Purkinje)
   let nightV = F.sunDir.w;
@@ -226,7 +226,9 @@ fn toSRGB(c: vec3f) -> vec3f {
   c = mix(c, c * vec3f(1.05, 1.0, 0.94), smoothstep(0.4, 2.0, l) * (1.0 - F.sunDir.w));
   c = aces(c * 1.05);
   let g = luma(c);
-  c = mix(vec3f(g), c, 1.08);
+  c = mix(vec3f(g), c, 1.15);
+  // gentle S-curve for depth
+  c = c * c * (3.0 - 2.0 * c) * 0.35 + c * 0.65;
   c = max(c, vec3f(0.0));
   // vignette
   let v = 1.0 - dot(cc * vec2f(1.0, 0.8), cc * vec2f(1.0, 0.8)) * 0.55;

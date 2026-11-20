@@ -130,7 +130,7 @@ fn waterScatter() -> vec3f {
   let fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
   var col = mix(refrC, refl, fres);
   let sh = shadowAt(in.rel, vec3f(0.0, 1.0, 0.0), in.pos.xy) * cloudShadow(pw);
-  col += F.lightColor.rgb * ggx(n, V, L, 0.07 + 0.25 * (1.0 - near)) * sh * 0.9;
+  col += F.lightColor.rgb * ggx(n, V, L, 0.05 + 0.07 * (1.0 - near)) * sh * 0.6;
 
   // foam: shoreline bands and crests
   let fn1 = fbm(pw.xz + vec2f(t * 0.6, t * 0.4) % 512.0, 2048, 3, 301u);

@@ -1,6 +1,6 @@
 import { frameStruct, commonLib, shadowLib } from './common.js';
 
-export const GRID_M = 64; // half-size of a clipmap level in cells
+export const GRID_M = 96; // half-size of a clipmap level in cells
 
 // Compute: bake heights, normals and far horizon shadows into a clipmap texture array.
 export const terrainCacheWGSL = frameStruct + commonLib + /* wgsl */ `
@@ -100,6 +100,17 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   let d1 = vec2f(gnoise(q, 4096, 201u), gnoise(q + 17.0, 4096, 203u));
   let d2 = vec2f(gnoise(q * 4.0, 16384, 205u), gnoise(q * 4.0 + 9.0, 16384, 207u));
   n = normalize(n + vec3f(d1.x + d2.x * 0.5, 0.0, d1.y + d2.y * 0.5) * 0.35 * near);
+  // distant rainforest: per-pixel tree crowns (bumps that catch the light, dark gaps between)
+  let crownW = in.misc.z * smoothstep(120.0, 450.0, dist) * smoothstep(-0.5, 3.0, h);
+  var crownShade = 1.0;
+  if (crownW > 0.01) {
+    let cq = pw.xz * (2048.0 / W);
+    let c0 = gnoise(cq, 2048, 231u) + 0.5 * gnoise(cq * 2.0, 4096, 233u);
+    let cx = gnoise(cq + vec2f(0.12, 0.0), 2048, 231u) + 0.5 * gnoise(cq * 2.0 + vec2f(0.24, 0.0), 4096, 233u);
+    let cz = gnoise(cq + vec2f(0.0, 0.12), 2048, 231u) + 0.5 * gnoise(cq * 2.0 + vec2f(0.0, 0.24), 4096, 233u);
+    n = normalize(n - vec3f(cx - c0, 0.0, cz - c0) * 9.0 * crownW);
+    crownShade = mix(1.0, 0.45 + 0.9 * smoothstep(-0.4, 0.5, c0), crownW);
+  }
   let slope = 1.0 - n.y;
   let shell = in.misc.y;
   let forest = in.misc.z;
@@ -137,7 +148,7 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   var sh = min(shadowAt(in.rel, n, in.pos.xy), in.misc.x) * cloudShadow(pw);
   let nl = max(dot(n, L), 0.0);
   let ao = 1.0 - 0.3 * forest * (1.0 - shell) * smoothstep(1.0, 5.0, h);
-  var col = alb * (lightAt(pw) * nl * sh + ambientAt(n, pw) * ao);
+  var col = alb * crownShade * (lightAt(pw) * nl * sh + ambientAt(n, pw) * ao);
   // wet sand sheen
   let wetS = (1.0 - smoothstep(0.0, 0.7, h)) * step(-0.4, h);
   col += lightAt(pw) * ggx(n, V, L, 0.25) * wetS * 0.25 * sh;

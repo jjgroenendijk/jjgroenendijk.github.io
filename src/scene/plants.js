@@ -102,7 +102,7 @@ export function tree(lod) {
       return [MAT.canopy, Math.min(1, 0.3 + 0.45 * (v[1] * 0.5 + 0.5) + 0.35 * out), 1, p[1]];
     }, (p, v) => {
       const d = blobDeform(c, crownC, r * 0.7, 22)(p, v);
-      d.p[1] = c[1] + (d.p[1] - c[1]) * 0.62;
+      d.p[1] = c[1] + (d.p[1] - c[1]) * 0.78;
       return d;
     });
   }
