@@ -1,6 +1,6 @@
 // Terrain height field: an endless archipelago, plus a "corridor" along the
 // camera path that guarantees lagoon -> beach -> jungle -> beach -> reef.
-import { W, CYCLE, fbm, gnoise } from './noise.js';
+import { W, CYCLE, fbm, gnoise, gnoiseD, hashu, wrapi } from './noise.js';
 
 const TAU = Math.PI * 2;
 export const smoothstep = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
@@ -54,18 +54,73 @@ function corridorAt(z) {
 }
 
 
+// Mirrors of the WGSL in shaders/common.js (fbmD, gullies, baseHeight).
+const sat = (x) => Math.min(Math.max(x, 0), 1);
+const hf = (x) => hashu(x >>> 0) / 4294967295;
+
+// fbm with its derivative (world units); octaves from damp0 on are damped by the slope below
+function fbmD(x, z, per0, oct, seed, damp0) {
+  const s = [0, 0, 0];
+  let a = 0.5, per = per0, sx = 0, sz = 0;
+  for (let i = 0; i < oct; i++) {
+    const n = gnoiseD(x * (per / W), z * (per / W), per, (seed + i * 101) >>> 0);
+    const damp = i >= damp0 ? 1 / (1 + 0.35 * (sx * sx + sz * sz)) : 1;
+    s[0] += n[0] * a * damp;
+    s[1] += n[1] * (per / W) * a * damp;
+    s[2] += n[2] * (per / W) * a * damp;
+    sx += n[1]; sz += n[2];
+    per *= 2; a *= 0.5;
+  }
+  return s;
+}
+
+function gullyOctave(x, z, gx, gz, cell) {
+  const n = Math.round(W / cell);
+  const qx = x / cell, qz = z / cell;
+  const cx = Math.floor(qx), cz = Math.floor(qz);
+  let ax = -gz + 1e-6, az = gx;
+  const al = Math.hypot(ax, az); ax /= al; az /= al;
+  let v = 0, dvx = 0, dvz = 0, wsum = 0;
+  for (let j = -1; j <= 1; j++) {
+    for (let i = -1; i <= 1; i++) {
+      const h = hashu((Math.imul(wrapi(cx + i, n), 3) + hashu((wrapi(cz + j, n) + 977) >>> 0)) >>> 0);
+      const dx = qx - (cx + i) - hf(h), dz = qz - (cz + j) - hf(h + 1);
+      const wt = Math.exp(-(dx * dx + dz * dz) * 1.5);
+      const ph = (dx * ax + dz * az) * Math.PI * 2;
+      v += Math.cos(ph) * wt;
+      dvx -= Math.sin(ph) * Math.PI * 2 * ax * wt;
+      dvz -= Math.sin(ph) * Math.PI * 2 * az * wt;
+      wsum += wt;
+    }
+  }
+  return [v / wsum, dvx / cell / wsum, dvz / cell / wsum];
+}
+
+function gullies(x, z, gx, gz) {
+  const steep = sat(Math.hypot(gx, gz) * 1.5);
+  if (steep < 0.01) return 0;
+  const o1 = gullyOctave(x, z, gx, gz, 32);
+  const o2 = gullyOctave(x, z, gx + o1[1] * 3.5, gz + o1[2] * 3.5, 8);
+  return (o1[0] * 3.5 + o2[0] * 1.2 - 1) * steep;
+}
+
 export function baseHeight(x, z) {
-  const c = fbm(x, z, 8, 3, 11);
-  const n = fbm(x, z, 32, 6, 23);
-  const e = n * 1.5 + c * 1.2 - 0.1;
+  const c = fbmD(x, z, 8, 3, 11, 99);
+  const n = fbmD(x, z, 32, 6, 23, 2);
+  const e = n[0] * 1.5 + c[0] * 1.2 - 0.1;
   const r = 1 - Math.abs(gnoise(x * (64 / W), z * (64 / W), 64, 37));
   const r2 = 1 - Math.abs(gnoise(x * (128 / W), z * (128 / W), 128, 41));
   const ridge = r * r * 0.7 + r2 * r2 * 0.3;
   let h;
   // gentle profile around sea level gives wide beaches and shallow shelves
-  if (e > 0) h = Math.min(e, 0.12) * 14 + Math.max(e - 0.12, 0) * 45 + Math.pow(Math.max(e - 0.14, 0), 1.5) * 950 * (0.35 + 0.65 * ridge);
-  else h = Math.max(e, -0.08) * 30 + Math.min(e + 0.08, 0) * 90;
-  return Math.max(h, -48 + 8 * n);
+  if (e > 0) {
+    const hill = 950 * (0.35 + 0.65 * ridge);
+    h = Math.min(e, 0.12) * 14 + Math.max(e - 0.12, 0) * 45 + Math.pow(Math.max(e - 0.14, 0), 1.5) * hill;
+    // erosion on the hillsides (beaches and shelves stay smooth)
+    const dhde = (e > 0.12 ? 45 : 14) + 1.5 * Math.sqrt(Math.max(e - 0.14, 0)) * hill;
+    h += gullies(x, z, (n[1] * 1.5 + c[1] * 1.2) * dhde, (n[2] * 1.5 + c[2] * 1.2) * dhde) * smoothstep(0.12, 0.2, e);
+  } else h = Math.max(e, -0.08) * 30 + Math.min(e + 0.08, 0) * 90;
+  return Math.max(h, -48 + 8 * n[0]);
 }
 
 export function terrainHeight(x, z) {

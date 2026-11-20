@@ -35,17 +35,16 @@ export const TYPE = {
 //   fadeDist distance over which instances shrink away (default maxDist)
 //   every    re-scatter only every n-th frame (phase picks which); the
 //            previous instances are drawn in between
-//   cacheHeight  read ground heights from the terrain clipmap cache
 //   lodBase  LOD number of the first mesh (for shadow caster selection)
 export const LAYERS = [
-  // palms and trees come in a near layer (every frame, exact heights) and a far
-  // layer (every other frame, heights from the terrain cache, impostor cards)
+  // palms and trees come in a near layer (every frame) and a far layer (every
+  // other frame, impostor cards)
   { type: 'palm', cell: 8, maxDist: 320, fadeDist: 1500, lods: [90], meshes: ['palm0', 'palm1'], caps: [500, 3000], keep: 60, reach: 16 },
   { type: 'palm', cell: 8, minDist: 320, maxDist: 1500, lods: [650], meshes: ['palm2', 'palmCard'], caps: [5000, 12000], keep: 0, reach: 16,
-    every: 2, phase: 0, cacheHeight: true, lodBase: 2 },
+    every: 2, phase: 0, lodBase: 2 },
   { type: 'tree', cell: 8, maxDist: 340, fadeDist: 1800, lods: [110], meshes: ['tree0', 'tree1'], caps: [600, 7000], keep: 60, reach: 28 },
   { type: 'tree', cell: 8, minDist: 340, maxDist: 1800, lods: [700], meshes: ['tree2', 'treeCard'], caps: [8000, 30000], keep: 0, reach: 28,
-    every: 2, phase: 1, cacheHeight: true, lodBase: 2 },
+    every: 2, phase: 1, lodBase: 2 },
   { type: 'bush', cell: 4, maxDist: 160, meshes: ['bush'], caps: [4000], keep: 30 },
   { type: 'flowers', cell: 4, maxDist: 110, meshes: ['flowers'], caps: [1500], keep: 15 },
   { type: 'butterfly', count: 24, maxDist: 60, meshes: ['butterfly'], caps: [24], keep: 0 },

@@ -1,10 +1,15 @@
 import { frameStruct, commonLib, shadowLib, hizLib, LEVELS } from './common.js';
 import { shoreLib } from './shore.js';
+import { groundSampleLib, groundShadingLib } from './ground.js';
+import { GROUND_COUNT } from './materials.js';
 
 export const GRID_M = 96; // half-size of a clipmap level in cells
 export const SIDE = GRID_M * 2 + 1; // vertices per level side
 export const TILES = 4; // each level is split into TILES x TILES clusters for culling
 export const TILE = (GRID_M * 2) / TILES;
+// cache layers: one per level with (height, normal x, normal z, horizon shadow),
+// then one per level with the ground's shape (horizon occlusion, curvature)
+export const CACHE_LAYERS = LEVELS * 2;
 
 // The clipmap cache is addressed toroidally: a world lattice point keeps its
 // texel while its level moves, so a move only re-bakes the rows and columns
@@ -18,6 +23,8 @@ fn cacheTexel(lvl: u32, g: vec2i) -> vec2i {
   return ((G % ${SIDE}) + ${SIDE}) % ${SIDE};
 }
 fn cacheFetch(lvl: u32, g: vec2i) -> vec4f { return textureLoad(cacheTex, cacheTexel(lvl, g), lvl, 0); }
+// x: sky visibility (horizon based occlusion), y: curvature (1/m, > 0 in hollows)
+fn cacheShape(lvl: u32, g: vec2i) -> vec2f { return textureLoad(cacheTex, cacheTexel(lvl, g), lvl + ${LEVELS}u, 0).xy; }
 
 // Terrain height as drawn: bilinear lookup in the finest clipmap level that
 // covers the point (used to place distant instances without any noise).
@@ -49,14 +56,60 @@ struct Bake {
 };
 @group(0) @binding(6) var<uniform> B: Bake;
 
-fn needsBake(lvl: u32, row: u32, g: vec2f) -> bool {
-  let Lv = F.levels[lvl];
+// texels the level's window did not cover before (or all, after a reset)
+fn isNew(lvl: u32, g: vec2f) -> bool {
   let pv = B.prev[lvl];
   if (pv.z > 1.5) { return true; }
-  if (u32(B.band.x) == lvl && f32(row) >= B.band.y && f32(row) < B.band.z) { return true; }
   if (pv.z < 0.5) { return false; }
-  let old = round((Lv.xy - pv.xy) / Lv.z) + g; // the same point in the previous window
+  let old = round((F.levels[lvl].xy - pv.xy) / F.levels[lvl].z) + g; // the same point in the previous window
   return any(abs(old) > vec2f(${GRID_M}.0));
+}
+// rows whose sun-dependent shadow is refreshed this frame
+fn inBand(lvl: u32, row: u32) -> bool {
+  return u32(B.band.x) == lvl && f32(row) >= B.band.y && f32(row) < B.band.z;
+}
+
+fn horizonShadow(p: vec2f, h: f32, spacing: f32) -> f32 {
+  let L = F.lightDir.xyz;
+  if (L.y < -0.05) { return 1.0; }
+  var sh = 1.0;
+  let dir = normalize(L.xz + vec2f(1e-5));
+  let slope = L.y / max(length(L.xz), 1e-3);
+  var t = spacing * 2.0;
+  for (var i = 0; i < 12; i++) {
+    let q = p + dir * t;
+    let th = baseHeight(q);
+    let ry = max(h, 0.0) + 2.0 + t * slope;
+    sh = min(sh, sat((ry - th) / (t * 0.06) + 0.5));
+    t *= 1.55;
+    if (t > 4000.0 || sh < 0.01) { break; }
+  }
+  return sh;
+}
+
+// Sky visibility from the horizon in 6 directions, out to ~15 grid cells.
+fn horizonOcclusion(p: vec2f, h: f32, spacing: f32) -> f32 {
+  var vis = 0.0;
+  for (var d = 0; d < 6; d++) {
+    let a = f32(d) * (TAU / 6.0) + 0.3;
+    let dir = vec2f(cos(a), sin(a));
+    var t = max(spacing, 0.5) * 2.0;
+    var top = 0.0;
+    for (var i = 0; i < 4; i++) {
+      top = max(top, (terrainHeight(p + dir * t) - h) / t);
+      t *= 2.0;
+    }
+    vis += 1.0 - top / sqrt(1.0 + top * top); // 1 - sin(horizon elevation)
+  }
+  return vis / 6.0;
+}
+
+// Laplacian of the height over a few metres: > 0 in hollows, < 0 on ridges.
+fn curvature(p: vec2f, h: f32, spacing: f32) -> f32 {
+  let r = max(spacing * 2.0, 3.0);
+  let s = terrainHeight(p + vec2f(r, 0.0)) + terrainHeight(p - vec2f(r, 0.0))
+        + terrainHeight(p + vec2f(0.0, r)) + terrainHeight(p - vec2f(0.0, r));
+  return (s - 4.0 * h) / (r * r);
 }
 
 @compute @workgroup_size(8, 8, 1)
@@ -64,7 +117,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let lvl = gid.z;
   if (gid.x > ${GRID_M * 2}u || gid.y > ${GRID_M * 2}u) { return; }
   let g = vec2f(f32(gid.x), f32(gid.y)) - ${GRID_M}.0;
-  if (!needsBake(lvl, gid.y, g)) { return; }
+  let fresh = isNew(lvl, g);
+  if (!fresh && !inBand(lvl, gid.y)) { return; }
   let Lv = F.levels[lvl];
   let p = Lv.xy + g * Lv.z;
   let h = terrainHeight(p);
@@ -74,23 +128,14 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let hz0 = terrainHeight(p - vec2f(0.0, e));
   let hz1 = terrainHeight(p + vec2f(0.0, e));
   let n = normalize(vec3f(hx0 - hx1, 2.0 * e, hz0 - hz1));
-  var sh = 1.0;
-  let L = F.lightDir.xyz;
-  if (lvl >= 2u && L.y > -0.05) {
-    let dir = normalize(L.xz + vec2f(1e-5));
-    let slope = L.y / max(length(L.xz), 1e-3);
-    var t = Lv.z * 2.0;
-    for (var i = 0; i < 12; i++) {
-      let q = p + dir * t;
-      let th = baseHeight(q);
-      let ry = max(h, 0.0) + 2.0 + t * slope;
-      sh = min(sh, sat((ry - th) / (t * 0.06) + 0.5));
-      t *= 1.55;
-      if (t > 4000.0 || sh < 0.01) { break; }
-    }
-  }
+  let sh = select(1.0, horizonShadow(p, h, Lv.z), lvl >= 2u);
   let G = vec2i(round(Lv.xy / Lv.z)) + vec2i(g);
-  textureStore(cacheOut, ((G % ${SIDE}) + ${SIDE}) % ${SIDE}, i32(lvl), vec4f(h, n.x, n.z, sh));
+  let texel = ((G % ${SIDE}) + ${SIDE}) % ${SIDE};
+  textureStore(cacheOut, texel, i32(lvl), vec4f(h, n.x, n.z, sh));
+  // the shape does not depend on the sun: only new texels need it
+  if (fresh) {
+    textureStore(cacheOut, texel, i32(lvl + ${LEVELS}u), vec4f(horizonOcclusion(p, h, Lv.z), curvature(p, h, Lv.z), 0.0, 0.0));
+  }
 }
 `;
 
@@ -102,6 +147,7 @@ struct TV {
   @location(1) n: vec3f,
   @location(2) misc: vec4f, // horizon shadow, canopy shell factor, forest, unused
   @location(3) region: vec2f, // dry / volcanic (large scale, so per vertex is plenty)
+  @location(4) shape: vec2f,  // sky visibility, curvature (from the cache)
 };
 
 // Grid vertex from vertex_index: indices carry the level (level * SIDE^2 +
@@ -121,6 +167,7 @@ fn terrainVertex(g: vec2f, lvl: u32) -> TV {
   let t0 = cacheFetch(lvl, vec2i(g));
   let t1 = cacheFetch(lvl, vec2i(g - odd));
   let tt = mix(t0, t1, morph);
+  let shape = mix(cacheShape(lvl, vec2i(g)), cacheShape(lvl, vec2i(g - odd)), morph);
   let gm = g - odd * morph;
   let xz = Lv.xy + gm * Lv.z;
   var h = tt.x;
@@ -139,11 +186,29 @@ fn terrainVertex(g: vec2f, lvl: u32) -> TV {
   o.n = n;
   o.misc = vec4f(select(1.0, tt.w, lvl >= 2u), shell, forest, 0.0);
   o.region = rg;
+  o.shape = shape;
   return o;
 }
 `;
 
-export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + shoreLib + /* wgsl */ `
+// Ground materials blended from slope, curvature, height and region; at most
+// two per pixel (see ground.js for the texture budget).
+const groundChoice = /* wgsl */ `
+struct Pick { m0: u32, m1: u32, w0: f32, w1: f32 };
+// the two strongest of the material weights, renormalised
+fn pickTwo(w: array<f32, ${GROUND_COUNT}>) -> Pick {
+  var a = 0u; var b = 1u;
+  if (w[1] > w[0]) { a = 1u; b = 0u; }
+  for (var i = 2u; i < GROUND_COUNT; i++) {
+    if (w[i] > w[a]) { b = a; a = i; } else if (w[i] > w[b]) { b = i; }
+  }
+  let s = max(w[a] + w[b], 1e-5);
+  return Pick(a, b, w[a] / s, w[b] / s);
+}
+fn isRocky(m: u32) -> bool { return m == G_ROCK || m == G_BASALT; }
+`;
+
+export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + shoreLib + groundSampleLib + groundShadingLib + groundChoice + /* wgsl */ `
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> TV {
   let gp = gridPoint(vi);
   var o = terrainVertex(gp.xy, u32(gp.z));
@@ -152,18 +217,21 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + sho
 }
 
 @fragment fn fs(in: TV) -> @location(0) vec4f {
+  // screen derivatives for texture filtering, before any branching
   let pw = in.rel + F.camPos.xyz;
+  let dpx = dpdx(pw);
+  let dpy = dpdy(pw);
   let h = pw.y;
   let dist = length(in.rel);
   var n = normalize(in.n);
-  let near = 1.0 - smoothstep(30.0, 160.0, dist);
-  // micro relief
-  let q = pw.xz * (4096.0 / W);
-  let d1 = vec2f(gnoise(q, 4096, 201u), gnoise(q + 17.0, 4096, 203u));
-  let d2 = vec2f(gnoise(q * 4.0, 16384, 205u), gnoise(q * 4.0 + 9.0, 16384, 207u));
-  n = normalize(n + vec3f(d1.x + d2.x * 0.5, 0.0, d1.y + d2.y * 0.5) * 0.35 * near);
+  let rg = in.region;
+  let skyVis = in.shape.x;
+  let curv = in.shape.y;
+  let shell = in.misc.y;
+  let forest = in.misc.z;
+
   // distant rainforest: per-pixel tree crowns (bumps that catch the light, dark gaps between)
-  let crownW = in.misc.z * smoothstep(120.0, 450.0, dist) * smoothstep(-0.5, 3.0, h);
+  let crownW = forest * smoothstep(120.0, 450.0, dist) * smoothstep(-0.5, 3.0, h);
   var crownShade = 1.0;
   if (crownW > 0.01) {
     let cq = pw.xz * (2048.0 / W);
@@ -174,26 +242,10 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + sho
     crownShade = mix(1.0, 0.45 + 0.9 * smoothstep(-0.4, 0.5, c0), crownW);
   }
   let slope = 1.0 - n.y;
-  let shell = in.misc.y;
-  let forest = in.misc.z;
-
-  let mn = fbm(pw.xz, 2048, 3, 211u);
+  // low-frequency variation: metres (mn), tens of metres (big), half a kilometre (macroV)
+  let mn = fbm(pw.xz, 2048, 2, 211u);
   let big = fbm(pw.xz, 256, 3, 213u);
-  // palette
-  // palette shifts with the island's character
-  let rg = in.region;
-  let sandTone = mix(mix(vec3f(0.86, 0.80, 0.66), vec3f(0.80, 0.66, 0.44), rg.x), vec3f(0.16, 0.15, 0.15), rg.y);
-  let sand = sandTone * (0.92 + 0.16 * mn);
-  let wetSand = sandTone * vec3f(0.55, 0.53, 0.52);
-  let uwSand = mix(vec3f(0.80, 0.75, 0.62), vec3f(0.30, 0.28, 0.27), rg.y * 0.8) * (0.9 + 0.2 * mn);
-  var grass = mix(vec3f(0.11, 0.17, 0.05), vec3f(0.20, 0.22, 0.08), sat(big * 2.0 + 0.5));
-  grass = mix(grass, mix(vec3f(0.36, 0.30, 0.13), vec3f(0.27, 0.27, 0.12), sat(big * 2.0 + 0.5)), rg.x);
-  // near the camera, break the lawn up with leaf litter and bare soil
-  let litter = smoothstep(-0.05, 0.25, gnoise(pw.xz * (4096.0 / W), 4096, 241u) + 0.5 * gnoise(pw.xz * (16384.0 / W), 16384, 243u));
-  grass = mix(grass, mix(vec3f(0.20, 0.15, 0.08), vec3f(0.14, 0.15, 0.06), mn + 0.5), litter * 0.55);
-  let floorC = mix(vec3f(0.17, 0.12, 0.07), vec3f(0.12, 0.17, 0.05), sat(mn * 2.0 + 0.5));
-  let rock = mix(mix(vec3f(0.30, 0.27, 0.24), vec3f(0.22, 0.20, 0.19), sat(mn * 2.0 + 0.5)), vec3f(0.09, 0.085, 0.085), rg.y);
-  let canopy = mix(vec3f(0.035, 0.09, 0.025), vec3f(0.09, 0.16, 0.04), sat(gnoise(pw.xz * (2048.0 / W), 2048, 217u) * 1.6 + 0.5));
+  let macroV = fbm(pw.xz, 32, 3, 215u);
 
   let beachH = 2.2 + mn * 1.2 + big * 0.8;
   let swash = swashAt(pw.xz, h);
@@ -206,31 +258,75 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + sho
     n = normalize(n + vec3f(fp.x, 0.0, fp.y) * k * 1.6);
     printK = fp.z * k;
   }
-  var alb: vec3f;
-  if (h < -0.4) {
-    let reef = reefMask(pw.xz);
-    alb = mix(uwSand, uwSand * vec3f(0.65, 0.6, 0.55), reef * 0.6);
-    alb = mix(alb, rock * 0.8, smoothstep(0.35, 0.6, slope));
-  } else {
-    let landW = smoothstep(beachH - 0.4, beachH + 0.6, h);
-    let wet = max(swash.wet, printK * 0.4);
-    var land = mix(grass, floorC, forest * (1.0 - shell) * 0.9);
-    land = mix(land, canopy, sat(shell * forest * 1.2));
-    land = mix(land, rock, smoothstep(0.42, 0.62, slope + mn * 0.2));
-    land = mix(land, rock * 1.1, smoothstep(160.0, 260.0, h + big * 40.0) * 0.7);
-    alb = mix(mix(sand, wetSand, wet), land, landW);
+
+  // ---- material weights
+  let underwater = h < -0.4;
+  let convex = sat(-curv * 6.0);
+  let hollow = sat(curv * 6.0);
+  var w: array<f32, ${GROUND_COUNT}>;
+  let landW = select(smoothstep(beachH - 0.4, beachH + 0.6, h), 0.0, underwater);
+  let beach = 1.0 - landW;
+  let rockness = sat(smoothstep(0.42, 0.62, slope + mn * 0.2 + convex * 0.25 - hollow * 0.2)
+                   + smoothstep(160.0, 260.0, h + big * 40.0) * 0.7);
+  let rockOnShore = smoothstep(0.35, 0.6, slope);
+  w[G_SAND] = beach * (1.0 - rg.y) * (1.0 - rockOnShore);
+  w[G_BLACK_SAND] = beach * rg.y * (1.0 - rockOnShore);
+  let floorK = sat(forest * (1.0 - shell) * 0.9 + hollow * 0.4);
+  w[G_GRASS] = landW * (1.0 - rockness) * (1.0 - floorK);
+  w[G_LITTER] = landW * (1.0 - rockness) * floorK;
+  let rocky = max(landW * rockness, beach * rockOnShore);
+  w[G_ROCK] = rocky * (1.0 - rg.y);
+  w[G_BASALT] = rocky * rg.y;
+  let pick = pickTwo(w);
+
+  // ---- sample the two materials and blend them by height
+  let k = sat(gnoise(pw.xz * (1024.0 / W), 1024, 219u) * 0.7 + 0.5); // tile variant index
+  let s0 = groundSurface(pick.m0, pw, n, dpx, dpy, k, isRocky(pick.m0) && n.y < 0.85);
+  var g = s0;
+  if (pick.w1 > 0.01) {
+    let s1 = groundSurface(pick.m1, pw, n, dpx, dpy, k, isRocky(pick.m1) && n.y < 0.85);
+    g = blendSurf(s0, s1, heightBlend(s0.h, pick.w0, s1.h, pick.w1));
   }
 
-  let rd = in.rel / max(dist, 1e-4);
-  let V = -rd;
+  // ---- colour variation by region and over large distances
+  var alb = g.alb;
+  let sandiness = (w[G_SAND] + w[G_BLACK_SAND]) / max(w[G_SAND] + w[G_BLACK_SAND] + w[G_GRASS] + w[G_LITTER] + w[G_ROCK] + w[G_BASALT], 1e-5);
+  alb *= mix(vec3f(1.0), vec3f(0.93, 0.825, 0.667), rg.x * sandiness);           // golden sand on the dry side
+  let grassiness = w[G_GRASS] / max(w[G_GRASS] + w[G_LITTER] + w[G_ROCK] + w[G_BASALT] + w[G_SAND], 1e-5);
+  alb = mix(alb, luma(alb) * vec3f(1.6, 1.3, 0.62), rg.x * grassiness * 0.75);   // dry golden grass
+  alb *= mix(vec3f(0.92, 1.0, 0.9), vec3f(1.06, 0.97, 0.9), sat(macroV * 2.0 + 0.5)) * (0.9 + 0.2 * sat(big * 2.0 + 0.5));
+  if (underwater) {
+    alb = mix(alb, alb * vec3f(0.65, 0.6, 0.55), reefMask(pw.xz) * 0.6);
+  }
+  // far forest: the raised canopy shell
+  let canopy = mix(vec3f(0.035, 0.09, 0.025), vec3f(0.09, 0.16, 0.04), sat(gnoise(pw.xz * (2048.0 / W), 2048, 217u) * 1.6 + 0.5));
+  let canopyW = sat(shell * forest * 1.2) * landW;
+  alb = mix(alb, canopy, canopyW);
+  var rough = mix(g.rough, 0.8, canopyW);
+  n = normalize(mix(g.n, n, canopyW));
+
+  // ---- wetness: the swash on the beach, and rain soaking in (most in hollows)
+  let rain = F.fx.w * select(1.0, 0.0, underwater) * (1.0 - 0.6 * forest * (1.0 - shell));
+  var wet = max(max(swash.wet * step(-0.4, h), printK * 0.4), rain * (0.55 + 0.45 * hollow));
+  let porous = sandiness;
+  alb *= mix(1.0, mix(0.72, 0.5, porous), wet);
+  rough = mix(rough, mix(0.2, 0.3, porous), wet);
+  // puddles in flat hollows after heavy rain
+  let puddle = smoothstep(0.55, 0.9, rain) * smoothstep(0.01, 0.06, curv) * smoothstep(0.9, 0.98, n.y) * (1.0 - smoothstep(0.35, 0.55, g.h));
+  n = normalize(mix(n, normalize(in.n), puddle));
+  rough = mix(rough, 0.04, puddle);
+  alb *= 1.0 - 0.35 * puddle;
+
+  // ---- light: occlusion from the material, the surrounding terrain and its hollows
+  let cavity = clamp(1.0 - curv * 3.0, 0.6, 1.1);
+  let forestAO = 1.0 - 0.3 * forest * (1.0 - shell) * smoothstep(1.0, 5.0, h);
+  let ao = g.ao * mix(1.0, skyVis, 0.85) * cavity * forestAO;
+  let sh = min(shadowAt(in.rel, n, in.pos.xy), in.misc.x) * cloudShadow(pw);
+  var col = shadeGround(alb * crownShade, n, rough, in.rel, GroundLight(sh, ao));
+
+  // the thin sheet of a running-up wave with its foam edge
+  let V = -in.rel / max(dist, 1e-4);
   let L = F.lightDir.xyz;
-  var sh = min(shadowAt(in.rel, n, in.pos.xy), in.misc.x) * cloudShadow(pw);
-  let nl = max(dot(n, L), 0.0);
-  let ao = 1.0 - 0.3 * forest * (1.0 - shell) * smoothstep(1.0, 5.0, h);
-  var col = alb * crownShade * (lightAt(pw) * nl * sh + ambientAt(n, pw) * ao);
-  // wet sand sheen, and the thin sheet of a running-up wave with its foam edge
-  let wetS = swash.wet * step(-0.4, h);
-  col += lightAt(pw) * ggx(n, V, L, 0.25) * wetS * 0.25 * sh;
   if (swash.sheet > 0.0 && h > -0.4) {
     let nf = normalize(mix(n, vec3f(0.0, 1.0, 0.0), 0.8));
     let fres = 0.02 + 0.98 * pow(1.0 - max(dot(nf, V), 0.0), 5.0);
@@ -240,7 +336,7 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + sho
     col = mix(col, (lightAt(pw) * max(L.y, 0.0) * sh + ambientAt(vec3f(0.0, 1.0, 0.0), pw)) * 0.8, foam * 0.8);
   }
   // canopy translucency glow at grazing light (far forest)
-  col += canopy * F.lightColor.rgb * pow(max(dot(-rd, -L), 0.0), 3.0) * shell * forest * 0.6 * sh;
+  col += canopy * F.lightColor.rgb * pow(max(dot(V, -L), 0.0), 3.0) * shell * forest * 0.6 * sh;
   col = applyFog(col, in.rel);
   return vec4f(col, 1.0);
 }

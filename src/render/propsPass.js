@@ -77,7 +77,7 @@ export class PropsPass {
       const u = new Uint32Array(params, k * PARAM_STRIDE, PARAM_BYTES / 4);
       const radius = layer.count ? 0 : Math.ceil(layer.maxDist / layer.cell);
       f[0] = layer.cell || 1; f[1] = radius; f[2] = layer.maxDist; f[3] = layer.minDist;
-      u[4] = TYPE[layer.type]; u[5] = layer.count || 0; u[6] = layer.cacheHeight ? 1 : 0;
+      u[4] = TYPE[layer.type]; u[5] = layer.count || 0;
       f[8] = layer.slots[0].range.bound; f[9] = layer.keep; f[10] = layer.reach || 0; f[11] = layer.fadeDist;
       for (let j = 0; j < 4; j++) {
         const sl = layer.slots[Math.min(j, layer.slots.length - 1)];

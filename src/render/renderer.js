@@ -25,6 +25,7 @@ import { HiZPass } from './hizPass.js';
 import { SkyLightPass } from './skyLightPass.js';
 import { CausticsPass } from './causticsPass.js';
 import { FlockPass } from './flockPass.js';
+import { GroundMaterials } from './groundMaterials.js';
 import { PropsVisibility } from './propsVisibility.js';
 
 const NEAR = 0.1;
@@ -47,7 +48,8 @@ export class Renderer {
     this.shared = createShared(device);
     this.uniforms = new FrameUniforms(device);
     this.targets = new Targets(device, quality.cloudDiv);
-    this.terrain = new TerrainPass(device, this.shared);
+    this.ground = new GroundMaterials(device);
+    this.terrain = new TerrainPass(device, this.shared, this.ground);
     this.flock = new FlockPass(device, this.shared);
     this.props = new PropsPass(device, this.shared, buildMeshes(), quality, this.flock.state);
     this.propsVis = new PropsVisibility(device, this.shared, this.props);

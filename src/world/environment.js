@@ -28,6 +28,7 @@ export class Environment {
     this.tod = tod;
     this.seed = seed;
     this.exposure = null;
+    this.wetness = null; // how soaked the ground is after the last shower
   }
 
   update(dt, t, shot) {
@@ -53,6 +54,11 @@ export class Environment {
     const wind = [(t * 7 + s * 1000) % W, (t * 3 + s * 700) % W];
     // passing showers leave a rainbow opposite a low sun now and then
     const shower = Math.max(0, Math.sin(t / 151 + s * 3.1)) * smoothstep(-0.05, 0.08, coverage);
+    // the ground soaks up quickly in a shower and dries slowly (faster in the sun)
+    const raining = smoothstep(0.35, 0.75, shower);
+    if (this.wetness === null) this.wetness = raining;
+    const tau = raining > this.wetness ? 40 : 300 / (1 + 2 * Math.max(sun[1], 0));
+    this.wetness += (raining - this.wetness) * (1 - Math.exp(-dt / tau));
     const rainbow = Math.pow(shower, 3) * smoothstep(0.03, 0.12, sun[1]) * smoothstep(0.75, 0.4, sun[1]);
     // mist settles before sunrise and burns off in the morning; stronger on some days
     const dayIndex = Math.floor((t + this.tod * 1320) / 1320);
@@ -78,7 +84,7 @@ export class Environment {
       stars: smoothstep(-0.05, -0.25, sun[1]),
       skyAmb, groundAmb, exposure: this.exposure,
       fog: [0.000055 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
-      waterFog, coverage, wind, rainbow, mist,
+      waterFog, coverage, wind, rainbow, mist, wetness: this.wetness,
     };
   }
 }

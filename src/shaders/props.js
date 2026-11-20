@@ -6,7 +6,7 @@ import { TYPE, MAT, CARD_VIEWS } from '../scene/catalog.js';
 export const scatterWGSL = frameStruct + commonLib + hizLib + cacheLib + flockReadLib(1, 4) + /* wgsl */ `
 struct SP {
   cell: f32, radius: f32, maxDist: f32, minDist: f32,
-  kind: u32, count: u32, flags: u32, p0: u32,      // flags: 1 = heights from the clipmap cache
+  kind: u32, count: u32, p0: u32, p1: u32,
   bound: f32, keepDist: f32, reach: f32, fadeDist: f32,
   lods: vec4f,                                      // distances where the next LOD slot takes over
   slot: vec4u, base: vec4u, cap: vec4u,
@@ -83,8 +83,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
       if (e < -P.reach) { return; }
     }
   }
-  // far layers sit on the terrain as it is drawn (cheap cache lookup instead of noise)
-  let h = select(terrainHeight(p), cacheHeight(p), (P.flags & 1u) != 0u);
+  // instances sit on the terrain as it is drawn (cheap cache lookup instead of noise)
+  let h = cacheHeight(p);
   let d = abs(p.x - pathX(p.y));
   var prob = 0.0;
   var scale = 1.0;
@@ -217,7 +217,7 @@ fn crab(i: u32, t: f32) {
   let rel2 = pos2 - F.camPos.xz;
   let dist = length(rel2);
   if (dist > P.maxDist) { return; }
-  let h = terrainHeight(pos2);
+  let h = cacheHeight(pos2);
   if (h < 0.25 || h > 2.4) { return; }
   let pos = vec3f(pos2.x, h, pos2.y);
   emit(pos - F.camPos.xyz, vec4f(pos, mix(0.3, 0.45, hf(sh + 4u))), vec4f(yaw, 0.0, hf(sh + 5u), ph * 10.0), dist);
