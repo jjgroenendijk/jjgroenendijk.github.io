@@ -67,7 +67,7 @@ export const LAYERS = [
   { type: 'shark', count: 4, maxDist: 90, meshes: ['shark'], caps: [4], keep: 0 },
   { type: 'ray', count: 6, maxDist: 70, meshes: ['manta'], caps: [6], keep: 0 },
   { type: 'jelly', count: 16, maxDist: 60, meshes: ['jelly'], caps: [16], keep: 0 },
-  { type: 'crab', count: 2025, maxDist: 85, meshes: ['crab'], caps: [500], keep: 0 },
+  { type: 'crab', count: 2025, maxDist: 85, meshes: ['crab'], caps: [800], keep: 0 },
   { type: 'parrot', count: 12, maxDist: 300, meshes: ['bird'], caps: [12], keep: 0 },
   { type: 'manta', count: 4, maxDist: 90, meshes: ['manta'], caps: [4], keep: 0 },
   { type: 'dolphin', count: 6, maxDist: 400, meshes: ['dolphin'], caps: [6], keep: 0 },

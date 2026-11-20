@@ -200,14 +200,14 @@ fn jelly(i: u32, t: f32) {
 }
 
 // crabs scuttling sideways on every beach: a 4 m lattice around the camera,
-// about a third of the cells on the sand band hold a crab
+// about half of the cells on the sand band hold a crab
 fn crab(i: u32, t: f32) {
   let n = 45u;
   if (i >= n * n || F.camFwd.w > 0.5) { return; }
   let cell = 4.0;
   let c = vec2i(floor(F.camPos.xz / cell)) + vec2i(i32(i % n), i32(i / n)) - i32(n / 2u);
   let sh = hashu(u32(c.x + 100000) * 193u + u32(c.y + 100000) * 7919u);
-  if (hf(sh + 6u) > 0.35) { return; }
+  if (hf(sh + 6u) > 0.5) { return; }
   let ph = hf(sh + 2u) * TAU;
   let yaw = hf(sh + 3u) * TAU;
   // walk sideways in bursts, then pause
@@ -219,7 +219,7 @@ fn crab(i: u32, t: f32) {
   let h = terrainHeight(pos2);
   if (h < 0.25 || h > 2.4) { return; }
   let pos = vec3f(pos2.x, h, pos2.y);
-  emit(pos - F.camPos.xyz, vec4f(pos, mix(0.16, 0.26, hf(sh + 4u))), vec4f(yaw, 0.0, hf(sh + 5u), ph * 10.0), dist);
+  emit(pos - F.camPos.xyz, vec4f(pos, mix(0.3, 0.45, hf(sh + 4u))), vec4f(yaw, 0.0, hf(sh + 5u), ph * 10.0), dist);
 }
 
 // scarlet macaws crossing over the jungle canopy
