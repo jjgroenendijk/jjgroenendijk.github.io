@@ -46,7 +46,7 @@ struct Bake {
   prev: array<vec4f, ${LEVELS}>, // xy previous level centre, z mode (0 keep, 1 new texels, 2 everything)
   band: vec4f,                   // refresh: x level, rows [y, z)
 };
-@group(0) @binding(2) var<uniform> B: Bake;
+@group(0) @binding(6) var<uniform> B: Bake;
 
 fn needsBake(lvl: u32, row: u32, g: vec2f) -> bool {
   let Lv = F.levels[lvl];

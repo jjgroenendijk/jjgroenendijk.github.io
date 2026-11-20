@@ -11,13 +11,13 @@ const f = (x) => {
 const knotArr = `var<private> KN: array<vec4f, ${KNOTS.length}> = array<vec4f, ${KNOTS.length}>(${KNOTS.map((k) => `vec4f(${f(k[0])},${f(k[1])},${f(k[2])},${f(k[3])})`).join(',')});
 var<private> KW: array<f32, ${KNOTS.length}> = array<f32, ${KNOTS.length}>(${KNOTS.map((k) => f(k[4])).join(',')});`;
 
-const waveArr = (name, list) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => `vec4f(${f(w[0])},${f(w[1])},${f(w[2])},${f(w[4])})`).join(',')});
+export const waveArr = (name, list) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => `vec4f(${f(w[0])},${f(w[1])},${f(w[2])},${f(w[4])})`).join(',')});
 var<private> ${name}Q: array<f32, ${list.length}> = array<f32, ${list.length}>(${list.map((w) => f(w[3])).join(',')});`;
 
 export const LEVELS = 9; // terrain clipmap levels
 // float offsets of the members that follow the clipmap levels
-export const FRAME_OFS = { levels: 192, cloud: 192 + LEVELS * 4, extra: 196 + LEVELS * 4, fx: 200 + LEVELS * 4, cloudMap: 204 + LEVELS * 4 };
-export const FRAME_FLOATS = 208 + LEVELS * 4;
+export const FRAME_OFS = { levels: 192, cloud: 192 + LEVELS * 4, extra: 196 + LEVELS * 4, fx: 200 + LEVELS * 4, cloudMap: 204 + LEVELS * 4, caustic: 208 + LEVELS * 4 };
+export const FRAME_FLOATS = 212 + LEVELS * 4;
 // cloud shadow map: CLOUD_MAP_N^2 texels covering CLOUD_MAP_SPAN metres of the cloud layer
 export const CLOUD_MAP_N = 256;
 export const CLOUD_MAP_SPAN = 8192;
@@ -50,8 +50,14 @@ struct Frame {
   extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight, w unused
   fx: vec4f,          // x rainbow, y morning mist, z vegetation draw distance, w unused
   cloudMap: vec4f,    // xy cloud shadow map origin (cloud plane), z 1/span, w unused
+  caustic: vec4f,     // xy caustic map origin, z 1/span, w map valid
 };
 @group(0) @binding(0) var<uniform> F: Frame;
+// baked lighting shared by every pass (see SkyLightPass and CausticsPass)
+@group(0) @binding(2) var skyLut: texture_2d<f32>;    // sky radiance by direction
+@group(0) @binding(3) var skySH: texture_2d<f32>;     // 9 x 1: sky irradiance, SH9, relative to straight up
+@group(0) @binding(4) var causticMap: texture_2d<f32>;
+@group(0) @binding(5) var frameSmp: sampler;
 `;
 
 export const commonLib = /* wgsl */ `
@@ -232,8 +238,9 @@ fn scatterSky(rd: vec3f, sun: vec3f, E: f32, g: f32) -> vec3f {
   c += E * 0.012 * tw * vec3f(0.10, 0.07, 0.12) * (1.0 - rd.y * 0.5);
   return c;
 }
-// full sky radiance without sun disc / stars / clouds
-fn skyBase(rd: vec3f) -> vec3f {
+// full sky radiance without sun disc / stars / clouds (evaluated exactly only
+// for the sky dome and the bakes; everything else reads the baked LUT)
+fn skyRadiance(rd: vec3f) -> vec3f {
   let E = F.fog.w;
   var c = scatterSky(rd, F.sunDir.xyz, E, 0.72);
   // moon light sky (stylised, brighter than reality)
@@ -241,6 +248,31 @@ fn skyBase(rd: vec3f) -> vec3f {
   // night floor
   c += vec3f(0.0009, 0.0016, 0.0034) * F.sunDir.w * (1.2 - 0.6 * max(rd.y, 0.0));
   return c;
+}
+// sky LUT parameterisation: azimuth across, sqrt of elevation down (dense at the horizon)
+fn skyLutUV(rd: vec3f) -> vec2f {
+  return vec2f(atan2(rd.z, rd.x) / TAU + 0.5, 0.5 - 0.5 * sign(rd.y) * sqrt(abs(rd.y)));
+}
+fn skyLutDir(uv: vec2f) -> vec3f {
+  let s = 1.0 - 2.0 * uv.y;
+  let y = sign(s) * s * s;
+  let az = (uv.x - 0.5) * TAU;
+  let r = sqrt(max(1.0 - y * y, 0.0));
+  return vec3f(r * cos(az), y, r * sin(az));
+}
+fn skyBase(rd: vec3f) -> vec3f { return textureSampleLevel(skyLut, frameSmp, skyLutUV(rd), 0.0).rgb; }
+// real SH9 basis (y up)
+fn sh9(n: vec3f) -> array<f32, 9> {
+  return array<f32, 9>(0.282095, 0.488603 * n.y, 0.488603 * n.z, 0.488603 * n.x,
+    1.092548 * n.x * n.z, 1.092548 * n.y * n.z, 0.315392 * (3.0 * n.y * n.y - 1.0),
+    1.092548 * n.x * n.y, 0.546274 * (n.x * n.x - n.z * n.z));
+}
+// irradiance from the sky for normal n, relative to an upward facing surface
+fn skyIrradiance(n: vec3f) -> vec3f {
+  let b = sh9(n);
+  var e = vec3f(0.0);
+  for (var i = 0; i < 9; i++) { e += textureLoad(skySH, vec2i(i, 0), 0).rgb * b[i]; }
+  return max(e, vec3f(0.0));
 }
 fn fogSkyColor(rd: vec3f) -> vec3f {
   return skyBase(normalize(vec3f(rd.x, max(rd.y, 0.0) * 0.6 + 0.015, rd.z)));
@@ -261,7 +293,7 @@ fn cloudPlane(pw: vec3f) -> vec2f {
 }
 
 // ------------------------------------------------------------ water lighting helpers
-fn caustics(pw: vec3f) -> f32 {
+fn causticsProcedural(pw: vec3f) -> f32 {
   let t = F.camPos.w;
   let L = F.lightDir.xyz;
   let p = pw.xz - L.xz / max(L.y, 0.2) * pw.y * 0.75;
@@ -275,6 +307,18 @@ fn caustics(pw: vec3f) -> f32 {
   return pow(c1, 5.0) * 1.0 + pow(c2, 5.0) * 0.6;
 }
 
+// caustics: photon-splatted map near the camera, procedural pattern beyond it
+fn caustics(pw: vec3f) -> f32 {
+  let uv = (pw.xz - F.caustic.xy) * F.caustic.z;
+  let m = F.caustic.w * smoothstep(0.0, 0.12, min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y)));
+  if (m <= 0.0) { return causticsProcedural(pw); }
+  // density relative to a flat surface, shaped like the procedural pattern
+  let d = textureSampleLevel(causticMap, frameSmp, uv, 0.0).r;
+  let c = pow(max(d - 0.5, 0.0), 1.6) * 1.1;
+  if (m >= 1.0) { return c; }
+  return mix(causticsProcedural(pw), c, m);
+}
+
 // light arriving at a world point (sun/moon colour, attenuated if underwater)
 fn lightAt(pw: vec3f) -> vec3f {
   var lc = F.lightColor.rgb;
@@ -285,7 +329,9 @@ fn lightAt(pw: vec3f) -> vec3f {
   return lc;
 }
 fn ambientAt(n: vec3f, pw: vec3f) -> vec3f {
-  var a = mix(F.groundAmb.rgb, F.skyAmb.rgb, n.y * 0.5 + 0.5);
+  // the baked sky irradiance makes the ambient directional (warmer towards the sun)
+  let sky = F.skyAmb.rgb * clamp(skyIrradiance(n), vec3f(0.35), vec3f(2.5));
+  var a = mix(F.groundAmb.rgb, sky, n.y * 0.5 + 0.5);
   if (pw.y < 0.0) {
     let depth = -pw.y;
     a = mix(a, F.waterFog.rgb * 3.0, 0.5) * exp(-LIGHT_EXT * depth * 0.6);

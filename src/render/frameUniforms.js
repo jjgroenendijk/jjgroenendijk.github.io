@@ -38,6 +38,7 @@ export class FrameUniforms {
     v4(FRAME_OFS.extra, [f.modes.und, f.modes.aer, f.modes.land, 0]);
     v4(FRAME_OFS.fx, [e.rainbow, e.mist, f.vegDist, 0]);
     v4(FRAME_OFS.cloudMap, f.cloudMap);
+    v4(FRAME_OFS.caustic, f.caustic);
     this.device.queue.writeBuffer(this.buffer, 0, d);
   }
 }

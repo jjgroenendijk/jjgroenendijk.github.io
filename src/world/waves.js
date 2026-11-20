@@ -23,6 +23,12 @@ export const RIPPLES = mkWaves([
   [2600, -1500, 0.012, 0], [-3100, 2200, 0.010, 0], [4200, 2900, 0.007, 0], [-5200, -3900, 0.005, 0],
   [6900, -1800, 0.004, 0], [-2300, 7600, 0.0035, 0], [9100, 5200, 0.0025, 0], [-11000, 4100, 0.002, 0],
 ]);
+// Short waves that only steer the caustic photons: too small to see on the
+// surface, but curved enough to focus sunlight a few metres down.
+export const CAUSTIC_WAVES = mkWaves([
+  [9000, 4100, 0.030, 0], [-7600, 8300, 0.026, 0], [11800, -6900, 0.022, 0],
+  [-12600, -3300, 0.020, 0], [3100, 14200, 0.017, 0], [15800, 9400, 0.013, 0],
+]);
 export function waveHeight(x, z, t) {
   let y = 0;
   const tt = t % WAVE_T;

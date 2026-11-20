@@ -2,7 +2,7 @@
 // toroidally addressed texture-array cache (one layer per level). A level that
 // moves only bakes the texels that scrolled in; a few rows per frame are
 // refreshed so far horizon shadows follow the sun without frame-time spikes.
-import { shader, buffer, bufferWithData, bindLayout, bindGroup, entry } from '../core/gpu.js';
+import { shader, buffer, bufferWithData, bindLayout, bindGroup, entry, at } from '../core/gpu.js';
 import { terrainCacheWGSL, terrainWGSL, terrainShadowWGSL, terrainCullWGSL, GRID_M, SIDE, TILES, TILE, BAKE_BYTES } from '../shaders/terrain.js';
 import { HDR, DEPTH, depthState } from './layouts.js';
 import { LEVELS } from '../shaders/common.js';
@@ -69,7 +69,7 @@ export class TerrainPass {
 
     this.bakeData = new Float32Array(BAKE_BYTES / 4);
     this.bakeBuffer = buffer(device, BAKE_BYTES, U.UNIFORM | U.COPY_DST, 'terrain-bake');
-    const cacheLayout = bindLayout(device, 'terrain-cache', [entry.uniform(), entry.storageTexture('rgba32float', '2d-array'), entry.uniform()]);
+    const cacheLayout = bindLayout(device, 'terrain-cache', [entry.uniform(), entry.storageTexture('rgba32float', '2d-array'), at(6, entry.uniform())]);
     this.cacheLayout = cacheLayout;
     this.cachePipeline = device.createComputePipeline({
       label: 'terrain-cache',
@@ -149,7 +149,7 @@ export class TerrainPass {
   }
 
   cacheBindGroup(frameBuffer) {
-    return bindGroup(this.device, this.cacheLayout, [frameBuffer, this.cacheView, this.bakeBuffer], 'terrain-cache');
+    return bindGroup(this.device, this.cacheLayout, [frameBuffer, this.cacheView, at(6, this.bakeBuffer)], 'terrain-cache');
   }
 
   bake(pass, group) {

@@ -1,6 +1,7 @@
 // Frame orchestration: owns every pass and records one command buffer per frame.
 //
-//   bake terrain cache -> cloud shadow map -> (bake impostor cards, once)
+//   bake terrain cache (new texels only) -> sky lighting (when the sky changed)
+//   -> caustics -> cloud shadow map -> (bake impostor cards, once)
 //   -> scatter props + cull terrain tiles (frustum + last frame's Hi-Z)
 //   -> shadow cascades (cached) -> clouds -> opaque (props, terrain, sky)
 //   -> Hi-Z depth pyramid -> half-res reflections -> water + particles
@@ -20,6 +21,8 @@ import { WaterPass } from './waterPass.js';
 import { PostPass } from './postPass.js';
 import { CloudMapPass } from './cloudMapPass.js';
 import { HiZPass } from './hizPass.js';
+import { SkyLightPass } from './skyLightPass.js';
+import { CausticsPass } from './causticsPass.js';
 
 const NEAR = 0.1;
 
@@ -49,7 +52,10 @@ export class Renderer {
     this.water = new WaterPass(device, this.shared);
     this.post = new PostPass(device, this.shared, gpu.format);
     this.hiz = new HiZPass(device);
-    this.frameGroup = bindGroup(device, this.shared.frame, [this.uniforms.buffer, this.terrain.cacheView], 'frame');
+    this.skyLight = new SkyLightPass(device, this.uniforms.buffer);
+    this.caustics = new CausticsPass(device, this.uniforms.buffer, this.terrain.cacheView);
+    this.frameGroup = bindGroup(device, this.shared.frame, [this.uniforms.buffer, this.terrain.cacheView,
+      this.skyLight.lutView, this.skyLight.shView, this.caustics.view, this.shared.frameSampler], 'frame');
     this.cacheGroup = this.terrain.cacheBindGroup(this.uniforms.buffer);
     this.frame = 0;
     this.history = 0;
@@ -105,6 +111,7 @@ export class Renderer {
       cascades: this.shadows.matrices, frustum, levels: levels.data,
       modes: shot.modes, fade, vegDist: this.props.vegDist,
       cloudMap: this.cloudMap.origin(pos, env.lightDir),
+      caustic: this.caustics.placement(pos, env.lightDir),
     });
 
 
@@ -115,6 +122,8 @@ export class Renderer {
       this.terrain.bake(pass, this.cacheGroup);
       pass.end();
     }
+    this.skyLight.encode(encoder, env);
+    if (on('caustics')) this.caustics.encode(encoder);
     this.cloudMap.encode(encoder, this.frameGroup);
     this.props.bakeCards(encoder, this.frameGroup);
     if (on('scatter')) this.props.scatter(encoder, this.frameGroup, this.frame);
