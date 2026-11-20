@@ -449,14 +449,18 @@ fn applyFog(col: vec3f, rel: vec3f) -> vec3f {
     if (abs(yb - ya) > 0.01) { layer = MH * (exp(-ya / MH) - exp(-yb / MH)) / (yb - ya); }
     od += F.fx.y * 0.0035 * min(dist, 6000.0) * layer;
   }
-  // jungle haze (near-field, only at ground level)
-  od += F.fog.z * 0.005 * min(dist, 140.0) * exp(-max(cy + rel.y * 0.5, 0.0) * 0.02);
   let T = exp(-od * vec3f(0.75, 0.9, 1.15));
   var fc = fogSkyColor(rd);
   // sun glow in the haze
   let mu = max(dot(rd, F.sunDir.xyz), 0.0);
   fc += F.lightColor.rgb * pow(mu, 12.0) * 0.03 * F.lightDir.w;
-  return col * T + fc * (1.0 - T);
+  let fogged = col * T + fc * (1.0 - T);
+  // jungle haze (near-field, only at ground level): air in the shade of the
+  // canopy, lit green-gold by light filtering through the leaves, not by the sky
+  let jod = F.fog.z * 0.003 * min(dist, 140.0) * exp(-max(cy + rel.y * 0.5, 0.0) * 0.02);
+  let Tj = exp(-jod);
+  let jc = F.skyAmb.rgb * vec3f(0.55, 0.65, 0.4) + F.lightColor.rgb * max(F.lightDir.y, 0.0) * vec3f(0.06, 0.055, 0.03) * (1.0 + 2.0 * pow(mu, 8.0));
+  return fogged * Tj + jc * (1.0 - Tj);
 }
 
 fn ggx(n: vec3f, v: vec3f, l: vec3f, rough: f32) -> f32 {
