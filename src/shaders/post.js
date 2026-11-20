@@ -220,18 +220,20 @@ fn toSRGB(c: vec3f) -> vec3f {
   // night vision: desaturate and shift towards blue in the dark (Purkinje)
   let nightV = F.sunDir.w;
   c = mix(c, vec3f(luma(c)) * vec3f(0.55, 0.75, 1.25), nightV * 0.65);
-  // gentle grade before tonemap: warm highlights, teal shadows
+  // sunny grade before tonemap: warm light overall, shadows only faintly cool
+  let day = 1.0 - F.sunDir.w;
   let l = luma(c);
-  c = mix(c, c * vec3f(0.94, 1.0, 1.06), 1.0 - smoothstep(0.0, 0.25, l));
-  c = mix(c, c * vec3f(1.05, 1.0, 0.94), smoothstep(0.4, 2.0, l) * (1.0 - F.sunDir.w));
-  c = aces(c * 1.05);
+  c = mix(c, c * vec3f(0.97, 1.0, 1.03), 1.0 - smoothstep(0.0, 0.2, l));
+  c = mix(c, c * vec3f(1.06, 1.01, 0.92), smoothstep(0.15, 1.5, l) * day);
+  c = aces(c * 1.08);
   let g = luma(c);
-  c = mix(vec3f(g), c, 1.15);
-  // gentle S-curve for depth
-  c = c * c * (3.0 - 2.0 * c) * 0.35 + c * 0.65;
+  c = mix(vec3f(g), c, 1.15 + 0.1 * day);
+  // gentle S-curve for depth, shadows lifted a little so nothing turns murky
+  c = c * c * (3.0 - 2.0 * c) * 0.25 + c * 0.75;
+  c += (1.0 - c) * 0.015 * day;
   c = max(c, vec3f(0.0));
   // vignette
-  let v = 1.0 - dot(cc * vec2f(1.0, 0.8), cc * vec2f(1.0, 0.8)) * 0.55;
+  let v = 1.0 - dot(cc * vec2f(1.0, 0.8), cc * vec2f(1.0, 0.8)) * 0.4;
   c *= v;
   c *= F.cloud.w;
   var o = toSRGB(sat3(c));

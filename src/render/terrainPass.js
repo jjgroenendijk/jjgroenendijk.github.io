@@ -3,7 +3,7 @@
 // moves only bakes the texels that scrolled in; a few rows per frame are
 // refreshed so far horizon shadows follow the sun without frame-time spikes.
 import { shader, buffer, bufferWithData, bindLayout, bindGroup, entry, at } from '../core/gpu.js';
-import { terrainCacheWGSL, terrainWGSL, terrainShadowWGSL, terrainCullWGSL, GRID_M, SIDE, TILES, TILE, BAKE_BYTES } from '../shaders/terrain.js';
+import { terrainCacheWGSL, terrainWGSL, terrainShadowWGSL, terrainCullWGSL, GRID_M, SIDE, TILES, TILE, BAKE_BYTES, CACHE_LAYERS } from '../shaders/terrain.js';
 import { HDR, DEPTH, depthState } from './layouts.js';
 import { LEVELS } from '../shaders/common.js';
 
@@ -53,16 +53,20 @@ function boxVisible(planes, lo, hi) {
 }
 
 export class TerrainPass {
-  constructor(device, shared) {
+  constructor(device, shared, ground) {
     this.device = device;
     const grid = buildGrid();
+    // ground material textures (albedo + height, normal + roughness + occlusion)
+    const F = GPUShaderStage.FRAGMENT;
+    const groundLayout = bindLayout(device, 'ground', [entry.texture('float', '2d-array', F), entry.texture('float', '2d-array', F), entry.sampler('filtering', F)]);
+    this.groundGroup = bindGroup(device, groundLayout, [...ground.views, ground.sampler], 'ground');
     const U = GPUBufferUsage;
     this.indexBuffer = bufferWithData(device, grid.indices, U.INDEX | U.STORAGE, 'grid-indices');
     this.tileRanges = [grid.full, grid.ring];
     this.levelData = new Float32Array(LEVELS * 4);
 
     this.cache = device.createTexture({
-      label: 'terrain-cache', size: [SIDE, SIDE, LEVELS], format: 'rgba32float',
+      label: 'terrain-cache', size: [SIDE, SIDE, CACHE_LAYERS], format: 'rgba32float',
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.cacheView = this.cache.createView({ dimension: '2d-array' });
@@ -100,7 +104,7 @@ export class TerrainPass {
     const main = shader(device, terrainWGSL, 'terrain');
     this.pipeline = device.createRenderPipeline({
       label: 'terrain',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow] }),
+      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, groundLayout] }),
       vertex: { module: main, entryPoint: 'vs', buffers: vertexBuffers },
       fragment: { module: main, entryPoint: 'fs', targets: [{ format: HDR }] },
       primitive: { topology: 'triangle-list', cullMode: 'back', frontFace: 'ccw' },
@@ -213,6 +217,7 @@ export class TerrainPass {
     pass.setPipeline(this.pipeline);
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, shadowGroup);
+    pass.setBindGroup(2, this.groundGroup);
     this.drawCulled(pass);
   }
 

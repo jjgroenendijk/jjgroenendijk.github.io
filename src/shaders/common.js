@@ -48,7 +48,7 @@ struct Frame {
   levels: array<vec4f, ${LEVELS}>,
   cloud: vec4f,       // xy wind offset, z coverage, w unused
   extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight, w unused
-  fx: vec4f,          // x rainbow, y morning mist, z vegetation draw distance, w unused
+  fx: vec4f,          // x rainbow, y morning mist, z vegetation draw distance, w ground wetness after rain
   cloudMap: vec4f,    // xy cloud shadow map origin (cloud plane), z 1/span, w unused
   caustic: vec4f,     // xy caustic map origin, z 1/span, w map valid
 };
@@ -60,18 +60,13 @@ struct Frame {
 @group(0) @binding(5) var frameSmp: sampler;
 `;
 
-export const commonLib = /* wgsl */ `
+// Constants, hashing and periodic noise: needs no bindings, so bake shaders
+// that run outside the frame can use it too.
+export const noiseLib = /* wgsl */ `
 const W: f32 = ${f(W)};
 const CYCLE: f32 = ${f(CYCLE)};
 const PI: f32 = 3.14159265;
 const TAU: f32 = 6.28318531;
-const WATER_EXT: vec3f = vec3f(0.20, 0.058, 0.034);
-// lighting attenuation is kept gentler than view extinction so reefs stay colourful
-const LIGHT_EXT: vec3f = vec3f(0.075, 0.035, 0.03);
-${knotArr}
-${waveArr('WV', WAVES)}
-${waveArr('RP', RIPPLES)}
-
 fn hashu(x: u32) -> u32 {
   var h = x * 747796405u + 2891336453u;
   h = ((h >> ((h >> 28u) + 4u)) ^ h) * 277803737u;
@@ -93,6 +88,27 @@ fn gnoise(p: vec2f, per: i32, seed: u32) -> f32 {
   let c = dot(grad(i.x, i.y + 1, per, seed), fr - vec2f(0.0, 1.0));
   let d = dot(grad(i.x + 1, i.y + 1, per, seed), fr - vec2f(1.0, 1.0));
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+// gradient noise and its derivative (x: value, yz: d/dp in lattice units)
+fn gnoiseD(p: vec2f, per: i32, seed: u32) -> vec3f {
+  let pi = floor(p);
+  let fr = p - pi;
+  let i = vec2i(pi);
+  let u = fr * fr * fr * (fr * (fr * 6.0 - 15.0) + 10.0);
+  let du = 30.0 * fr * fr * (fr - 1.0) * (fr - 1.0);
+  let ga = grad(i.x, i.y, per, seed);
+  let gb = grad(i.x + 1, i.y, per, seed);
+  let gc = grad(i.x, i.y + 1, per, seed);
+  let gd = grad(i.x + 1, i.y + 1, per, seed);
+  let a = dot(ga, fr);
+  let b = dot(gb, fr - vec2f(1.0, 0.0));
+  let c = dot(gc, fr - vec2f(0.0, 1.0));
+  let d = dot(gd, fr - vec2f(1.0, 1.0));
+  let k = a - b - c + d;
+  let v = a + (b - a) * u.x + (c - a) * u.y + k * u.x * u.y;
+  let dv = ga + (gb - ga) * u.x + (gc - ga) * u.y + (ga - gb - gc + gd) * u.x * u.y
+         + du * vec2f(b - a + k * u.y, c - a + k * u.x);
+  return vec3f(v, dv);
 }
 fn fbm(p: vec2f, per0: i32, oct: i32, seed: u32) -> f32 {
   var s = 0.0; var a = 0.5; var per = per0;
@@ -119,6 +135,16 @@ fn ign(px: vec2f, frame: f32) -> f32 {
 fn sat(x: f32) -> f32 { return clamp(x, 0.0, 1.0); }
 fn luma(c: vec3f) -> f32 { return dot(c, vec3f(0.2126, 0.7152, 0.0722)); }
 
+`;
+
+export const commonLib = noiseLib + /* wgsl */ `
+const WATER_EXT: vec3f = vec3f(0.20, 0.058, 0.034);
+// lighting attenuation is kept gentler than view extinction so reefs stay colourful
+const LIGHT_EXT: vec3f = vec3f(0.075, 0.035, 0.03);
+${knotArr}
+${waveArr('WV', WAVES)}
+${waveArr('RP', RIPPLES)}
+
 // ------------------------------------------------------------ terrain
 fn pathX(z: f32) -> f32 {
   let k = TAU / W;
@@ -138,18 +164,75 @@ fn corridorAt(z: f32) -> vec4f {
   t = t * t * (3.0 - 2.0 * t);
   return vec4f(mix(a.yzw, b.yzw, t), mix(KW[i], KW[j], t));
 }
+// fbm with its derivative (world units). From octave damp0 on, octaves
+// shrink where the octaves below are already steep: smooth slopes, crisp
+// peaks and ridges, as erosion leaves them.
+fn fbmD(p: vec2f, per0: i32, oct: i32, seed: u32, damp0: i32) -> vec3f {
+  var s = vec3f(0.0);
+  var a = 0.5;
+  var per = per0;
+  var slope = vec2f(0.0);
+  for (var i = 0; i < oct; i++) {
+    let n = gnoiseD(p * (f32(per) / W), per, seed + u32(i) * 101u);
+    let damp = select(1.0, 1.0 / (1.0 + 0.35 * dot(slope, slope)), i >= damp0);
+    s += vec3f(n.x, n.yz * (f32(per) / W)) * a * damp;
+    slope += n.yz;
+    per *= 2; a *= 0.5;
+  }
+  return s;
+}
+
+// Gullies: in cells along the slope, crests and troughs that run downhill
+// (wave fronts across the slope direction), fading with the cell's distance.
+// g is the height gradient; returns the relief (-1..1) and its gradient.
+fn gullyOctave(p: vec2f, g: vec2f, cell: f32) -> vec3f {
+  let n = i32(W / cell + 0.5);
+  let q = p / cell;
+  let c = vec2i(floor(q));
+  let across = normalize(vec2f(-g.y, g.x) + vec2f(1e-6, 0.0));
+  var v = 0.0; var dv = vec2f(0.0); var wsum = 0.0;
+  for (var j = -1; j <= 1; j++) {
+    for (var i = -1; i <= 1; i++) {
+      let cc = c + vec2i(i, j);
+      let h = hashu(u32(wrapi(cc.x, n)) * 3u + hashu(u32(wrapi(cc.y, n)) + 977u));
+      let d = q - vec2f(cc) - vec2f(hf(h), hf(h + 1u));
+      let wt = exp(-dot(d, d) * 1.5);
+      let ph = dot(d, across) * TAU;
+      v += cos(ph) * wt;
+      dv -= sin(ph) * TAU * across * wt;
+      wsum += wt;
+    }
+  }
+  return vec3f(v, dv / cell) / wsum;
+}
+fn gullies(p: vec2f, g: vec2f) -> f32 {
+  let steep = sat(length(g) * 1.5);
+  if (steep < 0.01) { return 0.0; }
+  let o1 = gullyOctave(p, g, 32.0);
+  // the finer gullies follow the slope as the coarse ones bent it: branching
+  let o2 = gullyOctave(p, g + o1.yz * 3.5, 8.0);
+  return (o1.x * 3.5 + o2.x * 1.2 - 1.0) * steep;
+}
+
 fn baseHeight(p: vec2f) -> f32 {
-  let c = fbm(p, 8, 3, 11u);
-  let n = fbm(p, 32, 6, 23u);
-  let e = n * 1.5 + c * 1.2 - 0.1;
+  let c = fbmD(p, 8, 3, 11u, 99);
+  let n = fbmD(p, 32, 6, 23u, 2);
+  let e = n.x * 1.5 + c.x * 1.2 - 0.1;
+  let de = n.yz * 1.5 + c.yz * 1.2;
   let r = 1.0 - abs(gnoise(p * (64.0 / W), 64, 37u));
   let r2 = 1.0 - abs(gnoise(p * (128.0 / W), 128, 41u));
   let ridge = r * r * 0.7 + r2 * r2 * 0.3;
   var h: f32;
   // gentle profile around sea level gives wide beaches and shallow shelves
-  if (e > 0.0) { h = min(e, 0.12) * 14.0 + max(e - 0.12, 0.0) * 45.0 + pow(max(e - 0.14, 0.0), 1.5) * 950.0 * (0.35 + 0.65 * ridge); }
+  if (e > 0.0) {
+    let hill = 950.0 * (0.35 + 0.65 * ridge);
+    h = min(e, 0.12) * 14.0 + max(e - 0.12, 0.0) * 45.0 + pow(max(e - 0.14, 0.0), 1.5) * hill;
+    // erosion on the hillsides (beaches and shelves stay smooth)
+    let dhde = select(14.0, 45.0, e > 0.12) + 1.5 * sqrt(max(e - 0.14, 0.0)) * hill;
+    h += gullies(p, de * dhde) * smoothstep(0.12, 0.2, e);
+  }
   else { h = max(e, -0.08) * 30.0 + min(e + 0.08, 0.0) * 90.0; }
-  return max(h, -48.0 + 8.0 * n);
+  return max(h, -48.0 + 8.0 * n.x);
 }
 fn terrainHeight(p: vec2f) -> f32 {
   var h = baseHeight(p);

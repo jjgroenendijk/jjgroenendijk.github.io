@@ -5,6 +5,7 @@
 import { shader, bindLayout, bindGroup, entry } from '../core/gpu.js';
 import { visibilityWGSL, resolveWGSL, EMPTY, ID_FORMAT } from '../shaders/propsVisibility.js';
 import { HDR, DEPTH, depthState } from './layouts.js';
+import { LeafTextures } from './leafTextures.js';
 
 export class PropsVisibility {
   constructor(device, shared, props) {
@@ -14,6 +15,7 @@ export class PropsVisibility {
     const dataLayout = bindLayout(device, 'prop-data', [
       entry.texture('float', '2d-array', F), entry.texture('float', '2d-array', F),
       ...Array.from({ length: 5 }, () => entry.storage(true, VF)),
+      ...LeafTextures.entries(F),
     ]);
     this.dataGroup = bindGroup(device, dataLayout, props.visibilityResources, 'prop-data');
     this.idLayout = bindLayout(device, 'prop-ids', [entry.texture('uint', '2d', F)]);

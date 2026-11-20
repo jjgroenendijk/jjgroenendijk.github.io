@@ -30,10 +30,33 @@
     #sound.on .wave { opacity: 1; }
     #sound.on .mute { opacity: 0; }
     body.no-webgpu #sound { display: none; }
+    /* Loader: a sun bobbing over rolling waves until the first frame is ready. */
+    #loader {
+      position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none;
+      transition: opacity 0.9s ease, visibility 0s linear 0.9s;
+    }
+    body.ready #loader, body.no-webgpu #loader { opacity: 0; visibility: hidden; }
+    #loader svg { width: 72px; height: 72px; overflow: visible; }
+    #loader .sun { fill: #ffb35c; animation: bob 2.4s ease-in-out infinite; transform-origin: 32px 26px; }
+    #loader .wave { fill: none; stroke: #4fb3c8; stroke-width: 3.5; stroke-linecap: round; animation: roll 1.6s linear infinite; }
+    #loader .wave.back { stroke: #2a7f93; animation-duration: 2.4s; animation-direction: reverse; }
+    @keyframes bob { 0%, 100% { transform: translateY(2px) scale(0.96); } 50% { transform: translateY(-3px) scale(1.04); } }
+    @keyframes roll { from { transform: translateX(0); } to { transform: translateX(-16px); } }
+    @media (prefers-reduced-motion: reduce) { #loader .sun, #loader .wave { animation: none; } }
   </style>
 </head>
 <body>
   <canvas id="scene"></canvas>
+  <div id="loader" role="status" aria-label="Loading">
+    <svg viewBox="0 0 64 64" aria-hidden="true">
+      <defs><clipPath id="loader-clip"><rect x="4" y="0" width="56" height="64"/></clipPath></defs>
+      <circle class="sun" cx="32" cy="26" r="11"/>
+      <g clip-path="url(#loader-clip)">
+        <path class="wave back" d="M-12 44q4-4 8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0"/>
+        <path class="wave" d="M-12 51q4-4 8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0t8 0"/>
+      </g>
+    </svg>
+  </div>
   <button id="sound" aria-label="Toggle ambient sound">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
       <path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/>
