@@ -89,8 +89,8 @@ fn waterScatter() -> vec3f {
   var sd = sceneDist(rpx);
   if (sd < dist) { ruv = uv; sd = sd0; }
   thick = max(sd - dist, 0.0);
-  // vertical depth below this point (for shore effects) approximated from view thickness
-  let vdepth = thick * max(-rd.y, 0.08);
+  // vertical water depth under this point: the seabed seen through it lies at camY + rd.y * sd
+  let vdepth = select(max(pw.y - (F.camPos.y + rd.y * sd), 0.0), 50.0, sd > 1e5);
   let behind = sceneAt(ruv);
   let T = exp(-WATER_EXT * min(thick, 400.0) * 1.1);
   var refrC = behind * T + waterScatter() * (1.0 - T);
@@ -134,10 +134,10 @@ fn waterScatter() -> vec3f {
 
   // foam: shoreline bands and crests
   let fn1 = fbm(pw.xz + vec2f(t * 0.6, t * 0.4) % 512.0, 2048, 3, 301u);
-  let shore = 1.0 - smoothstep(0.0, 1.4, vdepth + fn1 * 0.8);
-  let bands = sat(sin(vdepth * 7.0 - t * 1.4 + fn1 * 6.0) * 0.5 + 0.5) * (1.0 - smoothstep(0.0, 0.9, vdepth));
-  let crest = smoothstep(0.22, 0.4, in.crest + fn1 * 0.3) * near;
-  let foam = sat(max(shore * (0.55 + 0.45 * smoothstep(0.1, 0.5, fn1 + 0.3)), bands * 0.5) + crest * 0.45) * smoothstep(0.0, 0.05, thick);
+  let shore = 1.0 - smoothstep(0.0, 0.35, vdepth + fn1 * 0.25);
+  let bands = pow(sat(sin(vdepth * 9.0 - t * 1.4 + fn1 * 6.0) * 0.5 + 0.5), 4.0) * (1.0 - smoothstep(0.0, 0.6, vdepth));
+  let crest = smoothstep(0.3, 0.5, in.crest + fn1 * 0.25) * near;
+  let foam = sat(max(shore * (0.4 + 0.6 * smoothstep(0.0, 0.4, fn1 + 0.25)), bands * 0.45) + crest * 0.3) * smoothstep(0.0, 0.03, thick);
   let foamLit = (F.lightColor.rgb * max(L.y, 0.0) * sh + F.skyAmb.rgb) * 0.85;
   col = mix(col, foamLit, foam * 0.9);
   col = applyFog(col, in.rel);
@@ -173,11 +173,17 @@ struct PO { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) 
   let fade = smoothstep(B * 0.5, B * 0.25, length(p)) * smoothstep(0.3, 1.5, length(p));
   var col = vec3f(0.0);
   let pw = p + F.camPos.xyz;
+  let night = F.sunDir.w;
+  let blink = pow(sat(sin(t * (0.6 + h.y * 1.4) + h.z * 40.0)), 6.0);
   if (uw > 0.5) {
-    col = (F.waterFog.rgb * 6.0 + lightAt(pw) * 0.15) * 0.55;
+    // marine snow by day, bioluminescent plankton at night
+    col = (F.waterFog.rgb * 6.0 + lightAt(pw) * 0.15) * 0.55 * (1.0 - night * 0.7);
+    col += vec3f(0.15, 0.55, 1.0) * 0.5 * blink * night * step(h.x, 0.35);
   } else if (land > 0.1 && pw.y > 0.0) {
+    // sunlit pollen by day, fireflies at night
     let sh = shadowPoint(p);
-    col = F.lightColor.rgb * sh * 0.9 * land * vec3f(1.0, 0.9, 0.6);
+    col = F.lightColor.rgb * sh * 0.9 * land * vec3f(1.0, 0.9, 0.6) * (1.0 - night);
+    col += vec3f(0.75, 1.0, 0.35) * 0.4 * blink * land * night * step(h.x, 0.3);
   }
   o.col = col * fade;
   if (dot(o.col, o.col) < 1e-8) { o.pos = vec4f(0.0, 0.0, -1.0, 1.0); }

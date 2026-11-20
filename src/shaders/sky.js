@@ -28,15 +28,15 @@ fn cloudDensity(p: vec3f, detail: bool) -> f32 {
   let hfr = (p.y - CB) / (CT - CB);
   if (hfr < 0.0 || hfr > 1.0) { return 0.0; }
   let cov = cloudCoverage(p.xz);
-  let prof = smoothstep(0.0, 0.12, hfr) * (1.0 - smoothstep(0.25 + 0.6 * sat(cov * 2.5), 1.0, hfr));
-  var d = (cov - 0.04) * prof * 3.0;
-  if (d <= 0.0) { return 0.0; }
-  if (detail) {
-    let t = F.misc.z;
-    let q = p * 0.0032 + vec3f(t * 0.004, -t * 0.002, t * 0.003);
-    d -= (vnoise3(q) - 0.5) * 0.45 * (1.0 - hfr * 0.3) + (vnoise3(q * 3.1) - 0.5) * 0.2;
-  }
-  return sat(d) * 0.035;
+  // cumulus: flat base, cauliflower tops that narrow with height
+  let base = smoothstep(0.0, 0.08, hfr);
+  var d = (cov - 0.05 - hfr * hfr * 0.45) * base;
+  if (d <= -0.12) { return 0.0; }
+  let t = F.misc.z;
+  let q = p * 0.0024 + vec3f(t * 0.004, -t * 0.003, t * 0.003);
+  d += (vnoise3(q) - 0.55) * 0.22;
+  if (detail) { d -= (1.0 - vnoise3(q * 3.7)) * 0.07 * (1.0 - hfr * 0.5); }
+  return sat(d * 3.0) * 0.03;
 }
 fn hg(mu: f32, g: f32) -> f32 { return (1.0 - g * g) / (4.0 * PI * pow(1.0 + g * g - 2.0 * g * mu, 1.5)); }
 

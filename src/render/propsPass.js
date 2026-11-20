@@ -150,7 +150,7 @@ export class PropsPass {
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, cascadeGroup);
     // the near cascade gets everything, far cascades only the big casters
-    const big = new Set(['palm0', 'palm1', 'tree0', 'tree1', 'rock', 'banana', 'bush']);
+    const big = new Set(['palm0', 'palm1', 'tree0', 'tree1', 'rock', 'banana', 'bush', 'galleon', 'wreck', 'rowboat']);
     this.drawSlots(pass, (s) => s.shadow && (cascade === 0 || big.has(s.mesh)));
   }
 }

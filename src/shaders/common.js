@@ -50,7 +50,7 @@ const W: f32 = ${f(W)};
 const CYCLE: f32 = ${f(CYCLE)};
 const PI: f32 = 3.14159265;
 const TAU: f32 = 6.28318531;
-const WATER_EXT: vec3f = vec3f(0.23, 0.062, 0.048);
+const WATER_EXT: vec3f = vec3f(0.20, 0.058, 0.034);
 // lighting attenuation is kept gentler than view extinction so reefs stay colourful
 const LIGHT_EXT: vec3f = vec3f(0.11, 0.04, 0.032);
 ${knotArr}
@@ -150,7 +150,7 @@ fn terrainHeight(p: vec2f) -> f32 {
   }
   return h;
 }
-fn forestDensity(p: vec2f) -> f32 { return smoothstep(-0.08, 0.2, fbm(p, 64, 3, 97u)); }
+fn forestDensity(p: vec2f) -> f32 { return smoothstep(-0.28, 0.05, fbm(p, 64, 3, 97u)); }
 fn reefMask(p: vec2f) -> f32 { return smoothstep(-0.05, 0.18, fbm(p, 256, 3, 113u)); }
 
 // ------------------------------------------------------------ waves
@@ -248,7 +248,7 @@ fn caustics(pw: vec3f) -> f32 {
   let c1 = sat(1.0 - abs(a - b) * 3.2);
   let a2 = gnoise(q1 * 2.0 + 3.1, 8192, 177u);
   let c2 = sat(1.0 - abs(a2 + b) * 3.2);
-  return pow(c1, 7.0) * 1.6 + pow(c2, 7.0) * 0.9;
+  return pow(c1, 5.0) * 1.0 + pow(c2, 5.0) * 0.6;
 }
 
 // light arriving at a world point (sun/moon colour, attenuated if underwater)

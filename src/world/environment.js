@@ -55,7 +55,7 @@ export class Environment {
     // exposure from the light actually falling on the scene
     const sceneLum = lum(lightColor) * Math.max(lightDir[1], 0.12) * 0.55 + lum(skyAmb) * 1.1;
     // eyes adapt, but not fully: nights stay dark and blue
-    let exposure = 0.5 / Math.pow(Math.max(sceneLum, 1e-5), 0.82) * Math.pow(0.4, 0.18);
+    let exposure = 0.5 / Math.pow(Math.max(sceneLum, 1e-5), 0.8) * Math.pow(0.4, 0.2);
     exposure = Math.min(exposure, 40);
     if (shot.modes.und > 0.5) exposure *= 1.25;
     if (this.exposure === null) this.exposure = exposure;
