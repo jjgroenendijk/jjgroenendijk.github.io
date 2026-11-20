@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1a24">
+  <meta name="description" content="An endless, procedurally generated tropical island, rendered with WebGPU.">
+  <title>Island</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='26' r='12' fill='%23ffb35c'/%3E%3Cpath d='M0 40q16-8 32 0t32 0v24H0z' fill='%231f8fa6'/%3E%3C/svg%3E">
+  <style>
+    html, body { margin: 0; height: 100%; background: #0b1a24; overflow: hidden; }
+    body { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+    #scene { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; }
+    /* Calm fallback when WebGPU is unavailable: a slow sunset gradient. */
+    body.no-webgpu #scene { display: none; }
+    body.no-webgpu {
+      background: linear-gradient(180deg, #1d3557 0%, #e07a5f 55%, #f4a261 62%, #2a6f97 63%, #013a63 100%);
+      background-size: 100% 200%; animation: drift 30s ease-in-out infinite alternate;
+    }
+    @keyframes drift { from { background-position: 0 0; } to { background-position: 0 100%; } }
+    #sound {
+      position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: max(16px, env(safe-area-inset-bottom));
+      width: 44px; height: 44px; border: 0; border-radius: 50%; padding: 11px; cursor: pointer;
+      background: rgba(0, 0, 0, 0.22); color: rgba(255, 255, 255, 0.85);
+      opacity: 0; transition: opacity 0.8s ease; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    }
+    #sound.visible { opacity: 1; }
+    #sound svg { width: 100%; height: 100%; display: block; }
+    #sound .wave { opacity: 0; transition: opacity 0.4s; }
+    #sound.on .wave { opacity: 1; }
+    #sound.on .mute { opacity: 0; }
+    body.no-webgpu #sound { display: none; }
+  </style>
+</head>
+<body>
+  <canvas id="scene"></canvas>
+  <button id="sound" aria-label="Toggle ambient sound">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor" stroke="none"/>
+      <path class="wave" d="M15.5 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12"/>
+      <path class="mute" d="M16 9.5l5 5M21 9.5l-5 5"/>
+    </svg>
+  </button>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
