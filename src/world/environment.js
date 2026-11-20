@@ -72,7 +72,7 @@ export class Environment {
     let exposure = 0.6 / Math.pow(Math.max(sceneLum, 1e-5), 0.8) * Math.pow(0.4, 0.2);
     exposure = Math.min(exposure, 40);
     // our eyes adapt to the shade under the canopy
-    exposure *= 1 + 1.6 * shot.modes.land + 0.3 * shot.modes.und;
+    exposure *= 1 + 2.6 * shot.modes.land + 0.3 * shot.modes.und;
     if (this.exposure === null) this.exposure = exposure;
     this.exposure *= Math.pow(exposure / this.exposure, 1 - Math.exp(-dt * 1.5));
 
