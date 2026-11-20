@@ -884,7 +884,7 @@ fn foliageSurface(in: PV, tap: LeafTap, t: vec3f, b: vec3f) -> Surf {
   let n = normalize(normalize(in.n) + (t * tap.nt.x + b * tap.nt.y) * 0.6);
   // per tree tint: some crowns fresher, some darker and bluer
   let tint = mix(vec3f(0.85, 0.95, 1.1), vec3f(1.15, 1.05, 0.8), in.ex.w);
-  return Surf(tap.alb * tint, n, tap.trans, 0.6, 0.38, vec3f(0.0));
+  return Surf(tap.alb * tint, n, tap.trans, 0.35, 0.4, vec3f(0.0));
 }
 `;
 
@@ -906,10 +906,11 @@ fn shadeProp(in: PV, s: Surf, frag: vec2f) -> vec3f {
   let through = 0.4 * sat(-dot(s.n, L)) + 1.1 * pow(sat(dot(V, -L)), 4.0);
   col += s.alb * vec3f(1.0, 1.08, 0.75) * lc * s.trans * through * sh * mix(0.3, 1.0, ao);
   col += lc * ggx(s.n, V, L, s.rough) * s.spec * sh * nl;
-  // reflected sky on glossy surfaces (waxy leaves, wet shells)
+  // reflected sky on glossy surfaces (waxy leaves, wet shells); squared
+  // occlusion: inside a crown or a hollow little sky is left to reflect
   let R = reflect(-V, s.n);
   let fres = 0.04 + 0.96 * pow(1.0 - sat(dot(s.n, V)), 5.0);
-  col += mix(skyBase(R), ambientAt(R, pw), s.rough) * smoothstep(-0.2, 0.15, R.y) * fres * min(s.spec, 1.0) * ao;
+  col += mix(skyBase(R), ambientAt(R, pw), s.rough) * smoothstep(-0.2, 0.15, R.y) * fres * min(s.spec, 1.0) * ao * ao;
   return applyFog(col + s.emissive, in.rel);
 }
 `;
