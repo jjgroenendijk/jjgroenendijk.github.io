@@ -1,7 +1,9 @@
 // Frame orchestration: owns every pass and records one command buffer per frame.
 //
-//   bake terrain cache -> scatter props -> shadow cascades -> clouds
-//   -> opaque (terrain, props, sky) -> water + particles
+//   bake terrain cache -> cloud shadow map -> (bake impostor cards, once)
+//   -> scatter props + cull terrain tiles (frustum + last frame's Hi-Z)
+//   -> shadow cascades (cached) -> clouds -> opaque (props, terrain, sky)
+//   -> Hi-Z depth pyramid -> half-res reflections -> water + particles
 //   -> volumetric light -> TAA -> bloom -> composite
 import { bindGroup } from '../core/gpu.js';
 import { mat4, vec3, frustumPlanes, halton } from '../core/math.js';
@@ -16,6 +18,8 @@ import { ShadowPass, SPLITS } from './shadowPass.js';
 import { SkyPass } from './skyPass.js';
 import { WaterPass } from './waterPass.js';
 import { PostPass } from './postPass.js';
+import { CloudMapPass } from './cloudMapPass.js';
+import { HiZPass } from './hizPass.js';
 
 const NEAR = 0.1;
 
@@ -39,10 +43,12 @@ export class Renderer {
     this.targets = new Targets(device, quality.cloudDiv);
     this.terrain = new TerrainPass(device, this.shared);
     this.props = new PropsPass(device, this.shared, buildMeshes(), quality);
-    this.shadows = new ShadowPass(device, this.shared, quality.shadowSize);
+    this.cloudMap = new CloudMapPass(device, this.shared);
+    this.shadows = new ShadowPass(device, this.shared, quality.shadowSize, this.cloudMap.view);
     this.sky = new SkyPass(device, this.shared);
     this.water = new WaterPass(device, this.shared);
     this.post = new PostPass(device, this.shared, gpu.format);
+    this.hiz = new HiZPass(device);
     this.frameGroup = bindGroup(device, this.shared.frame, [this.uniforms.buffer, this.terrain.cacheView], 'frame');
     this.cacheGroup = this.terrain.cacheBindGroup(this.uniforms.buffer);
     this.frame = 0;
@@ -57,6 +63,9 @@ export class Renderer {
     this.sky.resize(this.targets);
     this.water.resize(this.targets);
     this.post.resize(this.targets);
+    this.hiz.resize(this.targets);
+    this.props.setHiZ(this.hiz.view);
+    this.terrain.setHiZ(this.hiz.view);
     this.resetHistory = true;
   }
 
@@ -83,16 +92,21 @@ export class Renderer {
     }
 
     const levels = this.terrain.updateLevels(pos, this.frame === 0);
-    this.shadows.update({ pos, fwd, fov: fovY, aspect }, env.lightDir);
+    const frustum = frustumPlanes(viewProjNJ);
+    // last frame's depth is useless for occlusion after a cut or a big turn
+    const cut = !this.prev || this.resetHistory || vec3.length(vec3.sub(pos, this.prev.pos)) > 30 || vec3.dot(fwd, this.prev.fwd) < 0.9;
+    this.shadows.update({ pos, fwd, fov: fovY, aspect }, env.lightDir, this.frame);
 
     this.uniforms.write({
       viewProj, invViewProj: mat4.invert(viewProj), prevViewProj, viewProjNoJitter: viewProjNJ,
       camPos: pos, camFwd: fwd, underwater: shot.underwater, time, env,
-      waterLevel: shot.water, width: t.width, height: t.height, jitter, resetHistory: this.resetHistory,
+      waterLevel: shot.water, width: t.width, height: t.height, jitter, resetHistory: this.resetHistory, noOcclusion: cut,
       frame: this.frame, cycleU: shot.u, quality: this.quality.level, splits: [...SPLITS, 0],
-      cascades: this.shadows.matrices, frustum: frustumPlanes(viewProjNJ), levels: levels.data,
-      modes: shot.modes, cacheMask: levels.mask, fade,
+      cascades: this.shadows.matrices, frustum, levels: levels.data,
+      modes: shot.modes, cacheMask: levels.mask, fade, vegDist: this.props.vegDist,
+      cloudMap: this.cloudMap.origin(pos, env.lightDir),
     });
+
 
     const encoder = this.device.createCommandEncoder();
     const on = (name) => !this.skip.has(name);
@@ -101,7 +115,10 @@ export class Renderer {
       this.terrain.bake(pass, this.cacheGroup);
       pass.end();
     }
-    if (on('scatter')) this.props.scatter(encoder, this.frameGroup);
+    this.cloudMap.encode(encoder, this.frameGroup);
+    this.props.bakeCards(encoder, this.frameGroup);
+    if (on('scatter')) this.props.scatter(encoder, this.frameGroup, this.frame);
+    this.terrain.cull(encoder, this.frameGroup);
     if (on('shadows')) this.shadows.encode(encoder, this.frameGroup, this.terrain, this.props);
     if (on('clouds')) this.sky.renderClouds(encoder, t, this.frameGroup);
 
@@ -110,17 +127,19 @@ export class Renderer {
       colorAttachments: [{ view: t.views.hdr, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
       depthStencilAttachment: { view: t.views.depth, depthClearValue: 0, depthLoadOp: 'clear', depthStoreOp: 'store' },
     });
-    if (on('terrain')) this.terrain.draw(main, this.frameGroup, this.shadows.sampleGroup);
+    // props first: they hide much of the (expensive to shade) ground
     if (on('props')) this.props.draw(main, this.frameGroup, this.shadows.sampleGroup);
+    if (on('terrain')) this.terrain.draw(main, this.frameGroup, this.shadows.sampleGroup);
     if (on('sky')) this.sky.draw(main, this.frameGroup);
     main.end();
 
+    this.hiz.encode(encoder);
     if (on('water')) this.water.encode(encoder, t, this.frameGroup, this.shadows.sampleGroup, this.terrain);
     const out = this.gpu.context.getCurrentTexture().createView();
     this.post.encode(encoder, t, this.frameGroup, this.shadows.sampleGroup, out, this.history);
     this.device.queue.submit([encoder.finish()]);
 
-    this.prev = { pos: [...pos], viewProjNJ };
+    this.prev = { pos: [...pos], fwd, viewProjNJ };
     this.history = 1 - this.history;
     this.resetHistory = false;
     this.frame++;

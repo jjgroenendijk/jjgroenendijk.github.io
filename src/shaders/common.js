@@ -14,7 +14,14 @@ var<private> KW: array<f32, ${KNOTS.length}> = array<f32, ${KNOTS.length}>(${KNO
 const waveArr = (name, list) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => `vec4f(${f(w[0])},${f(w[1])},${f(w[2])},${f(w[4])})`).join(',')});
 var<private> ${name}Q: array<f32, ${list.length}> = array<f32, ${list.length}>(${list.map((w) => f(w[3])).join(',')});`;
 
-export const FRAME_FLOATS = 236;
+export const LEVELS = 9; // terrain clipmap levels
+// float offsets of the members that follow the clipmap levels
+export const FRAME_OFS = { levels: 192, cloud: 192 + LEVELS * 4, extra: 196 + LEVELS * 4, fx: 200 + LEVELS * 4, cloudMap: 204 + LEVELS * 4 };
+export const FRAME_FLOATS = 208 + LEVELS * 4;
+// cloud shadow map: CLOUD_MAP_N^2 texels covering CLOUD_MAP_SPAN metres of the cloud layer
+export const CLOUD_MAP_N = 256;
+export const CLOUD_MAP_SPAN = 8192;
+export const CLOUD_ALT = 1700;
 
 export const frameStruct = /* wgsl */ `
 struct Frame {
@@ -33,15 +40,16 @@ struct Frame {
   fog: vec4f,         // x density, y height falloff, z jungle haze, w sky intensity
   waterFog: vec4f,    // rgb in-scatter colour, w visibility scale
   res: vec4f,         // w, h, 1/w, 1/h
-  jitter: vec4f,
+  jitter: vec4f,      // xy TAA jitter, z reset history, w no occlusion history
   misc: vec4f,        // x frame, y cycle u, z wind time, w quality
   cascadeSplits: vec4f,
   lightVP: array<mat4x4f, 3>,
   frustum: array<vec4f, 6>,
-  levels: array<vec4f, 8>,
+  levels: array<vec4f, ${LEVELS}>,
   cloud: vec4f,       // xy wind offset, z coverage, w unused
   extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight, w cache mask
-  fx: vec4f,          // x rainbow, y morning mist, z, w unused
+  fx: vec4f,          // x rainbow, y morning mist, z vegetation draw distance, w unused
+  cloudMap: vec4f,    // xy cloud shadow map origin (cloud plane), z 1/span, w unused
 };
 @group(0) @binding(0) var<uniform> F: Frame;
 `;
@@ -244,11 +252,12 @@ fn cloudCoverage(xz: vec2f) -> f32 {
   let n = fbm(q, 4, 4, 131u) + 0.35 * fbm(q, 32, 2, 151u);
   return n + F.cloud.z;
 }
-fn cloudShadow(pw: vec3f) -> f32 {
+// light let through the cloud layer at a point q on the cloud plane
+fn cloudTransmit(q: vec2f) -> f32 { return 1.0 - 0.75 * smoothstep(0.02, 0.35, cloudCoverage(q)); }
+// where the ray from pw towards the light meets the cloud plane
+fn cloudPlane(pw: vec3f) -> vec2f {
   let L = F.lightDir.xyz;
-  if (L.y < 0.03) { return 1.0; }
-  let q = pw.xz + L.xz * (1700.0 - pw.y) / L.y;
-  return 1.0 - 0.75 * smoothstep(0.02, 0.35, cloudCoverage(q));
+  return pw.xz + L.xz * (${f(CLOUD_ALT)} - pw.y) / max(L.y, 0.03);
 }
 
 // ------------------------------------------------------------ water lighting helpers
@@ -336,10 +345,53 @@ fn ggx(n: vec3f, v: vec3f, l: vec3f, rough: f32) -> f32 {
 }
 `;
 
+// Hi-Z occlusion test against last frame's depth pyramid (min depth per texel,
+// reverse-Z so smaller is farther). A camera-relative box is projected with
+// last frame's matrix; it is hidden if its nearest point lies behind the
+// farthest depth of every texel it covers. bias > 1 demands extra clearance.
+export const hizLib = /* wgsl */ `
+fn occludedBox(hiz: texture_2d<f32>, c: vec3f, e: vec3f, bias: f32) -> bool {
+  if (F.jitter.w > 0.5) { return false; } // no usable history (first frame, camera cut)
+  var lo = vec2f(1e9); var hi = vec2f(-1e9); var zmax = 0.0;
+  for (var i = 0u; i < 8u; i++) {
+    let o = vec3f(select(-e.x, e.x, (i & 1u) != 0u), select(-e.y, e.y, (i & 2u) != 0u), select(-e.z, e.z, (i & 4u) != 0u));
+    let q = F.prevViewProj * vec4f(c + o, 1.0);
+    if (q.w <= 0.1) { return false; }
+    let n = q.xyz / q.w;
+    lo = min(lo, n.xy); hi = max(hi, n.xy); zmax = max(zmax, n.z);
+  }
+  // partly outside last frame's view: nothing is known about the hidden part
+  if (any(lo < vec2f(-1.0)) || any(hi > vec2f(1.0))) { return false; }
+  let dims = vec2f(textureDimensions(hiz, 0));
+  let p0 = vec2f(lo.x * 0.5 + 0.5, 0.5 - hi.y * 0.5) * dims - 0.5;
+  let p1 = vec2f(hi.x * 0.5 + 0.5, 0.5 - lo.y * 0.5) * dims + 0.5;
+  let ext = max(p1.x - p0.x, p1.y - p0.y);
+  let lvl = u32(clamp(ceil(log2(max(ext, 1.0))), 0.0, f32(textureNumLevels(hiz) - 1u)));
+  let s = 1.0 / f32(1u << lvl);
+  if (ext * s > 1.0) { return false; } // larger than the coarsest mip covers with 2x2 texels
+  let ld = vec2i(textureDimensions(hiz, lvl)) - 1;
+  let a = clamp(vec2i(floor(p0 * s)), vec2i(0), ld);
+  let b = clamp(vec2i(floor(p1 * s)), vec2i(0), ld);
+  let z = min(min(textureLoad(hiz, a, lvl).x, textureLoad(hiz, vec2i(b.x, a.y), lvl).x),
+              min(textureLoad(hiz, vec2i(a.x, b.y), lvl).x, textureLoad(hiz, b, lvl).x));
+  return zmax * bias < z;
+}
+`;
+
 export const shadowLib = /* wgsl */ `
 @group(1) @binding(0) var shadowTex: texture_depth_2d_array;
 @group(1) @binding(1) var shadowSmp: sampler_comparison;
 @group(1) @binding(2) var linSmp: sampler;
+@group(1) @binding(3) var cloudMap: texture_2d<f32>;
+
+// cloud shadows: one lookup in the per-frame cloud map, exact noise only beyond it
+fn cloudShadow(pw: vec3f) -> f32 {
+  if (F.lightDir.y < 0.03) { return 1.0; }
+  let q = cloudPlane(pw);
+  let uv = (q - F.cloudMap.xy) * F.cloudMap.z + 0.5;
+  if (any(uv < vec2f(0.002)) || any(uv > vec2f(0.998))) { return cloudTransmit(q); }
+  return textureSampleLevel(cloudMap, linSmp, uv, 0.0).x;
+}
 
 var<private> POISSON: array<vec2f, 8> = array<vec2f, 8>(
   vec2f(-0.326, -0.406), vec2f(-0.840, -0.074), vec2f(-0.696, 0.457), vec2f(-0.203, 0.621),
