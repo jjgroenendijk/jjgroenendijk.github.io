@@ -48,12 +48,12 @@ export class Environment {
     const groundAmb = skyAmb.map((v, i) => v * [0.32, 0.36, 0.28][i] + lightColor[i] * Math.max(lightDir[1], 0) * 0.06);
     const night = smoothstep(0.02, -0.18, sun[1]);
 
-    // weather: slowly drifting cloud cover
+    // weather: mostly fair, with fair-weather cumulus drifting by
     const s = this.seed * 100;
-    const coverage = -0.05 + 0.08 * Math.sin(t / 530 + s) + 0.07 * Math.sin(t / 233 + s * 1.7) + 0.04 * Math.sin(t / 97 + s * 2.3);
+    const coverage = -0.15 + 0.08 * Math.sin(t / 530 + s) + 0.07 * Math.sin(t / 233 + s * 1.7) + 0.04 * Math.sin(t / 97 + s * 2.3);
     const wind = [(t * 7 + s * 1000) % W, (t * 3 + s * 700) % W];
     // passing showers leave a rainbow opposite a low sun now and then
-    const shower = Math.max(0, Math.sin(t / 151 + s * 3.1)) * smoothstep(-0.05, 0.08, coverage);
+    const shower = Math.max(0, Math.sin(t / 151 + s * 3.1)) * smoothstep(-0.08, 0.06, coverage);
     // the ground soaks up quickly in a shower and dries slowly (faster in the sun)
     const raining = smoothstep(0.35, 0.75, shower);
     if (this.wetness === null) this.wetness = raining;
@@ -62,17 +62,17 @@ export class Environment {
     const rainbow = Math.pow(shower, 3) * smoothstep(0.03, 0.12, sun[1]) * smoothstep(0.75, 0.4, sun[1]);
     // mist settles before sunrise and burns off in the morning; stronger on some days
     const dayIndex = Math.floor((t + this.tod * 1320) / 1320);
-    const mistDay = 0.4 + 0.6 * ((Math.sin(dayIndex * 12.9898 + s) * 43758.5453) % 1 + 1) % 1;
+    const mistDay = 0.2 + 0.4 * ((Math.sin(dayIndex * 12.9898 + s) * 43758.5453) % 1 + 1) % 1;
     const mist = mistDay * smoothstep(-0.25, -0.02, sun[1]) * smoothstep(0.3, 0.06, sun[1]) * (this.tod < 0.5 ? 1 : 0);
 
     // exposure from the light actually falling on the scene
     // (the constant light term accounts for low suns glaring straight into view)
     const sceneLum = lum(lightColor) * (Math.max(lightDir[1], 0.12) * 0.55 + 0.14) + lum(skyAmb) * 1.1;
     // eyes adapt, but not fully: nights stay dark and blue
-    let exposure = 0.5 / Math.pow(Math.max(sceneLum, 1e-5), 0.8) * Math.pow(0.4, 0.2);
+    let exposure = 0.6 / Math.pow(Math.max(sceneLum, 1e-5), 0.8) * Math.pow(0.4, 0.2);
     exposure = Math.min(exposure, 40);
     // our eyes adapt to the shade under the canopy
-    exposure *= 1 + 0.9 * shot.modes.land + 0.3 * shot.modes.und;
+    exposure *= 1 + 1.2 * shot.modes.land + 0.3 * shot.modes.und;
     if (this.exposure === null) this.exposure = exposure;
     this.exposure *= Math.pow(exposure / this.exposure, 1 - Math.exp(-dt * 1.5));
 
@@ -83,7 +83,7 @@ export class Environment {
       tod: this.tod, sun, moon, lightDir, lightColor, isSun: useSun ? 1 : 0, night,
       stars: smoothstep(-0.05, -0.25, sun[1]),
       skyAmb, groundAmb, exposure: this.exposure,
-      fog: [0.000055 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
+      fog: [0.00004 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
       waterFog, coverage, wind, rainbow, mist, wetness: this.wetness,
     };
   }

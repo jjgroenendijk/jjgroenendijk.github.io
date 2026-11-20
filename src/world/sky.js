@@ -55,5 +55,6 @@ export function todRate(tod) {
   const golden = Math.exp(-Math.pow((e - 0.06) / 0.16, 2));
   const night = smoothstep(-0.05, -0.3, e);
   const base = 1 / (22 * 60); // ~22 min per full day before warping
-  return base * (1.25 - 0.8 * golden + 0.6 * night);
+  // nights pass quickly: the island is mostly seen in the sun
+  return base * (1.25 - 0.8 * golden + 1.6 * night);
 }

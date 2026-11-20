@@ -158,11 +158,13 @@ function crownFrame(sp) {
 const packUV = (u, v, layer) => layer * 1048576 + Math.round(u * 1023) * 1024 + Math.round(v * 1023);
 
 // Per LOD: smallest branch radius drawn, radial segments by size, share and
-// size of the foliage cards (fewer, larger cards far away keep the volume).
+// size of the foliage cards. Coarser LODs keep a subset of the very same
+// cards (same place, orientation and centre), enlarged to keep the crown's
+// volume and silhouette, so switching LOD does not change the tree's shape.
 const LOD = [
-  { minR: 0, radial: (r) => (r > 0.01 ? 7 : r > 0.004 ? 4 : 3), cards: 1, size: 1, extras: true },
-  { minR: 0.0045, radial: (r) => (r > 0.012 ? 5 : 3), cards: 0.45, size: 1.45, extras: false },
-  { minR: 0.009, radial: () => 3, cards: 0.18, size: 2.2, extras: false },
+  { minR: 0, radial: (r) => (r > 0.01 ? 7 : r > 0.004 ? 4 : 3), cards: 1, size: 1, perTip: 2, extras: true },
+  { minR: 0.0045, radial: (r) => (r > 0.012 ? 5 : 3), cards: 0.7, size: 1.4, perTip: 1, extras: false },
+  { minR: 0.009, radial: () => 3, cards: 0.4, size: 1.8, perTip: 1, extras: false },
 ];
 
 // every LOD of a tree is built from the same skeleton
@@ -175,7 +177,7 @@ function skeleton(kind, variant) {
 
 export function tree(kind, variant, lod) {
   const sp = SPECIES[kind];
-  const R = rng(2000 + variant * 31 + lod);
+  const R = rng(2000 + variant * 31);
   const nodes = skeleton(kind, variant);
   const crown = crownFrame(sp);
   const L = LOD[lod];
@@ -217,25 +219,30 @@ export function tree(kind, variant, lod) {
     });
   }
 
-  // foliage cards on the twigs
+  // foliage cards on the twigs; every card's randomness comes from its own
+  // twig, so all LODs agree on it
   const tips = nodes.map((n, i) => i).filter((i) => nodes[i].r < TWIG * 2.2 && nodes[i].p[1] > sp.trunk * 0.9);
-  const keep = rng(77 + lod);
   for (const i of tips) {
-    if (keep() > L.cards) continue;
+    const T = rng(i * 7919 + variant * 31 + 5);
+    if (T() > L.cards) continue;
     const nd = nodes[i];
     const twig = norm(sub(nd.p, nodes[nd.parent].p));
     const out = crown.normal(nd.p);
-    for (let c = 0; c < (lod === 0 ? 2 : 1); c++) {
-      const size = sp.card * L.size * (0.75 + 0.5 * R());
+    for (let c = 0; c < 2; c++) {
+      const size0 = sp.card * (0.75 + 0.5 * T());
       // the cluster points along the twig and outwards, droops a little,
       // and faces mostly up (leaves turn to the light)
-      const dir = norm(add(add(mul(twig, 0.6), mul(out, 0.5)), [(R() - 0.5) * 0.8, -0.25 + (R() - 0.5) * 0.4, (R() - 0.5) * 0.8]));
-      const face = norm(add([0, 0.9, 0], add(mul(out, 0.5), [(R() - 0.5), 0, (R() - 0.5)])));
+      const dir = norm(add(add(mul(twig, 0.6), mul(out, 0.5)), [(T() - 0.5) * 0.8, -0.25 + (T() - 0.5) * 0.4, (T() - 0.5) * 0.8]));
+      const face = norm(add([0, 0.9, 0], add(mul(out, 0.5), [(T() - 0.5), 0, (T() - 0.5)])));
+      if (c >= L.perTip) break;
+      const size = size0 * L.size;
       let side = cross(face, dir);
       if (len(side) < 1e-3) side = cross([1, 0, 0], dir);
       side = mul(norm(side), size * 0.5);
-      const base = add(nd.p, mul(dir, -size * 0.12));
-      const tip = add(base, mul(dir, size));
+      // grown around the full-detail card's centre
+      const centre = add(nd.p, mul(dir, size0 * 0.38));
+      const base = add(centre, mul(dir, -size * 0.5));
+      const tip = add(centre, mul(dir, size * 0.5));
       const corners = [[sub(base, side), 0, 1], [add(base, side), 1, 1], [add(tip, side), 1, 0], [sub(tip, side), 0, 0]];
       const ids = corners.map(([p, u, v]) => {
         // crown normal, a little of the card's own orientation for variety

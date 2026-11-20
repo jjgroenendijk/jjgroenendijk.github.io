@@ -1,5 +1,6 @@
 import { frameStruct, commonLib, shadowLib, shadowLibSimple } from './common.js';
 import { GRID_M, SIDE, cacheLib } from './terrain.js';
+import { WAVES, RIPPLES } from '../world/waves.js';
 
 export const waterWGSL = frameStruct + commonLib + shadowLib + /* wgsl */ `
 @group(2) @binding(0) var sceneTex: texture_2d<f32>;
@@ -69,6 +70,33 @@ fn toScreen(rel: vec3f) -> vec3f {
 }
 fn sceneAt(uv: vec2f) -> vec3f { return textureSampleLevel(sceneTex, linSmp, uv, 0.0).rgb; }
 
+// Slope variance of the waves and ripples faded out at this distance (they
+// get too small for the pixel). Kept as roughness instead of dropped, so the
+// far sea keeps its sheen and widening sun path instead of turning into a
+// flat mirror (LEADR-style).
+fn unresolvedSlopeVar(dist: f32, near: f32) -> f32 {
+  var v = 0.0;
+  for (var i = 0; i < ${WAVES.length}; i++) {
+    let w = WV[i];
+    let k = length(w.xy);
+    let f = sat(1.0 - dist / (TAU / k * 14.0));
+    v += 0.5 * k * k * w.z * w.z * (1.0 - f * f);
+  }
+  for (var i = 0; i < ${RIPPLES.length}; i++) {
+    let w = RP[i];
+    v += 0.5 * dot(w.xy, w.xy) * w.z * w.z * (1.0 - near * near);
+  }
+  return v;
+}
+
+// Wind on the sea is patchy: gusts roughen the surface, calm slicks smooth
+// it. Large drifting patches that break up the uniform far water. 0.4..1.6
+fn windPatch(p: vec2f, t: f32) -> f32 {
+  let q = p + vec2f(t * 3.0, t * 1.3) % W;
+  let g = fbm(q, 48, 3, 331u) + 0.5 * fbm(q * vec2f(1.0, 0.35), 96, 2, 337u);
+  return clamp(1.0 + g * 1.6, 0.4, 1.6);
+}
+
 fn waterScatter() -> vec3f {
   return (F.lightColor.rgb * max(F.lightDir.y, 0.0) * 0.55 + F.skyAmb.rgb * 0.8) * vec3f(0.006, 0.06, 0.12);
 }
@@ -80,8 +108,11 @@ fn waterScatter() -> vec3f {
   let V = -rd;
   let t = F.camPos.w;
   let near = 1.0 - smoothstep(20.0, 260.0, dist);
-  let rg = rippleNormal(pw.xz, t, near);
+  let gust = windPatch(pw.xz, t);
+  let rg = rippleNormal(pw.xz, t, near) * gust;
   var n = normalize(in.n + vec3f(-rg.x, 0.0, -rg.y));
+  // ggx alpha from the unresolved slopes (Beckmann: alpha^2 = 2 sigma^2)
+  let alpha = sqrt(0.0025 + 2.0 * unresolvedSlopeVar(dist, near) * gust);
   let px = vec2i(in.pos.xy);
   let uv = in.pos.xy * F.res.zw;
   let L = F.lightDir.xyz;
@@ -128,11 +159,21 @@ fn waterScatter() -> vec3f {
   let D = clamp(dist * 0.3, 4.0, 40.0);
   let shift = clamp(toScreen(in.rel + R * D).xy - toScreen(in.rel + Rs * D).xy, vec2f(-0.04), vec2f(0.04));
   let rt = textureSampleLevel(reflTex, linSmp, uv + shift, 0.0);
-  let refl = mix(skyBase(R), rt.rgb, rt.a);
-  let fres = 0.02 + 0.98 * pow(1.0 - max(dot(n, V), 0.0), 5.0);
+  // a rough sea reflects the sky from a spread of slopes, on average higher
+  // than the mirror direction: the horizon water is a little darker and
+  // bluer than the sky just above it
+  let Rsky = normalize(vec3f(R.x, R.y + alpha * 0.6, R.z));
+  let refl = mix(skyBase(Rsky), rt.rgb, rt.a);
+  // Fresnel averaged over the slopes (rough Schlick): no white mirror at grazing angles
+  let fres = 0.02 + (max(1.0 - alpha * 1.6, 0.02) - 0.02) * pow(1.0 - max(dot(n, V), 0.0), 5.0);
   var col = mix(refrC, refl, fres);
   let sh = shadowAt(in.rel, vec3f(0.0, 1.0, 0.0), in.pos.xy) * cloudShadow(pw);
-  col += F.lightColor.rgb * ggx(n, V, L, 0.05 + 0.07 * (1.0 - near)) * sh * 0.6;
+  // sun glitter: the wider lobe far away draws the long sun path
+  col += F.lightColor.rgb * ggx(n, V, L, sqrt(alpha)) * sh * 0.6;
+  // and sparkles nearby where single ripple facets catch the sun
+  let fq0 = pw.xz * 3.0 + vec2f(t * 0.7, t * 0.4);
+  let glint = pow(hf(hashu(u32(floor(fq0.x)) * 7919u + u32(floor(fq0.y)) * 104729u + u32(t * 6.0))), 60.0);
+  col += F.lightColor.rgb * glint * ggx(n, V, L, 0.35) * sh * 0.25 * near;
 
   // foam: shoreline bands and crests
   let fn1 = fbm(pw.xz + vec2f(t * 0.6, t * 0.4) % 512.0, 2048, 3, 301u);
