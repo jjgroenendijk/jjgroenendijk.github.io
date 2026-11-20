@@ -37,6 +37,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (kind == ${TYPE.fish}u) { fish(gid.x + gid.y * 64u, t); return; }
   if (kind == ${TYPE.bird}u) { bird(gid.x + gid.y * 64u, t); return; }
   if (kind == ${TYPE.manta}u || kind == ${TYPE.turtle}u) { cruiser(gid.x + gid.y * 64u, kind, t); return; }
+  if (kind == ${TYPE.dolphin}u) { dolphin(gid.x + gid.y * 64u, t); return; }
   if (kind >= ${TYPE.ship}u) { landmark(gid.x + gid.y * 64u, kind, t); return; }
   let R = i32(P.radius);
   if (gid.x > u32(2 * R) || gid.y > u32(2 * R)) { return; }
@@ -183,6 +184,36 @@ fn cruiser(i: u32, kind: u32, t: f32) {
   emit(rel, vec4f(pos, sc), vec4f(yaw, sin(t * 0.3 + hf(sh) * 5.0) * 0.08, hf(sh + 7u), hf(sh + 8u) * 100.0), dist);
 }
 
+// a pod of dolphins cruising the open water near the lagoon, leaping now and then
+fn dolphin(i: u32, t: f32) {
+  if (i >= P.count || F.camFwd.w > 0.5) { return; }
+  let cyc = floor(F.camPos.z / CYCLE);
+  let ch = hashu(u32(i32(cyc) + 1000) * 747796405u);
+  let side = select(-1.0, 1.0, (ch & 2u) == 2u);
+  // the pod swims along the path through the lagoon approach, looping every 360 m
+  let s = (t * 6.0 + f32(i) * 1.7) % 360.0;
+  let z = (cyc + 0.12) * CYCLE + s;
+  let lane = side * (24.0 + f32(i % 3u) * 3.0) + sin(t * 0.3 + f32(i)) * 1.5;
+  let x = pathX(z) + lane;
+  if (terrainHeight(vec2f(x, z)) > -3.0) { return; }
+  // leap: a short ballistic arc every few seconds, otherwise swimming just below the surface
+  let ph = fract(t / 7.0 + hf(ch + i) * 0.6);
+  let jump = sat(ph / 0.16);
+  var y = -1.1 + sin(t * 1.5 + f32(i)) * 0.15;
+  var pitch = 0.0;
+  if (ph < 0.16) {
+    y = -0.6 + 2.6 * sin(PI * jump);
+    pitch = -cos(PI * jump) * 0.9;
+  }
+  // fade in/out at the ends of the loop so the reset is never seen
+  let fade = smoothstep(0.0, 25.0, s) * smoothstep(360.0, 335.0, s);
+  let pos = vec3f(x, y, z);
+  let rel = pos - F.camPos.xyz;
+  let dist = length(rel);
+  if (dist > P.maxDist || fade < 0.02) { return; }
+  emit(rel, vec4f(pos, 2.2 * fade), vec4f(atan2(pathX(z + 1.0) - pathX(z), 1.0), pitch, hf(ch), f32(i) * 13.0), dist);
+}
+
 // pirate set pieces, one per cycle, positioned relative to the camera path
 fn landmark(i: u32, kind: u32, t: f32) {
   if (i >= P.count) { return; }
@@ -324,6 +355,7 @@ fn propVertex(pos: vec3f, nrm: vec3f, ex: vec4f, a: vec4f, b: vec4f) -> PV {
   }
   if (mat == 17u) { p.z += sin(t * 0.7 + ph) * 0.25 * flex; }
   if (mat == 18u) { p.x += sin(t * 6.0 + ph - p.z * 1.8) * 0.28 * flex; }
+  if (mat == 26u) { p.y += sin(t * 4.0 + ph) * 0.05 * flex; }
   if (mat == 22u) { p.y += sin(t * 1.3 + ph - abs(p.x) * 2.0) * abs(p.x) * 0.45 * flex; }
   if (mat == 24u) { p.y += sin(t * 1.5 + ph + p.z * 2.0) * 0.22 * flex; p.z += cos(t * 1.5 + ph) * 0.06 * flex; }
   if (mat == 12u || mat == 13u) {
@@ -394,6 +426,9 @@ fn coralColor(h: f32) -> vec3f {
       let m = vnoise3(lp * 22.0) * 0.6 + vnoise3(lp * 55.0) * 0.4;
       let base = mix(vec3f(0.05, 0.14, 0.03), vec3f(0.15, 0.24, 0.05), hue);
       alb = base * (0.55 + 0.9 * m);
+      // clumpy leaf normals
+      let jn = vec3f(vnoise3(lp * 45.0), vnoise3(lp * 45.0 + 11.0), vnoise3(lp * 45.0 + 23.0)) - 0.5;
+      n = normalize(n + jn * 1.4);
       if (in.mat == 14u) { alb *= vec3f(0.9, 1.05, 0.8); }
       trans = 0.7; spec = 0.15; rough = 0.5;
     }
@@ -496,6 +531,10 @@ fn coralColor(h: f32) -> vec3f {
       let cell = abs(fract(q.x + sin(q.y)) - 0.5) + abs(fract(q.y + sin(q.x * 0.7)) - 0.5);
       alb = mix(vec3f(0.18, 0.13, 0.07), vec3f(0.45, 0.33, 0.16), smoothstep(0.2, 0.7, cell) * (0.7 + 0.3 * vnoise3(lp * 20.0)));
       spec = 0.4; rough = 0.35;
+    }
+    case 26u: {
+      alb = mix(vec3f(0.62, 0.64, 0.66), vec3f(0.20, 0.23, 0.27), smoothstep(-0.03, 0.04, lp.y + lp.x * 0.1));
+      spec = 0.8; rough = 0.25;
     }
     case 24u: { alb = vec3f(0.30, 0.32, 0.24) * (0.7 + 0.5 * vnoise3(lp * 30.0)); }
     default: {}

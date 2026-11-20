@@ -82,3 +82,29 @@ export function turtle() {
   flipper(0.25, -0.32, 0.18, true); flipper(-0.25, -0.32, 0.18, true);
   return mb.build();
 }
+
+export function dolphin() {
+  const mb = new MB();
+  const rings = 14, rad = 8;
+  const base = mb.v.length / 10;
+  for (let i = 0; i <= rings; i++) {
+    const s = i / rings;               // 0 = beak, 1 = tail stock
+    const z = 0.5 - s;
+    const r = 0.13 * Math.pow(Math.sin(Math.PI * Math.min(0.06 + s * 0.94, 1)), 0.6) * (s < 0.12 ? 0.55 + s * 3.7 : 1) * (1 - 0.55 * Math.max(s - 0.6, 0) / 0.4);
+    for (let j = 0; j <= rad; j++) {
+      const a = (j / rad) * Math.PI * 2;
+      const n = norm([Math.cos(a), Math.sin(a) * 0.9, 0]);
+      mb.vert([Math.cos(a) * r * 0.85, Math.sin(a) * r, z], n, [MAT.dolphin, 0.6 + 0.4 * Math.max(Math.sin(a), 0), Math.max(0, s - 0.45), 0]);
+    }
+  }
+  for (let i = 0; i < rings; i++) for (let j = 0; j < rad; j++) {
+    const a = base + i * (rad + 1) + j, b = a + rad + 1;
+    mb.quad(a, b, b + 1, a + 1);
+  }
+  const e = (f) => [MAT.dolphin, 0.8, f, 0];
+  mb.flatTri([0, 0.11, 0.05], [0, 0.26, -0.12], [0, 0.11, -0.16], e(0.2), e(0.3), e(0.3), [1, 0, 0]); // dorsal fin
+  mb.flatTri([0, 0, -0.48], [0.2, 0.01, -0.62], [0.05, 0, -0.55], e(1), e(1), e(1));                  // flukes
+  mb.flatTri([0, 0, -0.48], [-0.05, 0, -0.55], [-0.2, 0.01, -0.62], e(1), e(1), e(1));
+  for (const s of [-1, 1]) mb.flatTri([s * 0.08, -0.06, 0.22], [s * 0.22, -0.12, 0.1], [s * 0.08, -0.07, 0.12], e(0.1), e(0.1), e(0.1));
+  return mb.build();
+}

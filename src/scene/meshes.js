@@ -2,7 +2,7 @@
 // units, used for GPU frustum culling.
 import { palm, tree, bush, fern, banana } from './plants.js';
 import { rock, coralBranch, coralBrain, seaFan, seagrass } from './reef.js';
-import { fish, bird, manta, turtle } from './fauna.js';
+import { fish, bird, manta, turtle, dolphin } from './fauna.js';
 import { galleon, wreck, chest, rowboat, barrel } from './pirates.js';
 
 export function buildMeshes() {
@@ -23,6 +23,7 @@ export function buildMeshes() {
     bird: { ...bird(), bound: 0.8 },
     manta: { ...manta(), bound: 0.7 },
     turtle: { ...turtle(), bound: 0.8 },
+    dolphin: { ...dolphin(), bound: 0.7 },
     galleon: { ...galleon(), bound: 30 },
     wreck: { ...wreck(), bound: 16 },
     chest: { ...chest(), bound: 1.2 },
