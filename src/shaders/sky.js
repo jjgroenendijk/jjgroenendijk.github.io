@@ -151,7 +151,7 @@ fn meteor(rd: vec3f) -> vec3f {
   let E = F.fog.w;
   var col: vec3f;
   if (rd.y >= 0.0) {
-    col = skyBase(rd);
+    col = skyRadiance(rd);
     // sun disc with limb darkening
     let sd = dot(rd, F.sunDir.xyz);
     let sunR = 0.99996;

@@ -38,19 +38,24 @@ const VFC = () => GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderSta
 const VF = () => GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
 export const entry = {
   uniform: (dynamic = false, visibility = VFC()) => ({ visibility, buffer: { type: 'uniform', hasDynamicOffset: dynamic } }),
-  storage: (readOnly = false) => ({ visibility: GPUShaderStage.COMPUTE, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } }),
+  storage: (readOnly = false, visibility = GPUShaderStage.COMPUTE) => ({ visibility, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } }),
   texture: (sampleType = 'float', viewDimension = '2d', visibility = VF()) => ({ visibility, texture: { sampleType, viewDimension } }),
   storageTexture: (format, viewDimension = '2d') => ({ visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format, viewDimension } }),
   sampler: (type = 'filtering', visibility = VF()) => ({ visibility, sampler: { type } }),
 };
 
+// Entries are numbered by position unless they name a binding with at(): a
+// layout can then leave room for bindings that shared WGSL libraries declare.
+export const at = (binding, item) => ({ binding, item });
+const numbered = (list) => list.map((x, i) => (x && x.item !== undefined && Number.isInteger(x.binding) ? x : { binding: i, item: x }));
+
 export function bindLayout(device, label, entries) {
-  return device.createBindGroupLayout({ label, entries: entries.map((e, i) => ({ binding: i, ...e })) });
+  return device.createBindGroupLayout({ label, entries: numbered(entries).map(({ binding, item }) => ({ binding, ...item })) });
 }
 
 export function bindGroup(device, layout, resources, label) {
   return device.createBindGroup({
     label, layout,
-    entries: resources.map((r, i) => ({ binding: i, resource: r instanceof GPUBuffer ? { buffer: r } : r })),
+    entries: numbered(resources).map(({ binding, item }) => ({ binding, resource: item instanceof GPUBuffer ? { buffer: item } : item })),
   });
 }

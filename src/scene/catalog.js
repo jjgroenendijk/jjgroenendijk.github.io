@@ -1,5 +1,6 @@
 // Catalogue of everything that gets scattered over the world.
 // Shared by the mesh builder, the scatter compute shader and the renderer.
+import { FISH_COUNT, BIRD_COUNT } from '../shaders/flock.js';
 
 // Material ids (stored per vertex in extra.x, interpreted by the prop shader)
 export const MAT = {
@@ -62,8 +63,8 @@ export const LAYERS = [
   { type: 'clownfish', cell: 4, maxDist: 40, meshes: ['fish'], caps: [400], keep: 0 },
   { type: 'starfish', cell: 2, maxDist: 45, meshes: ['starfish'], caps: [600], keep: 0 },
   { type: 'seagrass', cell: 1, maxDist: 45, meshes: ['seagrass'], caps: [5000], keep: 8 },
-  { type: 'fish', count: 416, maxDist: 70, meshes: ['fish'], caps: [416], keep: 10 },
-  { type: 'bird', count: 36, maxDist: 900, meshes: ['bird'], caps: [36], keep: 0 },
+  { type: 'fish', count: FISH_COUNT, maxDist: 70, meshes: ['fish'], caps: [FISH_COUNT], keep: 10 },
+  { type: 'bird', count: BIRD_COUNT, maxDist: 900, meshes: ['bird'], caps: [BIRD_COUNT], keep: 0 },
   { type: 'shark', count: 4, maxDist: 90, meshes: ['shark'], caps: [4], keep: 0 },
   { type: 'ray', count: 6, maxDist: 70, meshes: ['manta'], caps: [6], keep: 0 },
   { type: 'jelly', count: 16, maxDist: 60, meshes: ['jelly'], caps: [16], keep: 0 },

@@ -1,12 +1,12 @@
 import { frameStruct, commonLib, shadowLib, shadowLibSimple } from './common.js';
-import { GRID_M, SIDE } from './terrain.js';
+import { GRID_M, SIDE, cacheLib } from './terrain.js';
 
 export const waterWGSL = frameStruct + commonLib + shadowLib + /* wgsl */ `
 @group(2) @binding(0) var sceneTex: texture_2d<f32>;
 @group(2) @binding(1) var depthTex: texture_depth_2d;
 @group(2) @binding(2) var reflTex: texture_2d<f32>;
 
-@group(0) @binding(1) var cacheTex: texture_2d_array<f32>;
+${cacheLib}
 
 struct WV2 {
   @builtin(position) pos: vec4f,
@@ -16,9 +16,7 @@ struct WV2 {
   @location(3) surf: f32,
 };
 
-fn groundAt(lvl: u32, g: vec2i) -> f32 {
-  return textureLoad(cacheTex, clamp(g + vec2i(${GRID_M}), vec2i(0), vec2i(${GRID_M * 2})), lvl, 0).x;
-}
+fn groundAt(lvl: u32, g: vec2i) -> f32 { return cacheFetch(lvl, g).x; }
 
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> WV2 {
   // same grid layout as the terrain (see gridPoint)
