@@ -34,7 +34,7 @@ export class WaterPass {
     this.sceneGroup = bindGroup(this.device, this.sceneLayout, [targets.views.sceneCopy, targets.views.depth], 'water-scene');
   }
 
-  encode(encoder, targets, frameGroup, shadowGroup, terrain) {
+  encode(encoder, targets, frameGroup, shadowGroup, terrain, draws) {
     encoder.copyTextureToTexture({ texture: targets.hdr }, { texture: targets.sceneCopy }, [targets.width, targets.height]);
     const pass = encoder.beginRenderPass({
       label: 'water',
@@ -45,7 +45,7 @@ export class WaterPass {
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, shadowGroup);
     pass.setBindGroup(2, this.sceneGroup);
-    terrain.drawGrid(pass);
+    terrain.drawGrid(pass, draws);
     pass.setPipeline(this.particlePipeline);
     pass.draw(6, PARTICLES);
     pass.end();

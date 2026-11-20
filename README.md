@@ -20,6 +20,8 @@ Useful URL parameters while developing:
 | parameter | effect |
 |-----------|--------|
 | `u=0.4` | start at this point of the shot cycle (0 aerial, 0.25 lagoon, 0.4 jungle, 0.7 reef) |
+| `cycle=3` | which of the eight shot cycles to play (random by default) |
+| `seed=0.3` | weather seed (random by default); with `cycle` it makes runs repeatable |
 | `tod=0.7` | time of day (0 midnight, 0.5 noon, 0.75 sunset) |
 | `q=low\|medium\|high` | quality preset |
 | `scale=0.8` | fixed render scale (disables adaptive resolution) |
@@ -43,13 +45,14 @@ src/
 
 Each frame:
 
-1. **Terrain cache** (compute): heights, normals and far horizon shadows of a geometry clipmap are baked into a texture array, only for levels that moved.
-2. **Scatter** (compute): vegetation, coral, wildlife and set pieces are placed around the camera, frustum culled and LOD-sorted straight into GPU buffers that drive indirect draws.
-3. **Shadows**: three stabilised cascades.
-4. **Clouds**: ray-marched volumetric cumulus at reduced resolution.
-5. **Opaque**: terrain, props, sky (reverse-Z, HDR).
-6. **Water**: Gerstner waves, refraction with absorption, screen-space reflections, foam; floating particles.
-7. **Post**: volumetric light shafts, TAA, bloom, ACES tonemapping and grading.
+1. **Terrain cache** (compute): heights, normals and far horizon shadows of a nine-level geometry clipmap (about 12 km of view distance) are baked into a texture array, only for levels that moved.
+2. **Cloud shadow map** (compute): the light let through by the cloud layer is baked into a small texture, so the ground, plants and water sample it once instead of evaluating cloud noise per pixel.
+3. **Scatter** (compute): vegetation, coral, wildlife and set pieces are placed around the camera, frustum culled (cheaply before any terrain noise is evaluated) and sorted into up to three levels of detail, straight into GPU buffers that drive indirect draws.
+4. **Shadows**: three stabilised cascades. Distant cascades only get large casters at coarse detail, and the far cascade is redrawn every other frame.
+5. **Clouds**: ray-marched volumetric cumulus at reduced resolution.
+6. **Opaque**: props first (so they hide terrain behind them early), then terrain in frustum-culled tiles, then sky (reverse-Z, HDR).
+7. **Water**: Gerstner waves, refraction with absorption, screen-space reflections, foam; floating particles.
+8. **Post**: volumetric light shafts, TAA, bloom, ACES tonemapping and grading.
 
 The world is periodic over 16 km in both directions, with every noise lattice wrapped, so the camera can fly forever without losing floating-point precision.
 The JavaScript copy of the terrain function in `world/` uses the same integer hashing as the WGSL version, so the camera director can keep a safe distance from the ground.

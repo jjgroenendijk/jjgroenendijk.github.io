@@ -10,6 +10,7 @@ export function createShared(device) {
     entry.texture('depth', '2d-array'),
     entry.sampler('comparison'),
     entry.sampler('filtering'),
+    entry.texture(), // cloud shadow map
   ]);
   const cascade = bindLayout(device, 'cascade', [entry.uniform(false, GPUShaderStage.VERTEX)]);
   const linear = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });

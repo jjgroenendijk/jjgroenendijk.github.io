@@ -9,8 +9,10 @@ export function buildMeshes() {
   return {
     palm0: { ...palm(0), bound: 0.75 },
     palm1: { ...palm(1), bound: 0.75 },
+    palm2: { ...palm(2), bound: 0.75 },
     tree0: { ...tree(0), bound: 0.6 },
     tree1: { ...tree(1), bound: 0.6 },
+    tree2: { ...tree(2), bound: 0.6 },
     bush: { ...bush(), bound: 0.8 },
     fern: { ...fern(), bound: 0.9 },
     flowers: { ...flowerBush(), bound: 0.8 },

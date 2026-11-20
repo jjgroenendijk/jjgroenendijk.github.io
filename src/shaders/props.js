@@ -6,7 +6,8 @@ struct SP {
   cell: f32, radius: f32, maxDist: f32, lodDist: f32,
   kind: u32, slot0: u32, slot1: u32, base0: u32,
   base1: u32, cap0: u32, cap1: u32, count: u32,
-  bound: f32, keepDist: f32, p0: f32, p1: f32,
+  bound: f32, keepDist: f32, reach: f32, lod2Dist: f32,
+  slot2: u32, base2: u32, cap2: u32, p0: u32,
 };
 @group(1) @binding(0) var<uniform> P: SP;
 @group(1) @binding(1) var<storage, read_write> inst: array<vec4f>;
@@ -23,7 +24,8 @@ fn emit(rel: vec3f, a: vec4f, b: vec4f, dist: f32) {
   }
   if (!vis && dist > P.keepDist) { return; }
   var slot = P.slot0; var base = P.base0; var cap = P.cap0;
-  if (dist > P.lodDist && P.slot1 != P.slot0) { slot = P.slot1; base = P.base1; cap = P.cap1; }
+  if (dist > P.lod2Dist) { slot = P.slot2; base = P.base2; cap = P.cap2; }
+  else if (dist > P.lodDist) { slot = P.slot1; base = P.base1; cap = P.cap1; }
   let idx = atomicAdd(&args[slot * 5u + 1u], 1u);
   if (idx >= cap) { return; }
   inst[(base + idx) * 2u] = a;
@@ -65,6 +67,16 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let rel2 = p - F.camPos.xz;
   let dist = length(rel2);
   if (dist > P.maxDist) { return; }
+  // cheap frustum test on a vertical column before evaluating any terrain noise
+  if (P.reach > 0.0 && dist > P.keepDist) {
+    let y0 = -60.0 - F.camPos.y;
+    let y1 = 360.0 - F.camPos.y;
+    for (var i = 0; i < 4; i++) {
+      let pl = F.frustum[i];
+      let e = dot(pl.xz, rel2) + max(pl.y * y0, pl.y * y1) + pl.w;
+      if (e < -P.reach) { return; }
+    }
+  }
   let h = terrainHeight(p);
   let d = abs(p.x - pathX(p.y));
   var prob = 0.0;

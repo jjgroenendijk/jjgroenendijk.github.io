@@ -7,15 +7,15 @@ export function palm(lod) {
   const mb = new MB();
   const R = rng(lod === 0 ? 11 : 12);
   const trunk = (t) => [0.05 * Math.sin(t * 2.4) * t, t, 0.02 * Math.sin(t * 3.1)];
-  mb.tube(trunk, (t) => 0.019 * (1 + 0.7 * Math.exp(-t * 14)) * (1 - 0.25 * t), lod === 0 ? 12 : 5, lod === 0 ? 7 : 5,
+  mb.tube(trunk, (t) => 0.019 * (1 + 0.7 * Math.exp(-t * 14)) * (1 - 0.25 * t), [12, 5, 3][lod], [7, 5, 3][lod],
     (t) => [MAT.palmBark, 0.55 + 0.45 * t, 0, t]);
   const top = trunk(1);
-  mb.ico(add(top, [0, 0.005, 0]), 0.032, 1, () => [MAT.coconut, 0.6, 0.1, 1]);
+  if (lod < 2) mb.ico(add(top, [0, 0.005, 0]), 0.032, 1, () => [MAT.coconut, 0.6, 0.1, 1]);
   if (lod === 0) for (let k = 0; k < 5; k++) {
     const a = k * 2.4;
     mb.ico(add(top, [Math.cos(a) * 0.03, -0.03 - R() * 0.01, Math.sin(a) * 0.03]), 0.017, 1, () => [MAT.coconut, 0.5, 0.05, 1]);
   }
-  const nf = lod === 0 ? 13 : 9;
+  const nf = [13, 9, 7][lod];
   for (let k = 0; k < nf; k++) {
     const phi = k * 2.39996 + R() * 0.3;
     const el = 0.75 - (k / nf) * 1.0 + (R() - 0.5) * 0.2;
@@ -42,7 +42,7 @@ export function palm(lod) {
         }
       }
     } else {
-      const N = 6;
+      const N = lod === 1 ? 6 : 2;
       let prev = null;
       for (let i = 0; i <= N; i++) {
         const s = i / N;
@@ -80,15 +80,15 @@ export function tree(lod) {
   const H = 0.62;
   const trunk = (t) => [0.015 * Math.sin(t * 4), t * H, 0.01 * Math.cos(t * 3)];
   mb.tube(trunk, (t, a) => 0.016 * (1 - 0.35 * t) * (1 + 2.6 * Math.exp(-t * 22) * Math.pow(0.5 + 0.5 * Math.cos(5 * a), 3)),
-    lod === 0 ? 10 : 4, lod === 0 ? 10 : 5, (t) => [MAT.bark, 0.35 + 0.5 * t, 0, t]);
+    [10, 4, 2][lod], [10, 5, 3][lod], (t) => [MAT.bark, 0.35 + 0.5 * t, 0, t]);
   const crownC = [0, 0.8, 0];
-  const nb = lod === 0 ? 11 : 6;
+  const nb = [11, 6, 4][lod];
   const blobs = [];
   for (let k = 0; k < nb; k++) {
     const a = k * 2.39996 + R() * 0.6;
     const r = k === 0 ? 0 : 0.08 + Math.sqrt(k / nb) * 0.2 + R() * 0.04;
     const y = 0.86 - r * 0.55 + (R() - 0.5) * 0.06;
-    blobs.push([[Math.cos(a) * r, y, Math.sin(a) * r], (lod === 0 ? 0.085 : 0.11) + R() * 0.05]);
+    blobs.push([[Math.cos(a) * r, y, Math.sin(a) * r], [0.085, 0.11, 0.135][lod] + R() * 0.05]);
   }
   // branches
   if (lod === 0) for (let k = 1; k < nb; k++) {
@@ -98,7 +98,7 @@ export function tree(lod) {
   }
   for (const [c, r] of blobs) {
     // a dense core keeps the crown opaque...
-    mb.ico(c, lod === 0 ? r * 0.82 : r, lod === 0 ? 1 : 1, (p, v) => {
+    mb.ico(c, lod === 0 ? r * 0.82 : r, lod === 2 ? 0 : 1, (p, v) => {
       const out = Math.min(1, len(sub(p, crownC)) / 0.25);
       return [MAT.canopy, Math.min(1, (lod === 0 ? 0.2 : 0.3) + 0.45 * (v[1] * 0.5 + 0.5) + 0.35 * out), 1, p[1]];
     }, (p, v) => {

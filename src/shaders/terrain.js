@@ -48,6 +48,7 @@ struct TV {
   @location(0) rel: vec3f,
   @location(1) n: vec3f,
   @location(2) misc: vec4f, // horizon shadow, canopy shell factor, forest, unused
+  @location(3) region: vec2f, // dry / volcanic (large scale, so per vertex is plenty)
 };
 
 fn fetchC(lvl: u32, g: vec2i) -> vec4f {
@@ -70,14 +71,17 @@ fn terrainVertex(g: vec2f, lvl: u32) -> TV {
   let n = vec3f(nxz.x, sqrt(max(1.0 - dot(nxz, nxz), 0.0)), nxz.y);
   var rel = vec3f(xz.x - F.camPos.x, h - F.camPos.y, xz.y - F.camPos.z);
   let dist = length(rel.xz);
-  let forest = forestDensity(xz) * smoothstep(3.5, 9.0, h);
-  let shell = smoothstep(380.0, 720.0, dist);
+  let rg = region(xz);
+  let forest = smoothstep(-0.28, 0.05, fbm(xz, 64, 3, 97u)) * (1.0 - 0.75 * rg.x) * smoothstep(3.5, 9.0, h);
+  // beyond the scattered trees the forest becomes a raised, lumpy canopy shell
+  let shell = smoothstep(F.fx.z * 0.54, F.fx.z * 1.03, dist);
   let lump = 0.75 + 0.5 * gnoise(xz * (1024.0 / W), 1024, 191u);
   rel.y += shell * forest * 17.0 * lump;
   var o: TV;
   o.rel = rel;
   o.n = n;
   o.misc = vec4f(select(1.0, tt.w, lvl >= 2u), shell, forest, 0.0);
+  o.region = rg;
   return o;
 }
 `;
@@ -119,7 +123,7 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   let big = fbm(pw.xz, 256, 3, 213u);
   // palette
   // palette shifts with the island's character
-  let rg = region(pw.xz);
+  let rg = in.region;
   let sandTone = mix(mix(vec3f(0.86, 0.80, 0.66), vec3f(0.80, 0.66, 0.44), rg.x), vec3f(0.16, 0.15, 0.15), rg.y);
   let sand = sandTone * (0.92 + 0.16 * mn);
   let wetSand = sandTone * vec3f(0.55, 0.53, 0.52);

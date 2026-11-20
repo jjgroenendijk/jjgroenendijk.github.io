@@ -1,5 +1,5 @@
 // Packs the per-frame uniform block (layout must match `struct Frame` in WGSL).
-import { FRAME_FLOATS } from '../shaders/common.js';
+import { FRAME_FLOATS, FRAME_OFS } from '../shaders/common.js';
 import { WAVE_T } from '../world/waves.js';
 
 export class FrameUniforms {
@@ -33,10 +33,11 @@ export class FrameUniforms {
     v4(116, f.splits);
     f.cascades.forEach((m, i) => d.set(m, 120 + i * 16));
     f.frustum.forEach((p, i) => v4(168 + i * 4, p));
-    d.set(f.levels, 192);
-    v4(224, [e.wind[0], e.wind[1], e.coverage, f.fade]);
-    v4(228, [f.modes.und, f.modes.aer, f.modes.land, f.cacheMask]);
-    v4(232, [e.rainbow, e.mist, 0, 0]);
+    d.set(f.levels, FRAME_OFS.levels);
+    v4(FRAME_OFS.cloud, [e.wind[0], e.wind[1], e.coverage, f.fade]);
+    v4(FRAME_OFS.extra, [f.modes.und, f.modes.aer, f.modes.land, f.cacheMask]);
+    v4(FRAME_OFS.fx, [e.rainbow, e.mist, f.vegDist, 0]);
+    v4(FRAME_OFS.cloudMap, f.cloudMap);
     this.device.queue.writeBuffer(this.buffer, 0, d);
   }
 }

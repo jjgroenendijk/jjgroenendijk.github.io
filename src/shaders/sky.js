@@ -200,3 +200,17 @@ fn meteor(rd: vec3f) -> vec3f {
   return vec4f(col, 1.0);
 }
 `;
+
+// Cloud shadow map: the light let through by the cloud layer, baked once per
+// frame so ground, plants and water need a single texture lookup.
+export const cloudMapWGSL = frameStruct + commonLib + /* wgsl */ `
+@group(1) @binding(0) var mapOut: texture_storage_2d<rgba16float, write>;
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) gid: vec3u) {
+  let n = textureDimensions(mapOut);
+  if (gid.x >= n.x || gid.y >= n.y) { return; }
+  let uv = (vec2f(gid.xy) + 0.5) / vec2f(n);
+  let q = F.cloudMap.xy + (uv - 0.5) / F.cloudMap.z;
+  textureStore(mapOut, vec2i(gid.xy), vec4f(cloudTransmit(q), 0.0, 0.0, 1.0));
+}
+`;

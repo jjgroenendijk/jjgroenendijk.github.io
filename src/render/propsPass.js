@@ -39,38 +39,43 @@ export class PropsPass {
     for (const layer of LAYERS) {
       const slots = layer.meshes.map((mesh, k) => {
         const cap = Math.ceil(layer.caps[k] * (layer.count ? 1 : quality.density));
-        const slot = { index: this.slots.length, mesh, cap, base, range: merged.ranges[mesh], shadow: layer.type !== 'bird' };
+        const slot = { index: this.slots.length, mesh, cap, base, lod: k, range: merged.ranges[mesh], shadow: layer.shadow ?? (layer.type !== 'bird') };
         base += cap;
         this.slots.push(slot);
         return slot;
       });
       this.layers.push({ ...layer, maxDist: layer.maxDist * (layer.count ? 1 : quality.distance), slots });
     }
+    // how far the forest reaches (the terrain fakes a canopy beyond it)
+    this.vegDist = this.layers.find((l) => l.type === 'tree').maxDist;
     this.instanceBuffer = buffer(device, base * INSTANCE_BYTES, U.STORAGE | U.VERTEX, 'prop-instances');
 
     this.argsTemplate = new Uint32Array(this.slots.length * 5);
     for (const s of this.slots) this.argsTemplate.set([s.range.indexCount, 0, s.range.firstIndex, s.range.baseVertex, 0], s.index * 5);
-    this.argsBuffer = buffer(device, this.argsTemplate.byteLength, U.STORAGE | U.INDIRECT | U.COPY_DST, 'prop-args');
+    this.argsBuffer = buffer(device, this.argsTemplate.byteLength, U.STORAGE | U.INDIRECT | U.COPY_DST | U.COPY_SRC, 'prop-args');
     this.capsBuffer = bufferWithData(device, new Uint32Array(this.slots.map((s) => s.cap)), U.STORAGE, 'prop-caps');
 
     // per-layer scatter parameters
     const params = new ArrayBuffer(PARAM_STRIDE * this.layers.length);
     this.layers.forEach((layer, k) => {
-      const f = new Float32Array(params, k * PARAM_STRIDE, 16);
-      const u = new Uint32Array(params, k * PARAM_STRIDE, 16);
-      const [s0, s1 = s0] = layer.slots;
+      const f = new Float32Array(params, k * PARAM_STRIDE, 20);
+      const u = new Uint32Array(params, k * PARAM_STRIDE, 20);
+      const [s0, s1 = s0, s2 = s1] = layer.slots;
       const radius = layer.count ? 0 : Math.ceil(layer.maxDist / layer.cell);
-      f[0] = layer.cell || 1; f[1] = radius; f[2] = layer.maxDist; f[3] = layer.lodDist;
+      f[0] = layer.cell || 1; f[1] = radius; f[2] = layer.maxDist;
       u[4] = TYPE[layer.type]; u[5] = s0.index; u[6] = s1.index; u[7] = s0.base;
       u[8] = s1.base; u[9] = s0.cap; u[10] = s1.cap; u[11] = layer.count || 0;
-      f[12] = s0.range.bound; f[13] = layer.keep;
+      f[12] = s0.range.bound; f[13] = layer.keep; f[14] = layer.reach || 0;
+      const lods = layer.lods || [];
+      f[3] = lods[0] ?? 1e9; f[15] = lods[1] ?? 1e9;
+      u[16] = s2.index; u[17] = s2.base; u[18] = s2.cap;
       layer.groups = layer.count ? [8, Math.ceil(layer.count / 64)] : [Math.ceil((2 * radius + 1) / 8), Math.ceil((2 * radius + 1) / 8)];
     });
     this.paramBuffer = bufferWithData(device, new Uint8Array(params), U.UNIFORM, 'scatter-params');
 
     const scatterLayout = bindLayout(device, 'scatter', [entry.uniform(true), entry.storage(), entry.storage()]);
     this.scatterGroup = bindGroup(device, scatterLayout, [
-      { buffer: this.paramBuffer, size: 64 }, this.instanceBuffer, this.argsBuffer,
+      { buffer: this.paramBuffer, size: 80 }, this.instanceBuffer, this.argsBuffer,
     ], 'scatter');
     this.scatterPipeline = device.createComputePipeline({
       label: 'scatter',
@@ -149,8 +154,10 @@ export class PropsPass {
     pass.setPipeline(this.shadowPipeline);
     pass.setBindGroup(0, frameGroup);
     pass.setBindGroup(1, cascadeGroup);
-    // the near cascade gets everything, far cascades only the big casters
-    const big = new Set(['palm0', 'palm1', 'tree0', 'tree1', 'rock', 'banana', 'bush', 'galleon', 'wreck', 'rowboat']);
-    this.drawSlots(pass, (s) => s.shadow && (cascade === 0 || big.has(s.mesh)));
+    // the near cascade gets every nearby caster, the far cascades only the big
+    // ones; distant LODs lie beyond the last cascade and never cast
+    this.drawSlots(pass, (s) => s.shadow && (cascade === 0 ? s.lod === 0 : BIG.has(s.mesh) && s.lod < cascade));
   }
 }
+
+const BIG = new Set(['palm0', 'palm1', 'tree0', 'tree1', 'rock', 'banana', 'bush', 'galleon', 'wreck', 'rowboat']);
