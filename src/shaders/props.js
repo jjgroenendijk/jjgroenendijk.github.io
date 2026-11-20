@@ -107,7 +107,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     sink = 0.12;
   } else if (kind == ${TYPE.seagrass}u) {
     let reef = reefMask(p);
-    prob = select(0.0, 0.65 * (1.0 - reef), h < -0.7 && h > -10.0);
+    let meadow = smoothstep(0.0, 0.15, fbm(p, 512, 2, 223u));
+    prob = select(0.0, 0.75 * (1.0 - reef) * meadow, h < -0.7 && h > -10.0);
     scale = mix(0.6, 1.3, r5);
     excl = 1.2;
   }
@@ -115,7 +116,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   if ((kind >= ${TYPE.coralA}u && kind <= ${TYPE.coralC}u) && r1 * 0.5 + r2 * 0.5 > prob) { return; }
   // keep the camera corridor clear
   let cor = corridorAt(p.y);
-  if (d < excl * max(cor.y, 0.25) * 1.0 + excl * 0.0 && cor.y > 0.01) { return; }
+  if (cor.y > 0.01 && d < excl * max(cor.y, 0.25)) { return; }
   // shrink near max distance to avoid popping
   scale *= 1.0 - smoothstep(P.maxDist * 0.8, P.maxDist, dist);
   if (scale < 0.02) { return; }
@@ -398,8 +399,8 @@ fn coralColor(h: f32) -> vec3f {
     }
     case 5u: { alb = mix(vec3f(0.09, 0.24, 0.05), vec3f(0.20, 0.34, 0.07), hue) * (0.8 + 0.4 * in.ex.z); trans = 0.8; spec = 0.1; }
     case 6u: {
-      let rib = 1.0 - smoothstep(0.0, 0.04, abs(lp.z * 0.0 + in.ex.z - 0.5) * 0.0 + abs(fract(in.ex.z * 1.0) - 0.0));
-      alb = mix(vec3f(0.13, 0.30, 0.05), vec3f(0.30, 0.45, 0.10), hue * 0.6 + rib * 0.2);
+      // in.ex.z is 0.5 on the two rows next to the midrib, 0 at the edges
+      alb = mix(vec3f(0.13, 0.30, 0.05), vec3f(0.30, 0.45, 0.10), hue * 0.6 + in.ex.z * 0.25);
       trans = 0.95; spec = 0.35; rough = 0.35;
     }
     case 7u: {

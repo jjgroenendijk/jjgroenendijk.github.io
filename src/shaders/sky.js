@@ -128,7 +128,8 @@ fn stars(rd: vec3f) -> vec3f {
       let crater = 0.85 + 0.15 * vnoise3(rd * 3000.0);
       col += vec3f(0.9, 0.92, 1.0) * 2.2 * k * crater * smoothstep(-0.05, 0.05, F.moonDir.y);
     }
-    col += F.lightColor.rgb * pow(max(md, 0.0), 2000.0) * 0.0 + vec3f(0.35, 0.4, 0.5) * pow(max(md, 0.0), 600.0) * 0.15 * F.sunDir.w;
+    // faint halo around the moon
+    col += vec3f(0.35, 0.4, 0.5) * pow(max(md, 0.0), 600.0) * 0.15 * F.sunDir.w;
     col += stars(rd) * F.moonDir.w * smoothstep(0.0, 0.15, rd.y);
     let c = textureSampleLevel(cloudTex, smp, in.uv, 0.0);
     col = col * c.a + c.rgb;

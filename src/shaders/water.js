@@ -69,11 +69,11 @@ fn waterScatter() -> vec3f {
     let refr = refract(rd, nd, 1.33);
     var col: vec3f;
     if (dot(refr, refr) < 1e-4) {
-      // total internal reflection: reflect the deep water
-      col = F.waterFog.rgb * 0.8;
+      // total internal reflection: the surface mirrors the lit water column
+      col = F.waterFog.rgb * 2.2 + F.lightColor.rgb * exp(-WATER_EXT * 6.0) * 0.04;
     } else {
       let fres = 0.02 + 0.98 * pow(1.0 - max(dot(-rd, nd), 0.0), 5.0);
-      col = skyBase(refr) * (1.0 - fres) * 0.9 + F.waterFog.rgb * fres;
+      col = skyBase(refr) * (1.0 - fres) * 0.9 + F.waterFog.rgb * 2.2 * fres;
       col += F.lightColor.rgb * pow(max(dot(refr, L), 0.0), 600.0) * 30.0;
     }
     col = applyFog(col, in.rel);
