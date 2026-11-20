@@ -54,4 +54,4 @@ Each frame:
 The world is periodic over 16 km in both directions, with every noise lattice wrapped, so the camera can fly forever without losing floating-point precision.
 The JavaScript copy of the terrain function in `world/` uses the same integer hashing as the WGSL version, so the camera director can keep a safe distance from the ground.
 
-Deployment: `.github/workflows/pages.yml` publishes the repository root to GitHub Pages.
+Deployment: `.github/workflows/pages.yml` publishes `index.html` and `src/` to GitHub Pages.

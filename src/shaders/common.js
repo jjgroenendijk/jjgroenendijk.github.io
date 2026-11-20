@@ -287,7 +287,7 @@ fn applyFog(col: vec3f, rel: vec3f) -> vec3f {
   if (abs(dy) > 0.01) { od = base * (1.0 - exp(-hf * dy)) / (hf * dy) * dist; }
   else { od = base * dist; }
   // jungle haze (near-field, only at ground level)
-  od += F.fog.z * 0.012 * min(dist, 140.0) * exp(-max(cy + rel.y * 0.5, 0.0) * 0.02);
+  od += F.fog.z * 0.005 * min(dist, 140.0) * exp(-max(cy + rel.y * 0.5, 0.0) * 0.02);
   let T = exp(-od * vec3f(0.75, 0.9, 1.15));
   var fc = fogSkyColor(rd);
   // sun glow in the haze

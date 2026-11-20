@@ -51,7 +51,7 @@ fn hg(mu: f32, g: f32) -> f32 { return (1.0 - g * g) / (4.0 * PI * pow(1.0 + g *
       let lc = F.lightColor.rgb * exp(-WATER_EXT * (depth * 1.15 + t));
       acc += sh * lc * beam * 0.05 * dt;
     } else {
-      let dens = F.fog.z * 0.014 * exp(-max(pw.y - 2.0, 0.0) * 0.03) + 0.0004;
+      let dens = F.fog.z * 0.008 * exp(-max(pw.y - 2.0, 0.0) * 0.03) + 0.0003;
       acc += sh * F.lightColor.rgb * dens * exp(-dens * t) * dt;
     }
     t += dt;

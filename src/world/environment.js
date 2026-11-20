@@ -53,7 +53,8 @@ export class Environment {
     const wind = [(t * 7 + s * 1000) % W, (t * 3 + s * 700) % W];
 
     // exposure from the light actually falling on the scene
-    const sceneLum = lum(lightColor) * Math.max(lightDir[1], 0.12) * 0.55 + lum(skyAmb) * 1.1;
+    // (the constant light term accounts for low suns glaring straight into view)
+    const sceneLum = lum(lightColor) * (Math.max(lightDir[1], 0.12) * 0.55 + 0.14) + lum(skyAmb) * 1.1;
     // eyes adapt, but not fully: nights stay dark and blue
     let exposure = 0.5 / Math.pow(Math.max(sceneLum, 1e-5), 0.8) * Math.pow(0.4, 0.2);
     exposure = Math.min(exposure, 40);
