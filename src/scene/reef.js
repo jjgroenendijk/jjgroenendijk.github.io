@@ -106,3 +106,88 @@ export function seagrass() {
   }
   return mb.build();
 }
+
+// table coral: a wide wavy plate on a short stem
+export function coralTable() {
+  const mb = new MB();
+  mb.tube((t) => [0, t * 0.3, 0], (t) => 0.06 * (1 - 0.3 * t), 2, 6, () => [MAT.coralBranch, 0.5, 0, 0.3]);
+  for (const side of [1, -1]) {
+    mb.surface((u, v) => {
+      const a = u * Math.PI * 2, r = 0.06 + v * 0.55;
+      const wav = Math.sin(a * 5) * 0.03 * v + Math.sin(a * 11) * 0.015 * v;
+      return [Math.cos(a) * r, 0.3 + v * 0.06 + wav + side * 0.012 * (1 - v), Math.sin(a) * r * side];
+    }, 24, 4, (u, v) => [MAT.coralBranch, side > 0 ? 0.6 + 0.4 * v : 0.35, 0, 0.4 + 0.6 * v]);
+  }
+  return mb.build();
+}
+
+// tube sponges: a clump of open, slightly flared tubes
+export function tubeSponge() {
+  const mb = new MB();
+  const R = rng(91);
+  for (let k = 0; k < 6; k++) {
+    const a = k * 2.4, r = k === 0 ? 0 : 0.12 + R() * 0.1;
+    const base = [Math.cos(a) * r, 0, Math.sin(a) * r];
+    const h = 0.4 + R() * 0.6;
+    const lean = [Math.cos(a) * 0.12, 0, Math.sin(a) * 0.12];
+    for (const inner of [false, true]) {
+      mb.tube((t) => add(add(base, [0, t * h, 0]), mul(lean, t * t)), (t) => (0.07 + 0.03 * t * t) * (inner ? 0.8 : 1), 4, 8,
+        (t) => [MAT.sponge, inner ? 0.3 + 0.3 * t : 0.6 + 0.4 * t, 0.2 * t, t]);
+    }
+  }
+  return mb.build();
+}
+
+// soft coral: swaying stalks covered in polyp clusters
+export function softCoral() {
+  const mb = new MB();
+  const R = rng(97);
+  const grow = (p, dir, l, depth) => {
+    const end = add(p, mul(dir, l));
+    mb.tube((t) => add(p, mul(dir, l * t)), () => 0.03 * (1 - depth * 0.25), 2, 5, (t) => [MAT.softCoral, 0.5, (depth + t) / 3, 0.2]);
+    if (depth >= 2) {
+      for (let k = 0; k < 4; k++) mb.ico(add(end, [(R() - 0.5) * 0.08, R() * 0.06, (R() - 0.5) * 0.08]), 0.05 + R() * 0.03, 1, () => [MAT.softCoral, 0.9, 1, 1]);
+      return;
+    }
+    for (let k = 0; k < 3; k++) {
+      const a = R() * Math.PI * 2;
+      grow(end, norm(add(dir, [Math.cos(a) * 0.6, 0.2, Math.sin(a) * 0.6])), l * 0.75, depth + 1);
+    }
+  };
+  grow([0, 0, 0], [0, 1, 0], 0.28, 0);
+  return mb.build();
+}
+
+// sea anemone: a disc of long swaying tentacles
+export function anemone() {
+  const mb = new MB();
+  const R = rng(101);
+  mb.tube((t) => [0, t * 0.1, 0], () => 0.16, 1, 10, () => [MAT.anemone, 0.5, 0, 0]);
+  for (let k = 0; k < 46; k++) {
+    const a = R() * Math.PI * 2, r = Math.sqrt(R()) * 0.15;
+    const out = [Math.cos(a), 0, Math.sin(a)];
+    const base = [out[0] * r, 0.1, out[2] * r];
+    const L = 0.18 + R() * 0.14;
+    mb.tube((t) => add(base, [out[0] * t * L * 0.6, t * L, out[2] * t * L * 0.6]), (t) => 0.018 * (1 - 0.5 * t), 3, 4,
+      (t) => [MAT.anemone, 0.7 + 0.3 * t, t, t]);
+  }
+  return mb.build();
+}
+
+// starfish: five tapered arms
+export function starfish() {
+  const mb = new MB();
+  for (const top of [true, false]) {
+    for (let k = 0; k < 5; k++) {
+      const a0 = (k / 5) * Math.PI * 2;
+      const tip = [Math.cos(a0) * 0.5, 0.01, Math.sin(a0) * 0.5];
+      const l = [Math.cos(a0 - 0.63) * 0.12, top ? 0.06 : 0.0, Math.sin(a0 - 0.63) * 0.12];
+      const r = [Math.cos(a0 + 0.63) * 0.12, top ? 0.06 : 0.0, Math.sin(a0 + 0.63) * 0.12];
+      const c = [0, top ? 0.08 : 0, 0];
+      const e = [MAT.starfish, 0.8, 0, 0];
+      mb.flatTri(c, l, tip, e, e, e, top ? [0, 1, 0] : [0, -1, 0]);
+      mb.flatTri(c, tip, r, e, e, e, top ? [0, 1, 0] : [0, -1, 0]);
+    }
+  }
+  return mb.build();
+}

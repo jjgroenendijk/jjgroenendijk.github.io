@@ -62,8 +62,9 @@ export function baseHeight(x, z) {
   const r2 = 1 - Math.abs(gnoise(x * (128 / W), z * (128 / W), 128, 41));
   const ridge = r * r * 0.7 + r2 * r2 * 0.3;
   let h;
-  if (e > 0) h = e * 40 + Math.pow(Math.max(e - 0.06, 0), 1.5) * 900 * (0.35 + 0.65 * ridge);
-  else h = e * 90;
+  // gentle profile around sea level gives wide beaches and shallow shelves
+  if (e > 0) h = Math.min(e, 0.12) * 14 + Math.max(e - 0.12, 0) * 45 + Math.pow(Math.max(e - 0.14, 0), 1.5) * 950 * (0.35 + 0.65 * ridge);
+  else h = Math.max(e, -0.08) * 30 + Math.min(e + 0.08, 0) * 90;
   return Math.max(h, -48 + 8 * n);
 }
 

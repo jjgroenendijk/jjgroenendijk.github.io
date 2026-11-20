@@ -1,6 +1,6 @@
 // Vegetation: coconut palms, rainforest canopy trees, shrubs, ferns, banana plants.
 import { MAT } from './catalog.js';
-import { MeshBuilder as MB, add, sub, mul, cross, norm, len, rng, vnoise, icosphere } from './geometry.js';
+import { MeshBuilder as MB, add, sub, mul, cross, norm, len, dot, rng, vnoise, icosphere } from './geometry.js';
 
 // ------------------------------------------------------------------ palms
 export function palm(lod) {
@@ -97,14 +97,34 @@ export function tree(lod) {
     mb.tube((t) => add(s, mul(sub(add(c, [0, -0.04, 0]), s), t)), (t) => 0.007 * (1 - 0.6 * t), 3, 4, (t) => [MAT.bark, 0.5, 0, 0.8 + 0.2 * t]);
   }
   for (const [c, r] of blobs) {
-    mb.ico(c, r, lod === 0 ? 2 : 1, (p, v) => {
+    // a dense core keeps the crown opaque...
+    mb.ico(c, lod === 0 ? r * 0.82 : r, lod === 0 ? 1 : 1, (p, v) => {
       const out = Math.min(1, len(sub(p, crownC)) / 0.25);
-      return [MAT.canopy, Math.min(1, 0.3 + 0.45 * (v[1] * 0.5 + 0.5) + 0.35 * out), 1, p[1]];
+      return [MAT.canopy, Math.min(1, (lod === 0 ? 0.2 : 0.3) + 0.45 * (v[1] * 0.5 + 0.5) + 0.35 * out), 1, p[1]];
     }, (p, v) => {
       const d = blobDeform(c, crownC, r * 0.7, 22)(p, v);
-      d.p[1] = c[1] + (d.p[1] - c[1]) * 0.62;
+      d.p[1] = c[1] + (d.p[1] - c[1]) * 0.78;
       return d;
     });
+    if (lod !== 0) continue;
+    // ...and individual leaf clusters break up its silhouette and catch the light
+    for (let k = 0; k < 70; k++) {
+      const z = R() * 2 - 1, a = R() * Math.PI * 2;
+      const v = [Math.sqrt(1 - z * z) * Math.cos(a), z * 0.8 + 0.2, Math.sqrt(1 - z * z) * Math.sin(a)];
+      const pos = add(c, mul(norm(v), r * (0.85 + 0.35 * R())));
+      pos[1] = c[1] + (pos[1] - c[1]) * 0.8;
+      const ln = norm(add(norm(v), [R() - 0.5, R() - 0.3, R() - 0.5]));
+      const t1 = norm(cross(ln, Math.abs(ln[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+      const t2 = cross(ln, t1);
+      const sz = 0.026 * (0.7 + 0.6 * R());
+      const radial = norm(sub(pos, crownC));
+      const n = norm(add(mul(radial, 0.65), mul(ln, 0.35)));
+      const ao = 0.5 + 0.5 * (norm(v)[1] * 0.5 + 0.5);
+      const e = [MAT.canopy, ao, 1, pos[1]];
+      const q = [add(pos, mul(t1, sz)), add(pos, mul(t2, sz * 0.55)), add(pos, mul(t1, -sz)), add(pos, mul(t2, -sz * 0.55))];
+      const i0 = mb.vert(q[0], n, e), i1 = mb.vert(q[1], n, e), i2 = mb.vert(q[2], n, e), i3 = mb.vert(q[3], n, e);
+      mb.quad(i0, i1, i2, i3);
+    }
   }
   return mb.build();
 }
@@ -211,6 +231,52 @@ export function banana() {
       }
       prev = row;
     }
+  }
+  return mb.build();
+}
+
+// flowering shrub: a low leafy rosette crowned with hibiscus-like blooms
+export function flowerBush() {
+  const mb = new MB();
+  const R = rng(81);
+  for (let k = 0; k < 18; k++) {
+    const phi = k * 2.39996 + R() * 0.4;
+    const L = 0.3 + R() * 0.2;
+    const dir = [Math.cos(phi), 0, Math.sin(phi)];
+    const side = [-Math.sin(phi), 0, Math.cos(phi)];
+    const rise = R();
+    const start = [0, 0.1 + rise * 0.35, 0];
+    const spine = (s) => add(start, add(mul(dir, L * s), [0, L * (0.5 * s - 0.6 * s * s), 0]));
+    let prev = null;
+    for (let i = 0; i <= 3; i++) {
+      const s = i / 3;
+      const c = spine(s);
+      const wd = 0.07 * Math.sin(Math.PI * Math.min(s * 0.9 + 0.1, 1));
+      const row = [add(c, mul(side, -wd)), add(c, [0, 0.006, 0]), add(c, mul(side, wd))];
+      if (prev) for (let j = 0; j < 2; j++) {
+        const e = [MAT.bush, 0.5 + 0.5 * rise, 0.3 + s * 0.6, s];
+        mb.flatTri(prev[j], row[j], row[j + 1], e);
+        mb.flatTri(prev[j], row[j + 1], prev[j + 1], e);
+      }
+      prev = row;
+    }
+  }
+  for (let f = 0; f < 12; f++) {
+    const a = f * 2.39996 + R();
+    const r = 0.12 + R() * 0.22;
+    const c = [Math.cos(a) * r, 0.42 + R() * 0.25 - r * 0.4, Math.sin(a) * r];
+    const up = norm([Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5]);
+    const t1 = norm(cross(up, [0, 0, 1])), t2 = cross(up, t1);
+    for (let p = 0; p < 5; p++) {
+      const pa = (p / 5) * Math.PI * 2 + f;
+      const pd = add(mul(t1, Math.cos(pa)), mul(t2, Math.sin(pa)));
+      const pd2 = add(mul(t1, Math.cos(pa + 0.62)), mul(t2, Math.sin(pa + 0.62)));
+      const tip = add(add(c, mul(pd, 0.11)), mul(up, 0.045));
+      const mid = add(add(c, mul(norm(add(pd, pd2)), 0.115)), mul(up, 0.05));
+      mb.flatTri(c, tip, mid, [MAT.petal, 0.9, 0.3, 0], [MAT.petal, 1, 0.5, 1], [MAT.petal, 1, 0.5, 1], up);
+      mb.flatTri(c, mid, add(add(c, mul(pd2, 0.11)), mul(up, 0.045)), [MAT.petal, 0.9, 0.3, 0], [MAT.petal, 1, 0.5, 1], [MAT.petal, 1, 0.5, 1], up);
+    }
+    mb.tube((t) => add(c, mul(up, t * 0.06)), () => 0.004, 1, 3, () => [MAT.petal, 1, 0.3, 0.05]);
   }
   return mb.build();
 }

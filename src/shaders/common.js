@@ -14,7 +14,7 @@ var<private> KW: array<f32, ${KNOTS.length}> = array<f32, ${KNOTS.length}>(${KNO
 const waveArr = (name, list) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => `vec4f(${f(w[0])},${f(w[1])},${f(w[2])},${f(w[4])})`).join(',')});
 var<private> ${name}Q: array<f32, ${list.length}> = array<f32, ${list.length}>(${list.map((w) => f(w[3])).join(',')});`;
 
-export const FRAME_FLOATS = 232;
+export const FRAME_FLOATS = 236;
 
 export const frameStruct = /* wgsl */ `
 struct Frame {
@@ -40,7 +40,8 @@ struct Frame {
   frustum: array<vec4f, 6>,
   levels: array<vec4f, 8>,
   cloud: vec4f,       // xy wind offset, z coverage, w unused
-  extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight
+  extra: vec4f,       // x underwater mode weight, y aerial weight, z land weight, w cache mask
+  fx: vec4f,          // x rainbow, y morning mist, z, w unused
 };
 @group(0) @binding(0) var<uniform> F: Frame;
 `;
@@ -52,7 +53,7 @@ const PI: f32 = 3.14159265;
 const TAU: f32 = 6.28318531;
 const WATER_EXT: vec3f = vec3f(0.20, 0.058, 0.034);
 // lighting attenuation is kept gentler than view extinction so reefs stay colourful
-const LIGHT_EXT: vec3f = vec3f(0.11, 0.04, 0.032);
+const LIGHT_EXT: vec3f = vec3f(0.075, 0.035, 0.03);
 ${knotArr}
 ${waveArr('WV', WAVES)}
 ${waveArr('RP', RIPPLES)}
@@ -131,8 +132,9 @@ fn baseHeight(p: vec2f) -> f32 {
   let r2 = 1.0 - abs(gnoise(p * (128.0 / W), 128, 41u));
   let ridge = r * r * 0.7 + r2 * r2 * 0.3;
   var h: f32;
-  if (e > 0.0) { h = e * 40.0 + pow(max(e - 0.06, 0.0), 1.5) * 900.0 * (0.35 + 0.65 * ridge); }
-  else { h = e * 90.0; }
+  // gentle profile around sea level gives wide beaches and shallow shelves
+  if (e > 0.0) { h = min(e, 0.12) * 14.0 + max(e - 0.12, 0.0) * 45.0 + pow(max(e - 0.14, 0.0), 1.5) * 950.0 * (0.35 + 0.65 * ridge); }
+  else { h = max(e, -0.08) * 30.0 + min(e + 0.08, 0.0) * 90.0; }
   return max(h, -48.0 + 8.0 * n);
 }
 fn terrainHeight(p: vec2f) -> f32 {
@@ -150,8 +152,17 @@ fn terrainHeight(p: vec2f) -> f32 {
   }
   return h;
 }
-fn forestDensity(p: vec2f) -> f32 { return smoothstep(-0.28, 0.05, fbm(p, 64, 3, 97u)); }
-fn reefMask(p: vec2f) -> f32 { return smoothstep(-0.05, 0.18, fbm(p, 256, 3, 113u)); }
+// Island character varies by region: x = dry (golden grass, sparse forest),
+// y = volcanic (black sand and basalt), the rest is lush with white sand.
+fn region(p: vec2f) -> vec2f {
+  let dry = smoothstep(0.06, 0.2, fbm(p, 8, 2, 251u));
+  let volc = smoothstep(0.08, 0.22, fbm(p, 8, 2, 257u)) * (1.0 - dry);
+  return vec2f(dry, volc);
+}
+fn forestDensity(p: vec2f) -> f32 {
+  return smoothstep(-0.28, 0.05, fbm(p, 64, 3, 97u)) * (1.0 - 0.75 * region(p).x);
+}
+fn reefMask(p: vec2f) -> f32 { return smoothstep(-0.22, 0.08, fbm(p, 256, 3, 113u)); }
 
 // ------------------------------------------------------------ waves
 struct WaveOut { disp: vec3f, n: vec3f };
@@ -204,7 +215,11 @@ fn scatterSky(rd: vec3f, sun: vec3f, E: f32, g: f32) -> vec3f {
   let dR = 8000.0 * mv; let dM = 1200.0 * mv;
   let ext = BR * dR + BM * dM;
   let sc = (BR * pR * dR + BM * pM * dM) / ext * (1.0 - exp(-ext));
-  var c = E * sunTrans(sun.y) * sc;
+  // light scattered towards the zenith comes from higher, thinner air, so it is
+  // reddened less than light near the horizon (keeps sunset zeniths blue)
+  let tsRaw = exp(-(BR * 8000.0 + BM * 1200.0) * airmass(sun.y));
+  let thin = mix(1.0, 0.3, sat(rd.y * 1.6));
+  var c = E * pow(tsRaw, vec3f(thin)) * smoothstep(-0.12, 0.02, sun.y) * sc;
   let tw = smoothstep(-0.25, 0.0, sun.y) * (1.0 - smoothstep(0.0, 0.25, sun.y));
   c += E * 0.012 * tw * vec3f(0.10, 0.07, 0.12) * (1.0 - rd.y * 0.5);
   return c;
@@ -212,7 +227,7 @@ fn scatterSky(rd: vec3f, sun: vec3f, E: f32, g: f32) -> vec3f {
 // full sky radiance without sun disc / stars / clouds
 fn skyBase(rd: vec3f) -> vec3f {
   let E = F.fog.w;
-  var c = scatterSky(rd, F.sunDir.xyz, E, 0.76);
+  var c = scatterSky(rd, F.sunDir.xyz, E, 0.72);
   // moon light sky (stylised, brighter than reality)
   c += scatterSky(rd, F.moonDir.xyz, E * 0.0035, 0.6) * vec3f(0.75, 0.85, 1.1);
   // night floor
@@ -286,6 +301,16 @@ fn applyFog(col: vec3f, rel: vec3f) -> vec3f {
   let base = F.fog.x * exp(-hf * max(cy, 0.0));
   if (abs(dy) > 0.01) { od = base * (1.0 - exp(-hf * dy)) / (hf * dy) * dist; }
   else { od = base * dist; }
+  // low morning mist hugging the water and valleys
+  if (F.fx.y > 0.001) {
+    // exact integral of an exponential layer (scale height MH) along the ray
+    let MH = 18.0;
+    let ya = max(cy, 0.0);
+    let yb = max(cy + dy, 0.0);
+    var layer = exp(-ya / MH);
+    if (abs(yb - ya) > 0.01) { layer = MH * (exp(-ya / MH) - exp(-yb / MH)) / (yb - ya); }
+    od += F.fx.y * 0.0035 * min(dist, 6000.0) * layer;
+  }
   // jungle haze (near-field, only at ground level)
   od += F.fog.z * 0.005 * min(dist, 140.0) * exp(-max(cy + rel.y * 0.5, 0.0) * 0.02);
   let T = exp(-od * vec3f(0.75, 0.9, 1.15));

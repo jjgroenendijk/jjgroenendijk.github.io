@@ -1,6 +1,6 @@
 import { frameStruct, commonLib, shadowLib } from './common.js';
 
-export const GRID_M = 64; // half-size of a clipmap level in cells
+export const GRID_M = 96; // half-size of a clipmap level in cells
 
 // Compute: bake heights, normals and far horizon shadows into a clipmap texture array.
 export const terrainCacheWGSL = frameStruct + commonLib + /* wgsl */ `
@@ -100,6 +100,17 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   let d1 = vec2f(gnoise(q, 4096, 201u), gnoise(q + 17.0, 4096, 203u));
   let d2 = vec2f(gnoise(q * 4.0, 16384, 205u), gnoise(q * 4.0 + 9.0, 16384, 207u));
   n = normalize(n + vec3f(d1.x + d2.x * 0.5, 0.0, d1.y + d2.y * 0.5) * 0.35 * near);
+  // distant rainforest: per-pixel tree crowns (bumps that catch the light, dark gaps between)
+  let crownW = in.misc.z * smoothstep(120.0, 450.0, dist) * smoothstep(-0.5, 3.0, h);
+  var crownShade = 1.0;
+  if (crownW > 0.01) {
+    let cq = pw.xz * (2048.0 / W);
+    let c0 = gnoise(cq, 2048, 231u) + 0.5 * gnoise(cq * 2.0, 4096, 233u);
+    let cx = gnoise(cq + vec2f(0.12, 0.0), 2048, 231u) + 0.5 * gnoise(cq * 2.0 + vec2f(0.24, 0.0), 4096, 233u);
+    let cz = gnoise(cq + vec2f(0.0, 0.12), 2048, 231u) + 0.5 * gnoise(cq * 2.0 + vec2f(0.0, 0.24), 4096, 233u);
+    n = normalize(n - vec3f(cx - c0, 0.0, cz - c0) * 9.0 * crownW);
+    crownShade = mix(1.0, 0.45 + 0.9 * smoothstep(-0.4, 0.5, c0), crownW);
+  }
   let slope = 1.0 - n.y;
   let shell = in.misc.y;
   let forest = in.misc.z;
@@ -107,15 +118,22 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   let mn = fbm(pw.xz, 2048, 3, 211u);
   let big = fbm(pw.xz, 256, 3, 213u);
   // palette
-  let sand = vec3f(0.80, 0.70, 0.52) * (0.92 + 0.16 * mn);
-  let wetSand = vec3f(0.46, 0.38, 0.27);
-  let uwSand = vec3f(0.78, 0.71, 0.55) * (0.9 + 0.2 * mn);
-  let grass = mix(vec3f(0.11, 0.17, 0.05), vec3f(0.20, 0.22, 0.08), sat(big * 2.0 + 0.5));
+  // palette shifts with the island's character
+  let rg = region(pw.xz);
+  let sandTone = mix(mix(vec3f(0.86, 0.80, 0.66), vec3f(0.80, 0.66, 0.44), rg.x), vec3f(0.16, 0.15, 0.15), rg.y);
+  let sand = sandTone * (0.92 + 0.16 * mn);
+  let wetSand = sandTone * vec3f(0.55, 0.53, 0.52);
+  let uwSand = mix(vec3f(0.80, 0.75, 0.62), vec3f(0.30, 0.28, 0.27), rg.y * 0.8) * (0.9 + 0.2 * mn);
+  var grass = mix(vec3f(0.11, 0.17, 0.05), vec3f(0.20, 0.22, 0.08), sat(big * 2.0 + 0.5));
+  grass = mix(grass, mix(vec3f(0.36, 0.30, 0.13), vec3f(0.27, 0.27, 0.12), sat(big * 2.0 + 0.5)), rg.x);
+  // near the camera, break the lawn up with leaf litter and bare soil
+  let litter = smoothstep(-0.05, 0.25, gnoise(pw.xz * (4096.0 / W), 4096, 241u) + 0.5 * gnoise(pw.xz * (16384.0 / W), 16384, 243u));
+  grass = mix(grass, mix(vec3f(0.20, 0.15, 0.08), vec3f(0.14, 0.15, 0.06), mn + 0.5), litter * 0.55);
   let floorC = mix(vec3f(0.17, 0.12, 0.07), vec3f(0.12, 0.17, 0.05), sat(mn * 2.0 + 0.5));
-  let rock = mix(vec3f(0.30, 0.27, 0.24), vec3f(0.22, 0.20, 0.19), sat(mn * 2.0 + 0.5));
+  let rock = mix(mix(vec3f(0.30, 0.27, 0.24), vec3f(0.22, 0.20, 0.19), sat(mn * 2.0 + 0.5)), vec3f(0.09, 0.085, 0.085), rg.y);
   let canopy = mix(vec3f(0.035, 0.09, 0.025), vec3f(0.09, 0.16, 0.04), sat(gnoise(pw.xz * (2048.0 / W), 2048, 217u) * 1.6 + 0.5));
 
-  let beachH = 1.6 + mn * 1.5 + big * 1.0;
+  let beachH = 2.2 + mn * 1.2 + big * 0.8;
   var alb: vec3f;
   if (h < -0.4) {
     let reef = reefMask(pw.xz);
@@ -137,7 +155,7 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + /* 
   var sh = min(shadowAt(in.rel, n, in.pos.xy), in.misc.x) * cloudShadow(pw);
   let nl = max(dot(n, L), 0.0);
   let ao = 1.0 - 0.3 * forest * (1.0 - shell) * smoothstep(1.0, 5.0, h);
-  var col = alb * (lightAt(pw) * nl * sh + ambientAt(n, pw) * ao);
+  var col = alb * crownShade * (lightAt(pw) * nl * sh + ambientAt(n, pw) * ao);
   // wet sand sheen
   let wetS = (1.0 - smoothstep(0.0, 0.7, h)) * step(-0.4, h);
   col += lightAt(pw) * ggx(n, V, L, 0.25) * wetS * 0.25 * sh;
