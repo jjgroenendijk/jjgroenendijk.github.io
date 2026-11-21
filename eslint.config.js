@@ -51,6 +51,16 @@ export default [
       'max-nested-callbacks': ['error', LIMITS.nestedCallbacks],
       'max-params': ['error', LIMITS.params],
       'max-statements': ['error', LIMITS.statements],
+      // Halving, doubling, negation and the identities are arithmetic, not tuning, so naming them adds nothing.
+      'no-magic-numbers': [
+        'error',
+        {
+          ignore: [-1, 0, 0.5, 1, 2],
+          ignoreArrayIndexes: true,
+          ignoreClassFieldInitialValues: true,
+          ignoreDefaultValues: true,
+        },
+      ],
       'sonarjs/cognitive-complexity': ['error', LIMITS.cognitive],
       // Contradicts the core arrow-body-style rule, which forbids the block body this one demands for multi-line
       // returns; the core rule stays.
@@ -62,6 +72,19 @@ export default [
     // GPU APIs so they stay portable and testable.
     files: ['src/world/**/*.js', 'src/core/math.js'],
     rules: { 'no-restricted-globals': ['error', ...BROWSER_AND_GPU_GLOBALS] },
+  },
+  {
+    // Numeric models: procedural meshes, noise, terrain, sky, wave and sound synthesis. Their numbers are shape and
+    // signal data (coordinates, colours, tuned coefficients), so naming each one would only restate it. Named constants
+    // are still expected for values that are reused or carry meaning elsewhere.
+    files: [
+      'src/scene/*.js',
+      'src/core/math.js',
+      'src/world/{noise,path,sky,terrain,waves}.js',
+      'src/audio/ambience.js',
+    ],
+    ignores: ['src/scene/catalog.js', 'src/scene/flocks.js'],
+    rules: { 'no-magic-numbers': 'off' },
   },
   {
     // Shader modules are mostly WGSL template strings, which are data rather than JS logic.

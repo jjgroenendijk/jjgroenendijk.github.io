@@ -27,7 +27,10 @@ the site stays build-free.
 - **JS** (`eslint.config.js`): every core rule (`js.configs.all`), every unicorn rule, sonarjs recommended, with strict
   size and complexity limits in `LIMITS`, `id-length` allowing the single-letter maths names, and a ban on browser and
   GPU globals in `src/world/` and `src/core/math.js` (that code runs on the CPU next to the camera director).
-  `eslint-config-prettier` turns off only stylistic rules that fight the formatter.
+  `eslint-config-prettier` turns off only stylistic rules that fight the formatter. `no-magic-numbers` allows -1, 0,
+  0.5, 1 and 2 everywhere and is off in the numeric-model files listed in the config (meshes, noise, terrain, sky,
+  waves, sound); everywhere else each number gets a named constant, and in the model files reused or meaningful numbers
+  still do.
 - **Markdown** (`.markdownlint-cli2.jsonc`): all rules, lines at most 120 characters, tables and code included.
 - **HTML and CSS** (`index.html`): html-validate (recommended, document, a11y) and Stylelint standard through
   postcss-html.
