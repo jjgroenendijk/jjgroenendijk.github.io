@@ -885,7 +885,7 @@ export const foliageSurfaceLib = /* wgsl */ `
 fn foliageSurface(in: PV, tap: LeafTap, t: vec3f, b: vec3f) -> Surf {
   let n = normalize(normalize(in.n) + (t * tap.nt.x + b * tap.nt.y) * 0.6);
   // per tree tint: some crowns fresher, some darker and bluer
-  let tint = mix(vec3f(0.85, 0.95, 1.1), vec3f(1.15, 1.05, 0.8), in.ex.w);
+  let tint = mix(vec3f(0.85, 0.95, 1.08), vec3f(1.08, 1.04, 0.86), in.ex.w);
   return Surf(tap.alb * tint, n, tap.trans, 0.35, 0.4, vec3f(0.0));
 }
 `;
@@ -906,7 +906,7 @@ fn shadeProp(in: PV, s: Surf, frag: vec2f) -> vec3f {
   // light through thin leaves: diffuse transmission from behind plus a
   // forward-scattering glow towards the sun; inner leaves get less of it
   let through = 0.4 * sat(-dot(s.n, L)) + 1.1 * pow(sat(dot(V, -L)), 4.0);
-  col += s.alb * vec3f(1.0, 1.08, 0.75) * lc * s.trans * through * sh * mix(0.3, 1.0, ao);
+  col += s.alb * vec3f(0.95, 1.0, 0.8) * lc * s.trans * through * sh * mix(0.3, 1.0, ao);
   col += lc * ggx(s.n, V, L, s.rough) * s.spec * sh * nl;
   // reflected sky on glossy surfaces (waxy leaves, wet shells); squared
   // occlusion: inside a crown or a hollow little sky is left to reflect
