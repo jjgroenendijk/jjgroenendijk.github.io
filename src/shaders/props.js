@@ -1,16 +1,13 @@
-import { frameStruct, commonLib, shadowLib, hizLib } from './common.js';
-import { cacheLib } from './terrain.js';
-import { flockReadLib } from './flock.js';
-import { TYPE, MAT } from '../scene/catalog.js';
-import { foliageLib } from './leaves.js';
+// Props: the GPU scatter, per-slot draw layout, shared vertex, surface and shading stages, shadows and impostor bakes.
+import { MAT, TYPE } from '../scene/catalog.js';
+import { commonLibrary, frameStruct, hizLibrary } from './common.js';
+import { cacheLibrary } from './terrain.js';
+import { flockReadLibrary } from './flock.js';
+import { foliageLibrary } from './leaves.js';
 
-export const scatterWGSL =
-  frameStruct +
-  commonLib +
-  hizLib +
-  cacheLib +
-  flockReadLib(1, 4) +
-  /* wgsl */ `
+// Binding of the flock state in the scatter's group 1.
+const FLOCK_BINDING = 4,
+  scatterWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${hizLibrary}${cacheLibrary}${flockReadLibrary(1, FLOCK_BINDING)}
 struct SP {
   cell: f32, radius: f32, maxDist: f32, minDist: f32,
   kind: u32, count: u32, variants: u32, lodCount: u32, // slots hold lodCount LODs per variant
@@ -456,21 +453,18 @@ fn bird(i: u32) {
   let fj = hashu(i * 13u + 1u);
   emit(rel, vec4f(b.pos, 0.9 + hf(fj + 2u) * 0.4), vec4f(atan2(b.vel.x, b.vel.z), b.bank, hf(b.key + 6u), hf(fj) * 100.0), dist);
 }
-`;
-
-// After the scatter: clamp each slot's instance count to its capacity and lay
-// the slots end to end (triangle corners), so the visibility pass draws every
-// prop with one non-indexed draw.
-export const slotInfoLib = /* wgsl */ `
+`,
+  // After the scatter: clamp each slot's instance count to its capacity and lay
+  // the slots end to end (triangle corners), so the visibility pass draws every
+  // prop with one non-indexed draw.
+  slotInfoLibrary = /* wgsl */ `
 struct SlotInfo {
   firstIndex: u32, baseVertex: u32, indexCount: u32, instBase: u32,
   fade: vec4f,  // distances: fade in from x to y, fade out from z to w (LOD cross-fade)
 };
-`;
-export const MAX_SLOTS = 64;
-export const finalizeWGSL =
-  slotInfoLib +
-  /* wgsl */ `
+`,
+  MAX_SLOTS = 64,
+  finalizeWGSL = /* wgsl */ `${slotInfoLibrary}
 @group(0) @binding(0) var<storage, read_write> args: array<u32>;
 @group(0) @binding(1) var<storage, read> caps: array<u32>;
 @group(0) @binding(2) var<storage, read> slots: array<SlotInfo>;
@@ -494,9 +488,8 @@ fn main(@builtin(local_invocation_index) i: u32) {
   starts[n] = total;
   draw = array<u32, 4>(total, 1u, 0u, 0u);
 }
-`;
-
-export const propVS = /* wgsl */ `
+`,
+  propVS = /* wgsl */ `
 /*CARD_FRAMES*/
 struct PV {
   @builtin(position) pos: vec4f,
@@ -618,9 +611,8 @@ fn propVertex(pos: vec3f, nrm: vec3f, ex: vec4f, a: vec4f, b: vec4f) -> PV {
   o.ex = vec4f(ex.y, flex, select(ex.w, 0.0, foliage), b.z);
   return o;
 }
-`;
-
-export const propSurface = /* wgsl */ `
+`,
+  propSurface = /* wgsl */ `
 fn fishColor(h: f32, lp: vec3f) -> vec3f {
   let belly = sat(lp.y * 6.0 + 0.3);
   if (h < 0.16) { return mix(vec3f(0.95, 0.78, 0.08), vec3f(0.98, 0.88, 0.35), belly); }            // yellow tang
@@ -886,21 +878,20 @@ fn surface(in: PV, ff: bool) -> Surf {
   }
   return Surf(alb, n, trans, spec, rough, emissive);
 }
-`;
-
-// Foliage card surface (needs foliageLib): leaf texture over the crown
-// normal. t, b: the card's texture axes in world space, or zero when unknown.
-export const foliageSurfaceLib = /* wgsl */ `
+`,
+  // Foliage card surface (needs foliageLibrary): leaf texture over the crown
+  // normal. t, b: the card's texture axes in world space, or zero when unknown.
+  foliageSurfaceLibrary = /* wgsl */ `
 fn foliageSurface(in: PV, tap: LeafTap, t: vec3f, b: vec3f) -> Surf {
   let n = normalize(normalize(in.n) + (t * tap.nt.x + b * tap.nt.y) * 0.6);
   // per tree tint: some crowns fresher, some darker and bluer
   let tint = mix(vec3f(0.85, 0.95, 1.08), vec3f(1.08, 1.04, 0.86), in.ex.w);
   return Surf(tap.alb * tint, n, tap.trans, 0.35, 0.4, vec3f(0.0));
 }
-`;
+`,
+  // Lighting of a prop surface point (shared by the visibility buffer resolve).
 
-// Lighting of a prop surface point (shared by the visibility buffer resolve).
-export const propShading = /* wgsl */ `
+  propShading = /* wgsl */ `
 fn shadeProp(in: PV, s: Surf, frag: vec2f) -> vec3f {
   let pw = in.rel + F.camPos.xyz;
   let dist = length(in.rel);
@@ -924,15 +915,10 @@ fn shadeProp(in: PV, s: Surf, frag: vec2f) -> vec3f {
   col += mix(skyBase(R), ambientAt(R, pw), s.rough) * smoothstep(-0.2, 0.15, R.y) * fres * min(s.spec, 1.0) * ao * ao;
   return applyFog(col + s.emissive, in.rel);
 }
-`;
+`,
+  // Shadow casters; foliage cards cast the shape of their leaves.
 
-// Shadow casters; foliage cards cast the shape of their leaves.
-export const propShadowWGSL =
-  frameStruct +
-  commonLib +
-  propVS +
-  foliageLib(2, 0) +
-  /* wgsl */ `
+  propShadowWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${propVS}${foliageLibrary(2, 0)}
 struct Cascade { vp: mat4x4f };
 @group(1) @binding(0) var<uniform> CS: Cascade;
 struct SO { @builtin(position) pos: vec4f, @location(0) uv: vec3f, @location(1) @interpolate(flat) leaf: u32 };
@@ -945,20 +931,12 @@ struct SO { @builtin(position) pos: vec4f, @location(0) uv: vec3f, @location(1) 
   // shadow texels are large: a coarse mip of the leaf coverage is enough
   if (in.leaf == 1u && textureSampleLevel(leafA, leafSmp, in.uv.xy, i32(in.uv.z + 0.5), 2.0).a < 0.5) { discard; }
 }
-`;
-
-// Impostor bake: one orthographic view of a plant into the card atlas
-// (premultiplied albedo + coverage, premultiplied normal + translucency).
-// The view looks at the bounding sphere's centre against dir; right and up
-// span the image (see cardBasis).
-export const cardBakeWGSL =
-  frameStruct +
-  commonLib +
-  propVS +
-  propSurface +
-  foliageLib(2, 0) +
-  foliageSurfaceLib +
-  /* wgsl */ `
+`,
+  // Impostor bake: one orthographic view of a plant into the card atlas
+  // (premultiplied albedo + coverage, premultiplied normal + translucency).
+  // The view looks at the bounding sphere's centre against dir; right and up
+  // span the image (see cardBasis).
+  cardBakeWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${propVS}${propSurface}${foliageLibrary(2, 0)}${foliageSurfaceLibrary}
 struct BakeU { right: vec4f, up: vec4f, dir: vec4f };   // right.w radius, up.w centre height
 @group(1) @binding(0) var<uniform> B: BakeU;
 @vertex fn vs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) ex: vec4f) -> PV {
@@ -982,11 +960,10 @@ struct BO { @location(0) alb: vec4f, @location(1) nrm: vec4f };
   // the impostor keeps the interior occlusion (ambient is applied later with ao = 1)
   return BO(vec4f(s.alb * mix(0.55, 1.0, in.ex.x), 1.0), vec4f(s.n * 0.5 + 0.5, s.trans));
 }
-`;
-
-// Mip chain of the card atlas: coverage weighted, so leaf colour does not
-// bleed into the transparent background.
-export const cardMipWGSL = /* wgsl */ `
+`,
+  // Mip chain of the card atlas: coverage weighted, so leaf colour does not
+  // bleed into the transparent background.
+  cardMipWGSL = /* wgsl */ `
 @group(0) @binding(0) var srcA: texture_2d_array<f32>;
 @group(0) @binding(1) var srcN: texture_2d_array<f32>;
 @group(0) @binding(2) var dstA: texture_storage_2d_array<rgba8unorm, write>;
@@ -1005,3 +982,17 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   textureStore(dstN, vec2i(gid.xy), gid.z, n * 0.25);
 }
 `;
+
+export {
+  MAX_SLOTS,
+  cardBakeWGSL,
+  cardMipWGSL,
+  finalizeWGSL,
+  foliageSurfaceLibrary,
+  propShading,
+  propShadowWGSL,
+  propSurface,
+  propVS,
+  scatterWGSL,
+  slotInfoLibrary,
+};

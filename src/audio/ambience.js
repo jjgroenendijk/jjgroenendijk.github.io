@@ -2,161 +2,201 @@
 // birds and insects in the jungle, muffled rumble and bubbles underwater.
 // Starts muted; browsers only allow audio after a user gesture anyway.
 
-function noiseBuffer(ctx, seconds = 3) {
-  const b = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
-  const d = b.getChannelData(0);
-  let pink = 0;
-  for (let i = 0; i < d.length; i++) {
-    pink = 0.97 * pink + 0.03 * (Math.random() * 2 - 1);
-    d[i] = pink * 3 + (Math.random() * 2 - 1) * 0.15;
+// Muffle low-pass cutoff (Hz), indexed by the underwater flag: open air, then underwater.
+const MUFFLE_CUTOFF = [18_000, 420],
+  // Uniform draws in [0, 1); they only jitter the sound (noise, loop offsets, bird and bubble timing, pitch and pan).
+  // eslint-disable-next-line sonarjs/pseudo-random -- audio jitter only, nothing secret or reproducible depends on it
+  chance = () => Math.random(),
+  // One chirp note: a pitch glide under a short attack and exponential decay.
+  chirpNote = (oscillator, envelope, start, pitch) => {
+    oscillator.frequency.setValueAtTime(pitch, start);
+    oscillator.frequency.exponentialRampToValueAtTime(pitch * (0.7 + chance() * 0.8), start + 0.07);
+    envelope.gain.setValueAtTime(0, start);
+    envelope.gain.linearRampToValueAtTime(0.05, start + 0.01);
+    envelope.gain.exponentialRampToValueAtTime(0.0005, start + 0.08);
+  },
+  noiseBuffer = (context, seconds = 3) => {
+    const buffer = context.createBuffer(1, context.sampleRate * seconds, context.sampleRate),
+      data = buffer.getChannelData(0);
+    let pink = 0;
+    for (let index = 0; index < data.length; index += 1) {
+      pink = 0.97 * pink + 0.03 * (chance() * 2 - 1);
+      data[index] = pink * 3 + (chance() * 2 - 1) * 0.15;
+    }
+    return buffer;
+  };
+
+class Ambience {
+  #noise;
+  context;
+  on = false;
+  nextBird = 0;
+  nextBubble = 0;
+  master;
+  muffle;
+  surf;
+  wind;
+  insects;
+  rumble;
+  birdBus;
+  bubbleBus;
+
+  // A looping noise source starting at a random point of the shared buffer.
+  #source() {
+    const source = this.context.createBufferSource();
+    source.buffer = this.#noise;
+    source.loop = true;
+    source.loopStart = chance();
+    source.start(0, chance() * 2);
+    return source;
   }
-  return b;
-}
 
-export class Ambience {
-  constructor() {
-    this.ctx = null;
-    this.on = false;
-    this.nextBird = 0;
-    this.nextBubble = 0;
+  #filter(type, frequency, q = 0.7) {
+    const node = this.context.createBiquadFilter();
+    node.type = type;
+    node.frequency.value = frequency;
+    node.Q.value = q;
+    return node;
   }
 
-  start() {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.ctx = ctx;
-    const noise = noiseBuffer(ctx);
-    const src = () => {
-      const s = ctx.createBufferSource();
-      s.buffer = noise;
-      s.loop = true;
-      s.loopStart = Math.random();
-      s.start(0, Math.random() * 2);
-      return s;
-    };
-    const filter = (type, f, q = 0.7) => {
-      const n = ctx.createBiquadFilter();
-      n.type = type;
-      n.frequency.value = f;
-      n.Q.value = q;
-      return n;
-    };
-    const gain = (v = 0) => {
-      const g = ctx.createGain();
-      g.gain.value = v;
-      return g;
-    };
+  #gain(value = 0) {
+    const node = this.context.createGain();
+    node.gain.value = value;
+    return node;
+  }
 
-    this.master = gain(0);
-    this.muffle = filter('lowpass', 18000, 0.5);
-    this.muffle.connect(this.master).connect(ctx.destination);
-
-    // surf: two detuned noise layers with slowly breathing gain
-    this.surf = gain(0);
-    src().connect(filter('lowpass', 520)).connect(this.surf);
-    src()
-      .connect(filter('bandpass', 1400, 0.4))
-      .connect(gain(0.25))
+  // Surf: two detuned noise layers with slowly breathing gain; wind: one band of noise.
+  #startSurfAndWind() {
+    this.surf = this.#gain();
+    this.#source().connect(this.#filter('lowpass', 520)).connect(this.surf);
+    this.#source()
+      .connect(this.#filter('bandpass', 1400, 0.4))
+      .connect(this.#gain(0.25))
       .connect(this.surf);
     this.surf.connect(this.muffle);
 
-    this.wind = gain(0);
-    src()
-      .connect(filter('bandpass', 380, 0.6))
+    this.wind = this.#gain();
+    this.#source()
+      .connect(this.#filter('bandpass', 380, 0.6))
       .connect(this.wind)
       .connect(this.muffle);
+  }
 
-    this.insects = gain(0);
-    const ins = filter('bandpass', 5200, 9);
-    const trem = gain(0.5);
-    const lfo = ctx.createOscillator();
+  // Insects: a narrow high band of noise under a 13 Hz tremolo.
+  #startInsects() {
+    this.insects = this.#gain();
+    const band = this.#filter('bandpass', 5200, 9),
+      lfo = this.context.createOscillator(),
+      tremolo = this.#gain(0.5),
+      tremoloDepth = this.#gain(0.5);
     lfo.frequency.value = 13;
-    const lfoAmt = gain(0.5);
-    lfo.connect(lfoAmt).connect(trem.gain);
+    lfo.connect(tremoloDepth).connect(tremolo.gain);
     lfo.start();
-    src().connect(ins).connect(trem).connect(this.insects).connect(this.muffle);
+    this.#source().connect(band).connect(tremolo).connect(this.insects).connect(this.muffle);
+  }
 
-    this.rumble = gain(0);
-    src().connect(filter('lowpass', 140)).connect(this.rumble).connect(this.master);
+  #setLevels(t, m, underwater, night) {
+    const nearSea = 1 - m.aer * 0.6,
+      set = (parameter, value) => parameter.setTargetAtTime(value, t, 0.5),
+      swell = 0.6 + 0.4 * Math.sin(t * 0.55) * Math.sin(t * 0.21 + 1);
+    set(this.surf.gain, (0.5 * nearSea * swell + 0.08) * (1 - underwater * 0.7));
+    set(this.wind.gain, 0.08 + m.aer * 0.35 + m.glide * 0.1);
+    set(this.insects.gain, m.land * (0.03 + night * 0.09) * (1 - underwater));
+    set(this.rumble.gain, underwater * 0.5);
+    set(this.muffle.frequency, MUFFLE_CUTOFF[underwater]);
+    set(this.birdBus.gain, m.land * (1 - night * 0.85) + m.glide * 0.2);
+    set(this.bubbleBus.gain, underwater);
+  }
 
-    this.birdBus = gain(0.0);
+  #scheduleBirds(t, m) {
+    if (t <= this.nextBird) return;
+    if (m.land > 0.2 || m.glide > 0.5) this.chirp(t + 0.05, 1800 + chance() * 2200);
+    this.nextBird = t + 0.8 + chance() * 3.5;
+  }
+
+  #scheduleBubbles(t) {
+    if (t <= this.nextBubble) return;
+    const count = 1 + Math.floor(chance() * 4);
+    for (let index = 0; index < count; index += 1) this.bubble(t + index * (0.05 + chance() * 0.1));
+    this.nextBubble = t + 1.5 + chance() * 5;
+  }
+
+  start() {
+    const AudioContextClass = globalThis.AudioContext || globalThis.webkitAudioContext;
+    this.context = new AudioContextClass();
+    this.#noise = noiseBuffer(this.context);
+
+    this.master = this.#gain();
+    this.muffle = this.#filter('lowpass', MUFFLE_CUTOFF[0], 0.5);
+    this.muffle.connect(this.master).connect(this.context.destination);
+
+    this.#startSurfAndWind();
+    this.#startInsects();
+
+    this.rumble = this.#gain();
+    this.#source().connect(this.#filter('lowpass', 140)).connect(this.rumble).connect(this.master);
+
+    this.birdBus = this.#gain();
     this.birdBus.connect(this.muffle);
-    this.bubbleBus = gain(0.0);
+    this.bubbleBus = this.#gain();
     this.bubbleBus.connect(this.master);
   }
 
   toggle() {
-    if (!this.ctx) this.start();
+    if (!this.context) this.start();
     this.on = !this.on;
-    this.ctx.resume();
-    const t = this.ctx.currentTime;
+    this.context.resume();
+    const t = this.context.currentTime;
     this.master.gain.cancelScheduledValues(t);
-    this.master.gain.setTargetAtTime(this.on ? 0.9 : 0, t, 0.6);
+    this.master.gain.setTargetAtTime(Number(this.on) * 0.9, t, 0.6);
     return this.on;
   }
 
   chirp(t, base) {
-    const ctx = this.ctx;
-    const o = ctx.createOscillator(),
-      g = ctx.createGain();
-    const notes = 2 + Math.floor(Math.random() * 4);
-    o.type = 'sine';
-    g.gain.value = 0;
-    for (let i = 0; i < notes; i++) {
-      const s = t + i * (0.09 + Math.random() * 0.05);
-      const f = base * (1 + Math.random() * 0.4);
-      o.frequency.setValueAtTime(f, s);
-      o.frequency.exponentialRampToValueAtTime(f * (0.7 + Math.random() * 0.8), s + 0.07);
-      g.gain.setValueAtTime(0, s);
-      g.gain.linearRampToValueAtTime(0.05, s + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0005, s + 0.08);
+    const { context } = this,
+      envelope = context.createGain(),
+      notes = 2 + Math.floor(chance() * 4),
+      oscillator = context.createOscillator();
+    oscillator.type = 'sine';
+    envelope.gain.value = 0;
+    for (let note = 0; note < notes; note += 1) {
+      const start = t + note * (0.09 + chance() * 0.05);
+      chirpNote(oscillator, envelope, start, base * (1 + chance() * 0.4));
     }
-    const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-    if (pan) {
-      pan.pan.value = Math.random() * 1.6 - 0.8;
-      o.connect(g).connect(pan).connect(this.birdBus);
-    } else o.connect(g).connect(this.birdBus);
-    o.start(t);
-    o.stop(t + notes * 0.15 + 0.2);
+    let output = oscillator.connect(envelope);
+    if (context.createStereoPanner) {
+      const panner = context.createStereoPanner();
+      panner.pan.value = chance() * 1.6 - 0.8;
+      output = output.connect(panner);
+    }
+    output.connect(this.birdBus);
+    oscillator.start(t);
+    oscillator.stop(t + notes * 0.15 + 0.2);
   }
 
   bubble(t) {
-    const ctx = this.ctx;
-    const o = ctx.createOscillator(),
-      g = ctx.createGain();
-    const f = 300 + Math.random() * 500;
-    o.frequency.setValueAtTime(f, t);
-    o.frequency.exponentialRampToValueAtTime(f * 2.5, t + 0.12);
-    g.gain.setValueAtTime(0.0, t);
-    g.gain.linearRampToValueAtTime(0.04, t + 0.01);
-    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.14);
-    o.connect(g).connect(this.bubbleBus);
-    o.start(t);
-    o.stop(t + 0.2);
+    const { context } = this,
+      envelope = context.createGain(),
+      oscillator = context.createOscillator(),
+      pitch = 300 + chance() * 500;
+    oscillator.frequency.setValueAtTime(pitch, t);
+    oscillator.frequency.exponentialRampToValueAtTime(pitch * 2.5, t + 0.12);
+    envelope.gain.setValueAtTime(0, t);
+    envelope.gain.linearRampToValueAtTime(0.04, t + 0.01);
+    envelope.gain.exponentialRampToValueAtTime(0.0005, t + 0.14);
+    oscillator.connect(envelope).connect(this.bubbleBus);
+    oscillator.start(t);
+    oscillator.stop(t + 0.2);
   }
 
-  update(dt, shot, env) {
-    if (!this.ctx || !this.on) return;
-    const t = this.ctx.currentTime;
-    const m = shot.modes;
-    const uw = shot.underwater ? 1 : 0;
-    const swell = 0.6 + 0.4 * Math.sin(t * 0.55) * Math.sin(t * 0.21 + 1);
-    const nearSea = 1 - m.aer * 0.6;
-    const set = (p, v) => p.setTargetAtTime(v, t, 0.5);
-    set(this.surf.gain, (0.5 * nearSea * swell + 0.08) * (1 - uw * 0.7));
-    set(this.wind.gain, 0.08 + m.aer * 0.35 + m.glide * 0.1);
-    set(this.insects.gain, m.land * (0.03 + env.night * 0.09) * (1 - uw));
-    set(this.rumble.gain, uw * 0.5);
-    set(this.muffle.frequency, uw ? 420 : 18000);
-    set(this.birdBus.gain, m.land * (1 - env.night * 0.85) + m.glide * 0.2);
-    set(this.bubbleBus.gain, uw);
-    if (t > this.nextBird) {
-      if (m.land > 0.2 || m.glide > 0.5) this.chirp(t + 0.05, 1800 + Math.random() * 2200);
-      this.nextBird = t + 0.8 + Math.random() * 3.5;
-    }
-    if (uw && t > this.nextBubble) {
-      const n = 1 + Math.floor(Math.random() * 4);
-      for (let i = 0; i < n; i++) this.bubble(t + i * (0.05 + Math.random() * 0.1));
-      this.nextBubble = t + 1.5 + Math.random() * 5;
-    }
+  update(dt, shot, environment) {
+    if (!this.context || !this.on) return;
+    const t = this.context.currentTime,
+      underwater = Number(Boolean(shot.underwater));
+    this.#setLevels(t, shot.modes, underwater, environment.night);
+    this.#scheduleBirds(t, shot.modes);
+    if (underwater) this.#scheduleBubbles(t);
   }
 }
+
+export { Ambience };

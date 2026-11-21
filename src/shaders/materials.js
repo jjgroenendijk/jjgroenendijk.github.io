@@ -4,25 +4,27 @@
 //   A: albedo (stored as sqrt, i.e. gamma 2, for 8-bit precision) + height
 //   B: tangent-space normal xy + roughness + ambient occlusion
 // The height channel drives height-based blending between materials.
-import { noiseLib } from './common.js';
+import { noiseLibrary } from './common.js';
 
-export const MAT_TEX = 512; // texels per side
-// id, metres covered by one tile (a power of two so it tiles the 16 km world),
-// relief depth in metres (scales the baked normals)
-const GROUND = {
-  sand: { id: 0, tile: 4, depth: 0.025 },
-  blackSand: { id: 1, tile: 4, depth: 0.025 },
-  grass: { id: 2, tile: 2, depth: 0.05 },
-  litter: { id: 3, tile: 4, depth: 0.03 },
-  rock: { id: 4, tile: 8, depth: 0.35 },
-  basalt: { id: 5, tile: 4, depth: 0.12 },
-};
-export const GROUND_COUNT = Object.keys(GROUND).length;
-const list = Object.values(GROUND).sort((a, b) => a.id - b.id);
-const arr = (k) => `array<f32, ${GROUND_COUNT}>(${list.map((m) => m[k].toFixed(4)).join(', ')})`;
-
-// shared by the bake and the terrain shader
-export const groundLib = /* wgsl */ `
+// Material texture texels per side.
+const MAT_TEX = 512,
+  // Relief depth in metres (scales the baked normals), id, and metres covered by one tile (a power of two so it tiles
+  // the 16 km world). The WGSL arrays are laid out by id, so the key order here does not matter.
+  GROUND = {
+    basalt: { depth: 0.12, id: 5, tile: 4 },
+    blackSand: { depth: 0.025, id: 1, tile: 4 },
+    grass: { depth: 0.05, id: 2, tile: 2 },
+    litter: { depth: 0.03, id: 3, tile: 4 },
+    rock: { depth: 0.35, id: 4, tile: 8 },
+    sand: { depth: 0.025, id: 0, tile: 4 },
+  },
+  // Decimals of the tile sizes and depths written into the WGSL arrays.
+  ARRAY_DECIMALS = 4,
+  GROUND_COUNT = Object.keys(GROUND).length,
+  list = Object.values(GROUND).toSorted((a, b) => a.id - b.id),
+  groundArray = (k) => `array<f32, ${GROUND_COUNT}>(${list.map((m) => m[k].toFixed(ARRAY_DECIMALS)).join(', ')})`,
+  // Shared by the bake and the terrain shader.
+  groundLibrary = /* wgsl */ `
 const GROUND_COUNT: u32 = ${GROUND_COUNT}u;
 const G_SAND: u32 = ${GROUND.sand.id}u;
 const G_BLACK_SAND: u32 = ${GROUND.blackSand.id}u;
@@ -30,12 +32,11 @@ const G_GRASS: u32 = ${GROUND.grass.id}u;
 const G_LITTER: u32 = ${GROUND.litter.id}u;
 const G_ROCK: u32 = ${GROUND.rock.id}u;
 const G_BASALT: u32 = ${GROUND.basalt.id}u;
-var<private> GROUND_TILE: array<f32, ${GROUND_COUNT}> = ${arr('tile')};
-var<private> GROUND_DEPTH: array<f32, ${GROUND_COUNT}> = ${arr('depth')};
-`;
-
-// ---------------------------------------------------------------- generation
-const patterns = /* wgsl */ `
+var<private> GROUND_TILE: array<f32, ${GROUND_COUNT}> = ${groundArray('tile')};
+var<private> GROUND_DEPTH: array<f32, ${GROUND_COUNT}> = ${groundArray('depth')};
+`,
+  // ---------------------------------------------------------------- generation
+  patterns = /* wgsl */ `
 struct Mat { alb: vec3f, h: f32, rough: f32 };
 
 // periodic noise over the unit tile
@@ -190,13 +191,9 @@ fn groundMat(m: u32, u: vec2f) -> Mat {
     default: { return basaltMat(u); }
   }
 }
-`;
-
-// Pass 1: albedo + height (A) and roughness (scratch).
-export const groundBakeWGSL =
-  noiseLib +
-  patterns +
-  /* wgsl */ `
+`,
+  // Pass 1: albedo + height (A) and roughness (scratch).
+  groundBakeWGSL = /* wgsl */ `${noiseLibrary}${patterns}
 @group(0) @binding(0) var outA: texture_storage_2d_array<rgba8unorm, write>;
 @group(0) @binding(1) var outRough: texture_storage_2d_array<rgba8unorm, write>;
 @compute @workgroup_size(8, 8, 1)
@@ -206,12 +203,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   textureStore(outA, gid.xy, gid.z, vec4f(sqrt(s.alb), s.h));
   textureStore(outRough, gid.xy, gid.z, vec4f(s.rough, 0.0, 0.0, 1.0));
 }
-`;
-
-// Pass 2: normals and occlusion from the baked heights (B).
-export const groundDeriveWGSL =
-  groundLib +
-  /* wgsl */ `
+`,
+  // Pass 2: normals and occlusion from the baked heights (B).
+  groundDeriveWGSL = /* wgsl */ `${groundLibrary}
 @group(0) @binding(0) var texA: texture_2d_array<f32>;
 @group(0) @binding(1) var texRough: texture_2d_array<f32>;
 @group(0) @binding(2) var outB: texture_storage_2d_array<rgba8unorm, write>;
@@ -240,12 +234,11 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let rough = textureLoad(texRough, p, m, 0).r;
   textureStore(outB, gid.xy, m, vec4f(n.xy * 0.5 + 0.5, rough, ao));
 }
-`;
-
-// Mip chains: plain averages for A; for B the normals are averaged and the
-// spread of the normals that got averaged away is folded into the roughness
-// (Toksvig), so distant ground does not turn glossy.
-export const groundMipWGSL = /* wgsl */ `
+`,
+  // Mip chains: plain averages for A; for B the normals are averaged and the
+  // spread of the normals that got averaged away is folded into the roughness
+  // (Toksvig), so distant ground does not turn glossy.
+  groundMipWGSL = /* wgsl */ `
 @group(0) @binding(0) var src: texture_2d_array<f32>;
 @group(0) @binding(1) var dst: texture_storage_2d_array<rgba8unorm, write>;
 fn fetch(p: vec2u, l: u32) -> vec4f { return textureLoad(src, p, l, 0); }
@@ -276,3 +269,5 @@ fn surface(@builtin(global_invocation_id) gid: vec3u) {
   textureStore(dst, gid.xy, gid.z, vec4f(n.xy * 0.5 + 0.5, rough, ao * 0.25));
 }
 `;
+
+export { GROUND_COUNT, MAT_TEX, groundBakeWGSL, groundDeriveWGSL, groundLibrary, groundMipWGSL };

@@ -1,46 +1,68 @@
 // Debug capture mode (?capture=N): renders offscreen and, after N frames,
 // copies the image into a 2D canvas. Lets headless/software GPUs (which can't
 // present to a WebGPU canvas) produce screenshots for automated checks.
+import { flags } from '../core/gpu.js';
 
-export function offscreenContext(device, canvas) {
-  let tex = null;
-  return {
-    format: 'rgba8unorm',
-    getCurrentTexture() {
-      if (!tex || tex.width !== canvas.width || tex.height !== canvas.height) {
-        tex?.destroy();
-        tex = device.createTexture({
-          size: [canvas.width, canvas.height],
-          format: 'rgba8unorm',
-          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
-        });
-      }
-      return tex;
-    },
-    texture: () => tex,
+// The offscreen target is RGBA8, and texture-to-buffer copies pad each row to 256 bytes.
+const BYTES_PER_TEXEL = 4,
+  ROW_ALIGN = 256,
+  offscreenContext = (device, canvas) => {
+    // Holds the current render target, recreated whenever the canvas size changes
+    const current = {};
+    return {
+      format: 'rgba8unorm',
+      getCurrentTexture() {
+        const { texture } = current;
+        if (!texture || texture.width !== canvas.width || texture.height !== canvas.height) {
+          texture?.destroy();
+          current.texture = device.createTexture({
+            format: 'rgba8unorm',
+            size: [canvas.width, canvas.height],
+            usage: flags(GPUTextureUsage.RENDER_ATTACHMENT, GPUTextureUsage.COPY_SRC),
+          });
+        }
+        return current.texture;
+      },
+      texture: () => current.texture,
+    };
+  },
+  // Copies the padded rows of a mapped readback buffer into tightly packed image data.
+  copyRows = (source, bytesPerRow, image) => {
+    const rowBytes = image.width * BYTES_PER_TEXEL;
+    for (let y = 0; y < image.height; y += 1)
+      image.data.set(source.subarray(y * bytesPerRow, y * bytesPerRow + rowBytes), y * image.width * BYTES_PER_TEXEL);
+  },
+  readPixels = async (device, texture) => {
+    const { height, width } = texture,
+      bytesPerRow = Math.ceil((width * BYTES_PER_TEXEL) / ROW_ALIGN) * ROW_ALIGN,
+      readback = device.createBuffer({
+        size: bytesPerRow * height,
+        usage: flags(GPUBufferUsage.COPY_DST, GPUBufferUsage.MAP_READ),
+      }),
+      encoder = device.createCommandEncoder(),
+      image = new ImageData(width, height);
+    encoder.copyTextureToBuffer({ texture }, { buffer: readback, bytesPerRow }, [width, height]);
+    device.queue.submit([encoder.finish()]);
+    await readback.mapAsync(GPUMapMode.READ);
+    copyRows(new Uint8Array(readback.getMappedRange()), bytesPerRow, image);
+    readback.unmap();
+    return image;
+  },
+  // Shows the captured image full-window in place of the WebGPU canvas.
+  showImage = (image, canvas) => {
+    const out = document.createElement('canvas');
+    out.width = image.width;
+    out.height = image.height;
+    out.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:5';
+    out.getContext('2d').putImageData(image, 0, 0);
+    document.body.append(out);
+    canvas.style.display = 'none';
+  },
+  captureToCanvas = async (device, context, canvas) => {
+    showImage(await readPixels(device, context.texture()), canvas);
+    // The headless screenshot script (checking-rendering skill) waits for window.__captured
+    // eslint-disable-next-line no-underscore-dangle, unicorn/no-global-object-property-assignment -- screenshot flag
+    globalThis.__captured = true;
   };
-}
 
-export async function captureToCanvas(device, ctx, canvas) {
-  const tex = ctx.texture();
-  const w = tex.width,
-    h = tex.height;
-  const bpr = Math.ceil((w * 4) / 256) * 256;
-  const buf = device.createBuffer({ size: bpr * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
-  const enc = device.createCommandEncoder();
-  enc.copyTextureToBuffer({ texture: tex }, { buffer: buf, bytesPerRow: bpr }, [w, h]);
-  device.queue.submit([enc.finish()]);
-  await buf.mapAsync(GPUMapMode.READ);
-  const src = new Uint8Array(buf.getMappedRange());
-  const img = new ImageData(w, h);
-  for (let y = 0; y < h; y++) img.data.set(src.subarray(y * bpr, y * bpr + w * 4), y * w * 4);
-  buf.unmap();
-  const out = document.createElement('canvas');
-  out.width = w;
-  out.height = h;
-  out.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:5';
-  out.getContext('2d').putImageData(img, 0, 0);
-  document.body.appendChild(out);
-  canvas.style.display = 'none';
-  window.__captured = true;
-}
+export { captureToCanvas, offscreenContext };

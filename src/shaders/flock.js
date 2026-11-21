@@ -2,19 +2,13 @@
 // apart, align with and stay close to their neighbours while following a
 // target that wanders along the island. State persists between frames; the
 // scatter pass reads it to place the instances.
-import { frameStruct, commonLib } from './common.js';
+import { BIRDS_PER_FLOCK, FISH_COUNT, FISH_PER_SCHOOL, FISH_SCHOOLS } from '../scene/flocks.js';
+import { commonLibrary, frameStruct } from './common.js';
 
-const FISH_SCHOOLS = 13;
-const FISH_PER_SCHOOL = 32;
-const BIRD_FLOCKS = 6;
-const BIRDS_PER_FLOCK = 6;
-export const FISH_COUNT = FISH_SCHOOLS * FISH_PER_SCHOOL;
-export const BIRD_COUNT = BIRD_FLOCKS * BIRDS_PER_FLOCK;
-export const FLOCK_GROUPS = FISH_SCHOOLS + BIRD_FLOCKS;
-export const AGENT_BYTES = 32; // (position, school key) + (velocity, bank)
-
-// Read access to the flock state for other shaders (bound read-only).
-export const flockReadLib = (group, binding) => /* wgsl */ `
+// Bytes per agent: (position, school key) + (velocity, bank).
+const AGENT_BYTES = 32,
+  // Read access to the flock state for other shaders (bound read-only).
+  flockReadLibrary = (group, binding) => /* wgsl */ `
 @group(${group}) @binding(${binding}) var<storage, read> flock: array<vec4f>;
 const FISH_COUNT: u32 = ${FISH_COUNT}u;
 struct Agent { pos: vec3f, key: u32, vel: vec3f, bank: f32 };
@@ -23,12 +17,8 @@ fn agentAt(k: u32) -> Agent {
   let b = flock[k * 2u + 1u];
   return Agent(a.xyz, bitcast<u32>(a.w), b.xyz, b.w);
 }
-`;
-
-export const flockWGSL =
-  frameStruct +
-  commonLib +
-  /* wgsl */ `
+`,
+  flockWGSL = /* wgsl */ `${frameStruct}${commonLibrary}
 struct Step { dt: f32, t: f32, pad0: f32, pad1: f32 };
 @group(1) @binding(0) var<uniform> S: Step;
 @group(1) @binding(1) var<storage, read_write> flock: array<vec4f>;
@@ -163,3 +153,5 @@ fn main(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) j: u3
   flock[k * 2u + 1u] = vec4f(v, bank);
 }
 `;
+
+export { AGENT_BYTES, flockReadLibrary, flockWGSL };

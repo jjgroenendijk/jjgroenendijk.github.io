@@ -1,20 +1,23 @@
-import { frameStruct, commonLib, shadowLib, hizLib, LEVELS } from './common.js';
-import { shoreLib } from './shore.js';
-import { groundSampleLib, groundShadingLib } from './ground.js';
+import { LEVELS, commonLibrary, frameStruct, hizLibrary, shadowLibrary } from './common.js';
+import { groundSampleLibrary, groundShadingLibrary } from './ground.js';
 import { GROUND_COUNT } from './materials.js';
+import { shoreLibrary } from './shore.js';
 
-export const GRID_M = 96; // half-size of a clipmap level in cells
-export const SIDE = GRID_M * 2 + 1; // vertices per level side
-export const TILES = 4; // each level is split into TILES x TILES clusters for culling
-export const TILE = (GRID_M * 2) / TILES;
-// cache layers: one per level with (height, normal x, normal z, horizon shadow),
-// then one per level with the ground's shape (horizon occlusion, curvature)
-export const CACHE_LAYERS = LEVELS * 2;
-
-// The clipmap cache is addressed toroidally: a world lattice point keeps its
-// texel while its level moves, so a move only re-bakes the rows and columns
-// that scrolled into view (see terrainCacheWGSL).
-export const cacheLib = /* wgsl */ `
+// Half-size of a clipmap level in cells.
+const GRID_M = 96,
+  // Vertices per level side.
+  SIDE = GRID_M * 2 + 1,
+  // Each level is split into TILES x TILES clusters for culling.
+  TILES = 4,
+  TILE = (GRID_M * 2) / TILES,
+  VEC4_BYTES = 16,
+  // Cache layers: one per level with (height, normal x, normal z, horizon shadow),
+  // then one per level with the ground's shape (horizon occlusion, curvature).
+  CACHE_LAYERS = LEVELS * 2,
+  // The clipmap cache is addressed toroidally: a world lattice point keeps its
+  // texel while its level moves, so a move only re-bakes the rows and columns
+  // that scrolled into view (see terrainCacheWGSL).
+  cacheLibrary = /* wgsl */ `
 @group(0) @binding(1) var cacheTex: texture_2d_array<f32>;
 // texel of grid point g (-GRID_M..GRID_M around the level centre) of a level
 fn cacheTexel(lvl: u32, g: vec2i) -> vec2i {
@@ -42,16 +45,12 @@ fn cacheHeight(p: vec2f) -> f32 {
   }
   return terrainHeight(p);
 }
-`;
-
-// Compute: bake heights, normals and far horizon shadows into a clipmap texture
-// array. Only texels that are new to a level's window are computed, plus a band
-// of rows per frame that is refreshed so horizon shadows follow the sun.
-export const BAKE_BYTES = (LEVELS + 1) * 16;
-export const terrainCacheWGSL =
-  frameStruct +
-  commonLib +
-  /* wgsl */ `
+`,
+  // Compute: bake heights, normals and far horizon shadows into a clipmap texture
+  // array. Only texels that are new to a level's window are computed, plus a band
+  // of rows per frame that is refreshed so horizon shadows follow the sun.
+  BAKE_BYTES = (LEVELS + 1) * VEC4_BYTES,
+  terrainCacheWGSL = /* wgsl */ `${frameStruct}${commonLibrary}
 @group(0) @binding(1) var cacheOut: texture_storage_2d_array<rgba32float, write>;
 struct Bake {
   prev: array<vec4f, ${LEVELS}>, // xy previous level centre, z mode (0 keep, 1 new texels, 2 everything)
@@ -140,11 +139,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     textureStore(cacheOut, texel, i32(lvl + ${LEVELS}u), vec4f(horizonOcclusion(p, h, Lv.z), curvature(p, h, Lv.z), 0.0, 0.0));
   }
 }
-`;
-
-const terrainVS =
-  cacheLib +
-  /* wgsl */ `
+`,
+  terrainVS = /* wgsl */ `${cacheLibrary}
 
 struct TV {
   @builtin(position) pos: vec4f,
@@ -194,11 +190,10 @@ fn terrainVertex(g: vec2f, lvl: u32) -> TV {
   o.shape = shape;
   return o;
 }
-`;
-
-// Ground materials blended from slope, curvature, height and region; at most
-// two per pixel (see ground.js for the texture budget).
-const groundChoice = /* wgsl */ `
+`,
+  // Ground materials blended from slope, curvature, height and region; at most
+  // two per pixel (see ground.js for the texture budget).
+  groundChoice = /* wgsl */ `
 struct Pick { m0: u32, m1: u32, w0: f32, w1: f32 };
 // the two strongest of the material weights, renormalised
 fn pickTwo(w: array<f32, ${GROUND_COUNT}>) -> Pick {
@@ -211,18 +206,8 @@ fn pickTwo(w: array<f32, ${GROUND_COUNT}>) -> Pick {
   return Pick(a, b, w[a] / s, w[b] / s);
 }
 fn isRocky(m: u32) -> bool { return m == G_ROCK || m == G_BASALT; }
-`;
-
-export const terrainWGSL =
-  frameStruct +
-  commonLib +
-  shadowLib +
-  terrainVS +
-  shoreLib +
-  groundSampleLib +
-  groundShadingLib +
-  groundChoice +
-  /* wgsl */ `
+`,
+  terrainWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${shadowLibrary}${terrainVS}${shoreLibrary}${groundSampleLibrary}${groundShadingLibrary}${groundChoice}
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> TV {
   let gp = gridPoint(vi);
   var o = terrainVertex(gp.xy, u32(gp.z));
@@ -356,13 +341,8 @@ export const terrainWGSL =
   col = applyFog(col, in.rel);
   return vec4f(col, 1.0);
 }
-`;
-
-export const terrainShadowWGSL =
-  frameStruct +
-  commonLib +
-  terrainVS +
-  /* wgsl */ `
+`,
+  terrainShadowWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${terrainVS}
 struct Cascade { vp: mat4x4f };
 @group(1) @binding(0) var<uniform> CS: Cascade;
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -370,19 +350,13 @@ struct Cascade { vp: mat4x4f };
   let o = terrainVertex(gp.xy, u32(gp.z));
   return CS.vp * vec4f(o.rel, 1.0);
 }
-`;
-
-// Cluster culling: one workgroup per terrain tile finds the tile's exact height
-// range in the cache and tests the box against the frustum and last frame's
-// depth pyramid. Visible tiles append their indices (made absolute: the level
-// is folded into the vertex index) to one compact list, so the whole terrain,
-// and the water on the same grid, is a single indexed indirect draw.
-export const terrainCullWGSL =
-  frameStruct +
-  commonLib +
-  hizLib +
-  cacheLib +
-  /* wgsl */ `
+`,
+  // Cluster culling: one workgroup per terrain tile finds the tile's exact height
+  // range in the cache and tests the box against the frustum and last frame's
+  // depth pyramid. Visible tiles append their indices (made absolute: the level
+  // is folded into the vertex index) to one compact list, so the whole terrain,
+  // and the water on the same grid, is a single indexed indirect draw.
+  terrainCullWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${hizLibrary}${cacheLibrary}
 struct Cluster { first: u32, count: u32, level: u32, tile: u32 };
 @group(1) @binding(0) var<storage, read> clusters: array<Cluster>;
 @group(1) @binding(1) var<storage, read_write> args: array<atomic<u32>>; // indexed indirect args, cleared each frame
@@ -440,3 +414,17 @@ fn main(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_index) li: u
   for (var i = li; i < cl.count; i += 64u) { drawIdx[base + i] = gridIdx[cl.first + i] + vbase; }
 }
 `;
+
+export {
+  BAKE_BYTES,
+  CACHE_LAYERS,
+  GRID_M,
+  SIDE,
+  TILE,
+  TILES,
+  cacheLibrary,
+  terrainCacheWGSL,
+  terrainCullWGSL,
+  terrainShadowWGSL,
+  terrainWGSL,
+};

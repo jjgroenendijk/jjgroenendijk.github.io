@@ -5,16 +5,14 @@
 //   B: tangent-space normal xy (premultiplied, 0.5 = flat), translucency, coverage
 // Premultiplied texels let the shared card mip filter average them without
 // the transparent background bleeding into the leaf colour.
-import { noiseLib } from './common.js';
+import { LEAF } from '../scene/catalog.js';
+import { noiseLibrary } from './common.js';
 
-export const LEAF_TEX = 256;
-export const LEAF = { broad: 0, small: 1, pinnate: 2 };
-export const LEAF_COUNT = Object.keys(LEAF).length;
-
-// Sampling, for any shader that draws foliage (uv and layer as unpacked by
-// unpackLeafUV in the prop vertex stage). The textures and
-// their sampler live in bind group `group` from binding `binding` on.
-export const foliageLib = (group, binding) => /* wgsl */ `
+const LEAF_TEX = 256,
+  // Sampling, for any shader that draws foliage (uv and layer as unpacked by
+  // unpackLeafUV in the prop vertex stage). The textures and
+  // their sampler live in bind group `group` from binding `binding` on.
+  foliageLibrary = (group, binding) => /* wgsl */ `
 @group(${group}) @binding(${binding}) var leafA: texture_2d_array<f32>;
 @group(${group}) @binding(${binding + 1}) var leafB: texture_2d_array<f32>;
 @group(${group}) @binding(${binding + 2}) var leafSmp: sampler;
@@ -29,11 +27,8 @@ fn leafSample(uvl: vec3f, gx: vec2f, gy: vec2f) -> LeafTap {
 fn leafCoverage(uvl: vec3f, gx: vec2f, gy: vec2f) -> f32 {
   return textureSampleGrad(leafA, leafSmp, uvl.xy, i32(uvl.z + 0.5), gx, gy).a;
 }
-`;
-
-export const leafBakeWGSL =
-  noiseLib +
-  /* wgsl */ `
+`,
+  leafBakeWGSL = /* wgsl */ `${noiseLibrary}
 @group(0) @binding(0) var outA: texture_storage_2d_array<rgba8unorm, write>;
 @group(0) @binding(1) var outB: texture_storage_2d_array<rgba8unorm, write>;
 
@@ -155,3 +150,5 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   textureStore(outB, vec2i(gid.xy), gid.z, vec4f(clamp(n, vec2f(-cov), vec2f(cov)) * 0.5 + 0.5 * cov, tr, cov));
 }
 `;
+
+export { LEAF_TEX, foliageLibrary, leafBakeWGSL };

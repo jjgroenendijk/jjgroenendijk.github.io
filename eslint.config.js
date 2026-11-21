@@ -1,6 +1,5 @@
 // Strictest practical ESLint setup: every core rule and every unicorn rule, sonarjs on top, and only the stylistic
-// rules that fight Prettier switched off. Violations that predate this setup are recorded in
-// eslint-suppressions.json; that baseline may only shrink (`npm run lint:prune` after fixing some).
+// rules that fight Prettier switched off. Rules that contradict each other are resolved below, each with a reason.
 import globals from 'globals';
 import js from '@eslint/js';
 import prettier from 'eslint-config-prettier';
@@ -42,7 +41,12 @@ export default [
     linterOptions: { reportUnusedDisableDirectives: 'error', reportUnusedInlineConfigs: 'error' },
     rules: {
       // A comment that wraps onto further lines is one sentence: only its first line starts with a capital.
-      'capitalized-comments': ['error', 'always', { ignoreConsecutiveComments: true }],
+      // `/* wgsl */` before a template string is the editor convention for WGSL syntax highlighting.
+      'capitalized-comments': [
+        'error',
+        'always',
+        { ignoreConsecutiveComments: true, ignorePattern: String.raw`wgsl\b` },
+      ],
       complexity: ['error', LIMITS.complexity],
       'id-length': ['error', { exceptions: MATH_NAMES, min: 2, properties: 'never' }],
       'max-depth': ['error', LIMITS.depth],
@@ -51,10 +55,28 @@ export default [
       'max-nested-callbacks': ['error', LIMITS.nestedCallbacks],
       'max-params': ['error', LIMITS.params],
       'max-statements': ['error', LIMITS.statements],
+      // Halving, doubling, negation and the identities are arithmetic, not tuning, so naming them adds nothing.
+      'no-inline-comments': ['error', { ignorePattern: String.raw`^\s*wgsl\s*$` }],
+      'no-magic-numbers': [
+        'error',
+        {
+          ignore: [-1, 0, 0.5, 1, 2],
+          ignoreArrayIndexes: true,
+          ignoreClassFieldInitialValues: true,
+          ignoreDefaultValues: true,
+        },
+      ],
       'sonarjs/cognitive-complexity': ['error', LIMITS.cognitive],
+      // Contradicts no-use-before-define (with one-var): declarations that depend on each other cannot also be in
+      // alphabetical order, so satisfying both means renaming helpers to fit the alphabet. Dependency order wins.
+      'sort-vars': 'off',
       // Contradicts the core arrow-body-style rule, which forbids the block body this one demands for multi-line
       // returns; the core rule stays.
       'unicorn/consistent-arrow-return-style': 'off',
+      // In this codebase "prop" means a scene prop (tree, rock, ship), not a property.
+      'unicorn/name-replacements': ['error', { replacements: { prop: false, props: false } }],
+      // Contradicts the core no-ternary rule: it asks for the ternary that no-ternary forbids. no-ternary stays.
+      'unicorn/prefer-ternary': 'off',
     },
   },
   {
@@ -62,6 +84,19 @@ export default [
     // GPU APIs so they stay portable and testable.
     files: ['src/world/**/*.js', 'src/core/math.js'],
     rules: { 'no-restricted-globals': ['error', ...BROWSER_AND_GPU_GLOBALS] },
+  },
+  {
+    // Numeric models: procedural meshes, noise, terrain, sky, wave and sound synthesis. Their numbers are shape and
+    // signal data (coordinates, colours, tuned coefficients), so naming each one would only restate it. Named constants
+    // are still expected for values that are reused or carry meaning elsewhere.
+    files: [
+      'src/scene/*.js',
+      'src/core/math.js',
+      'src/world/{noise,path,sky,terrain,waves}.js',
+      'src/audio/ambience.js',
+    ],
+    ignores: ['src/scene/catalog.js', 'src/scene/flocks.js'],
+    rules: { 'no-magic-numbers': 'off' },
   },
   {
     // Shader modules are mostly WGSL template strings, which are data rather than JS logic.

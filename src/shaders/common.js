@@ -1,40 +1,44 @@
 // Shared WGSL: frame uniforms, periodic noise, terrain, waves, sky, fog, lighting.
-import { W, CYCLE } from '../world/noise.js';
+import { CYCLE, W } from '../world/noise.js';
+import { RIPPLES, WAVES, WAVE_T } from '../world/waves.js';
 import { KNOTS } from '../world/terrain.js';
-import { WAVES, RIPPLES, WAVE_T } from '../world/waves.js';
 
-const f = (x) => {
-  const s = Number(x).toPrecision(9);
-  return s.includes('.') || s.includes('e') ? s : s + '.0';
-};
-
-const knotArr = `var<private> KN: array<vec4f, ${KNOTS.length}> = array<vec4f, ${KNOTS.length}>(${KNOTS.map((k) => `vec4f(${f(k[0])},${f(k[1])},${f(k[2])},${f(k[3])})`).join(',')});
-var<private> KW: array<f32, ${KNOTS.length}> = array<f32, ${KNOTS.length}>(${KNOTS.map((k) => f(k[4])).join(',')});`;
-
-export const waveArr = (
-  name,
-  list,
-) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => `vec4f(${f(w[0])},${f(w[1])},${f(w[2])},${f(w[4])})`).join(',')});
-var<private> ${name}Q: array<f32, ${list.length}> = array<f32, ${list.length}>(${list.map((w) => f(w[3])).join(',')});`;
-
-export const LEVELS = 9; // terrain clipmap levels
-// float offsets of the members that follow the clipmap levels
-export const FRAME_OFS = {
-  levels: 192,
-  cloud: 192 + LEVELS * 4,
-  extra: 196 + LEVELS * 4,
-  fx: 200 + LEVELS * 4,
-  cloudMap: 204 + LEVELS * 4,
-  caustic: 208 + LEVELS * 4,
-  path: 212 + LEVELS * 4,
-};
-export const FRAME_FLOATS = 224 + LEVELS * 4;
-// cloud shadow map: CLOUD_MAP_N^2 texels covering CLOUD_MAP_SPAN metres of the cloud layer
-export const CLOUD_MAP_N = 256;
-export const CLOUD_MAP_SPAN = 8192;
-export const CLOUD_ALT = 1700;
-
-export const frameStruct = /* wgsl */ `
+// Significant digits of the WGSL float literals that JS numbers are written as.
+const FLOAT_DIGITS = 9,
+  // A JS number as a WGSL float literal (always with a decimal point or exponent).
+  f = (x) => {
+    const s = Number(x).toPrecision(FLOAT_DIGITS);
+    if (s.includes('.') || s.includes('e')) return s;
+    return `${s}.0`;
+  },
+  vec4f = (...parts) => `vec4f(${parts.map((part) => f(part)).join(',')})`,
+  knotArray = `var<private> KN: array<vec4f, ${KNOTS.length}> = array<vec4f, ${KNOTS.length}>(${KNOTS.map((k) => vec4f(k[0], k[1], k[2], k[3])).join(',')});
+var<private> KW: array<f32, ${KNOTS.length}> = array<f32, ${KNOTS.length}>(${KNOTS.map((k) => f(k[4])).join(',')});`,
+  waveArray = (
+    name,
+    list,
+  ) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => vec4f(w[0], w[1], w[2], w[4])).join(',')});
+var<private> ${name}Q: array<f32, ${list.length}> = array<f32, ${list.length}>(${list.map((w) => f(w[3])).join(',')});`,
+  // Terrain clipmap levels.
+  LEVELS = 9,
+  // Float layout of `struct Frame`: LEVELS_AT floats of matrices and vec4fs precede the clipmap levels, which are
+  // followed by one vec4f for each FRAME_TAIL member but the last, the PATH_VEC4S vec4fs of the camera path.
+  LEVELS_AT = 192,
+  PATH_VEC4S = 3,
+  VEC4_FLOATS = 4,
+  AFTER_LEVELS = LEVELS_AT + LEVELS * VEC4_FLOATS,
+  FRAME_TAIL = ['cloud', 'extra', 'fx', 'cloudMap', 'caustic', 'path'],
+  // Float offsets of the clipmap levels and of the members that follow them, in struct order.
+  FRAME_OFS = Object.fromEntries([
+    ['levels', LEVELS_AT],
+    ...FRAME_TAIL.map((name, slot) => [name, AFTER_LEVELS + slot * VEC4_FLOATS]),
+  ]),
+  FRAME_FLOATS = AFTER_LEVELS + (FRAME_TAIL.length - 1 + PATH_VEC4S) * VEC4_FLOATS,
+  // Cloud shadow map: CLOUD_MAP_N^2 texels covering CLOUD_MAP_SPAN metres of the cloud layer.
+  CLOUD_MAP_N = 256,
+  CLOUD_MAP_SPAN = 8192,
+  CLOUD_ALT = 1700,
+  frameStruct = /* wgsl */ `
 struct Frame {
   viewProj: mat4x4f,
   invViewProj: mat4x4f,
@@ -70,11 +74,10 @@ struct Frame {
 @group(0) @binding(3) var skySH: texture_2d<f32>;     // 9 x 1: sky irradiance, SH9, relative to straight up
 @group(0) @binding(4) var causticMap: texture_2d<f32>;
 @group(0) @binding(5) var frameSmp: sampler;
-`;
-
-// Constants, hashing and periodic noise: needs no bindings, so bake shaders
-// that run outside the frame can use it too.
-export const noiseLib = /* wgsl */ `
+`,
+  // Constants, hashing and periodic noise: needs no bindings, so bake shaders
+  // that run outside the frame can use it too.
+  noiseLibrary = /* wgsl */ `
 const W: f32 = ${f(W)};
 const CYCLE: f32 = ${f(CYCLE)};
 const PI: f32 = 3.14159265;
@@ -147,17 +150,14 @@ fn ign(px: vec2f, frame: f32) -> f32 {
 fn sat(x: f32) -> f32 { return clamp(x, 0.0, 1.0); }
 fn luma(c: vec3f) -> f32 { return dot(c, vec3f(0.2126, 0.7152, 0.0722)); }
 
-`;
-
-export const commonLib =
-  noiseLib +
-  /* wgsl */ `
+`,
+  commonLibrary = /* wgsl */ `${noiseLibrary}
 const WATER_EXT: vec3f = vec3f(0.17, 0.042, 0.032);
 // lighting attenuation is kept gentler than view extinction so reefs stay colourful
 const LIGHT_EXT: vec3f = vec3f(0.075, 0.035, 0.03);
-${knotArr}
-${waveArr('WV', WAVES)}
-${waveArr('RP', RIPPLES)}
+${knotArray}
+${waveArray('WV', WAVES)}
+${waveArray('RP', RIPPLES)}
 
 // ------------------------------------------------------------ terrain
 fn pathX(z: f32) -> f32 {
@@ -493,13 +493,12 @@ fn ggx(n: vec3f, v: vec3f, l: vec3f, rough: f32) -> f32 {
   let G = nl / (nl * (1.0 - k) + k) * nv / (nv * (1.0 - k) + k);
   return D * G / (4.0 * nv);
 }
-`;
-
-// Hi-Z occlusion test against last frame's depth pyramid (min depth per texel,
-// reverse-Z so smaller is farther). A camera-relative box is projected with
-// last frame's matrix; it is hidden if its nearest point lies behind the
-// farthest depth of every texel it covers. bias > 1 demands extra clearance.
-export const hizLib = /* wgsl */ `
+`,
+  // Hi-Z occlusion test against last frame's depth pyramid (min depth per texel,
+  // reverse-Z so smaller is farther). A camera-relative box is projected with
+  // last frame's matrix; it is hidden if its nearest point lies behind the
+  // farthest depth of every texel it covers. bias > 1 demands extra clearance.
+  hizLibrary = /* wgsl */ `
 fn occludedBox(hiz: texture_2d<f32>, c: vec3f, e: vec3f, bias: f32) -> bool {
   if (F.jitter.w > 0.5) { return false; } // no usable history (first frame, camera cut)
   var lo = vec2f(1e9); var hi = vec2f(-1e9); var zmax = 0.0;
@@ -526,9 +525,8 @@ fn occludedBox(hiz: texture_2d<f32>, c: vec3f, e: vec3f, bias: f32) -> bool {
               min(textureLoad(hiz, vec2i(a.x, b.y), lvl).x, textureLoad(hiz, b, lvl).x));
   return zmax * bias < z;
 }
-`;
-
-export const shadowLib = /* wgsl */ `
+`,
+  shadowLibrary = /* wgsl */ `
 @group(1) @binding(0) var shadowTex: texture_depth_2d_array;
 @group(1) @binding(1) var shadowSmp: sampler_comparison;
 @group(1) @binding(2) var linSmp: sampler;
@@ -575,9 +573,8 @@ fn shadowAt(rel: vec3f, n: vec3f, px: vec2f) -> f32 {
   let fade = smoothstep(sp.z * 0.8, sp.z, dist);
   return mix(s, 1.0, fade);
 }
-`;
-
-export const shadowLibSimple = /* wgsl */ `
+`,
+  simpleShadowLibrary = /* wgsl */ `
 fn shadowPoint(rel: vec3f) -> f32 {
   let dist = length(rel);
   let sp = F.cascadeSplits;
@@ -591,3 +588,19 @@ fn shadowPoint(rel: vec3f) -> f32 {
   return textureSampleCompareLevel(shadowTex, shadowSmp, uv, c, lp.z);
 }
 `;
+
+export {
+  CLOUD_ALT,
+  CLOUD_MAP_N,
+  CLOUD_MAP_SPAN,
+  FRAME_FLOATS,
+  FRAME_OFS,
+  LEVELS,
+  commonLibrary,
+  frameStruct,
+  hizLibrary,
+  noiseLibrary,
+  shadowLibrary,
+  simpleShadowLibrary,
+  waveArray,
+};

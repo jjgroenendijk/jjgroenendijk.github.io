@@ -1,17 +1,13 @@
-import { frameStruct, commonLib, shadowLib, shadowLibSimple } from './common.js';
-import { GRID_M, SIDE, cacheLib } from './terrain.js';
-import { WAVES, RIPPLES } from '../world/waves.js';
+import { GRID_M, SIDE, cacheLibrary } from './terrain.js';
+import { RIPPLES, WAVES } from '../world/waves.js';
+import { commonLibrary, frameStruct, shadowLibrary, simpleShadowLibrary } from './common.js';
 
-export const waterWGSL =
-  frameStruct +
-  commonLib +
-  shadowLib +
-  /* wgsl */ `
+const waterWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${shadowLibrary}
 @group(2) @binding(0) var sceneTex: texture_2d<f32>;
 @group(2) @binding(1) var depthTex: texture_depth_2d;
 @group(2) @binding(2) var reflTex: texture_2d<f32>;
 
-${cacheLib}
+${cacheLibrary}
 
 struct WV2 {
   @builtin(position) pos: vec4f,
@@ -196,16 +192,12 @@ fn waterScatter() -> vec3f {
   col = applyFog(col, in.rel);
   return vec4f(col, 1.0);
 }
-`;
-
-// Floating particles: marine snow underwater, sunlit dust motes in the jungle.
-// Half resolution reflection trace: each pixel's view ray is intersected with
-// the swell (sea plane + large Gerstner waves) and marched through the depth
-// buffer. Output: reflected colour and confidence (0 = use the sky).
-export const reflectionWGSL =
-  frameStruct +
-  commonLib +
-  /* wgsl */ `
+`,
+  // Floating particles: marine snow underwater, sunlit dust motes in the jungle.
+  // Half resolution reflection trace: each pixel's view ray is intersected with
+  // the swell (sea plane + large Gerstner waves) and marched through the depth
+  // buffer. Output: reflected colour and confidence (0 = use the sky).
+  reflectionWGSL = /* wgsl */ `${frameStruct}${commonLibrary}
 @group(1) @binding(0) var sceneTex: texture_2d<f32>;
 @group(1) @binding(1) var depthTex: texture_depth_2d;
 @group(1) @binding(2) var smp: sampler;
@@ -266,16 +258,12 @@ fn sceneAt(uv: vec2f) -> vec3f { return textureSampleLevel(sceneTex, smp, uv, 0.
   }
   return vec4f(0.0);
 }
-`;
-
-export const particleWGSL =
-  frameStruct +
-  commonLib +
-  /* wgsl */ `
+`,
+  particleWGSL = /* wgsl */ `${frameStruct}${commonLibrary}
 @group(1) @binding(0) var shadowTex: texture_depth_2d_array;
 @group(1) @binding(1) var shadowSmp: sampler_comparison;
 @group(1) @binding(2) var linSmp: sampler;
-${shadowLibSimple}
+${simpleShadowLibrary}
 struct PO { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) col: vec3f };
 @vertex fn vs(@builtin(vertex_index) vi: u32, @builtin(instance_index) ii: u32) -> PO {
   var corners = array<vec2f, 6>(vec2f(-1.0, -1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, -1.0), vec2f(1.0, 1.0), vec2f(-1.0, 1.0));
@@ -319,3 +307,5 @@ struct PO { @builtin(position) pos: vec4f, @location(0) uv: vec2f, @location(1) 
   return vec4f(in.col * a, 0.0);
 }
 `;
+
+export { particleWGSL, reflectionWGSL, waterWGSL };

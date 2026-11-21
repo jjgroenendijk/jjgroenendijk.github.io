@@ -29,7 +29,7 @@ untracked `public/`, `themes/` and `.hugo_build.lock` are leftovers of an old Hu
   (`frameStruct + commonLib + hizLib + ...`). `shaders/common.js` interpolates JS constants from `world/` into the WGSL
   through the `f()` float formatter, so a plain JS number there must still become a valid WGSL float.
 - **Frame uniforms live in three places** that must agree: `FRAME_OFS` / `FRAME_FLOATS` and the `frameStruct` WGSL in
-  `shaders/common.js`, and the writes in `render/frameUniforms.js`.
+  `shaders/common.js`, and the writes in `render/frame-uniforms.js`.
 - **JS/WGSL twins**: `world/terrain.js`, `noise.js`, `waves.js` and `path.js` mirror the GPU terrain, wave and
   camera-path functions with identical integer hashing and erosion. The camera director uses the JS side to stay clear
   of the ground, so a change on one side without the other makes the camera clip into terrain.
@@ -37,7 +37,7 @@ untracked `public/`, `themes/` and `.hugo_build.lock` are leftovers of an old Hu
   `noise.js` / `common.js`, or seams and precision loss appear.
 - **Props are GPU-driven**: `scene/catalog.js` defines scatter kinds, `TYPE`/`MAT` ids, LODs and impostors; a compute
   scatter (`shaders/props.js`) culls against the frustum and last frame's Hi-Z, and all props go out in one indirect
-  draw into a visibility buffer (`propsVisibility.js`) that a fullscreen pass resolves. LOD switches rely on dithered
+  draw into a visibility buffer (`props-visibility.js`) that a fullscreen pass resolves. LOD switches rely on dithered
   cross-fades that TAA smooths, so judge LOD changes with TAA on.
 - **Terrain** is a nine-level clipmap (`LEVELS`) baked incrementally into a toroidal texture array; tiles are GPU-culled
   and drawn with one indirect draw. Ground materials are baked once at start-up.
