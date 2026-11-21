@@ -1,6 +1,7 @@
-import { frameStruct, commonLib } from './common.js';
+// Sky: the fullscreen vertex stage, volumetric clouds, sun, moon and stars, and the cloud shadow map.
+import { commonLibrary, frameStruct } from './common.js';
 
-export const fullscreenVS = /* wgsl */ `
+const fullscreenVS = /* wgsl */ `
 struct FSO { @builtin(position) pos: vec4f, @location(0) uv: vec2f };
 @vertex fn vs(@builtin(vertex_index) i: u32) -> FSO {
   let p = vec2f(f32((i << 1u) & 2u), f32(i & 2u));
@@ -9,24 +10,17 @@ struct FSO { @builtin(position) pos: vec4f, @location(0) uv: vec2f };
   o.uv = vec2f(p.x, 1.0 - p.y);
   return o;
 }
-`;
-
-const rayDir = /* wgsl */ `
+`,
+  viewRayLibrary = /* wgsl */ `
 fn viewRay(uv: vec2f) -> vec3f {
   let ndc = vec2f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0);
   let a = F.invViewProj * vec4f(ndc, 1.0, 1.0);
   let b = F.invViewProj * vec4f(ndc, 0.5, 1.0);
   return normalize(b.xyz / b.w - a.xyz / a.w);
 }
-`;
-
-// Volumetric cloud layer, rendered at reduced resolution.
-export const cloudWGSL =
-  frameStruct +
-  commonLib +
-  fullscreenVS +
-  rayDir +
-  /* wgsl */ `
+`,
+  // Volumetric cloud layer, rendered at reduced resolution.
+  cloudWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${fullscreenVS}${viewRayLibrary}
 const CB: f32 = 1150.0;
 const CT: f32 = 2500.0;
 fn cloudDensity(p: vec3f, detail: bool) -> f32 {
@@ -106,15 +100,9 @@ fn march(in: FSO, rd: vec3f) -> vec4f {
   let f = exp(-t0 / 26000.0) * smoothstep(0.015, 0.08, rd.y);
   return vec4f(col * f, mix(1.0, T, f));
 }
-`;
-
-// Sky (sun, moon, stars, distant ocean) composited with the cloud layer.
-export const skyWGSL =
-  frameStruct +
-  commonLib +
-  fullscreenVS +
-  rayDir +
-  /* wgsl */ `
+`,
+  // Sky (sun, moon, stars, distant ocean) composited with the cloud layer.
+  skyWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${fullscreenVS}${viewRayLibrary}
 @group(1) @binding(0) var cloudTex: texture_2d<f32>;
 @group(1) @binding(1) var smp: sampler;
 
@@ -209,14 +197,10 @@ fn meteor(rd: vec3f) -> vec3f {
   }
   return vec4f(col, 1.0);
 }
-`;
-
-// Cloud shadow map: the light let through by the cloud layer, baked once per
-// frame so ground, plants and water need a single texture lookup.
-export const cloudMapWGSL =
-  frameStruct +
-  commonLib +
-  /* wgsl */ `
+`,
+  // Cloud shadow map: the light let through by the cloud layer, baked once per
+  // frame so ground, plants and water need a single texture lookup.
+  cloudMapWGSL = /* wgsl */ `${frameStruct}${commonLibrary}
 @group(1) @binding(0) var mapOut: texture_storage_2d<rgba16float, write>;
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3u) {
@@ -227,3 +211,5 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   textureStore(mapOut, vec2i(gid.xy), vec4f(cloudTransmit(q), 0.0, 0.0, 1.0));
 }
 `;
+
+export { cloudMapWGSL, cloudWGSL, fullscreenVS, skyWGSL };

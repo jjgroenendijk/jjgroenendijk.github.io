@@ -1,7 +1,9 @@
-import { frameStruct, commonLib, shadowLibSimple } from './common.js';
+// Post-processing: volumetric light shafts, TAA, bloom and the final composite.
+import { commonLibrary, frameStruct, simpleShadowLibrary } from './common.js';
 import { fullscreenVS } from './sky.js';
 
-const sceneDistFn = /* wgsl */ `
+// World-space view rays and positions rebuilt from the depth buffer.
+const depthReconstructionLibrary = /* wgsl */ `
 fn depthToRel(uv: vec2f, d: f32) -> vec4f {
   let ndc = vec4f(uv.x * 2.0 - 1.0, 1.0 - uv.y * 2.0, d, 1.0);
   return F.invViewProj * ndc;
@@ -10,20 +12,14 @@ fn viewRay2(uv: vec2f) -> vec3f {
   let a = depthToRel(uv, 1.0); let b = depthToRel(uv, 0.5);
   return normalize(b.xyz / b.w - a.xyz / a.w);
 }
-`;
-
-// Volumetric light shafts (jungle god rays and underwater beams), half resolution.
-export const volumeWGSL =
-  frameStruct +
-  commonLib +
-  fullscreenVS +
-  sceneDistFn +
-  /* wgsl */ `
+`,
+  // Volumetric light shafts (jungle god rays and underwater beams), half resolution.
+  volumeWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${fullscreenVS}${depthReconstructionLibrary}
 @group(1) @binding(0) var shadowTex: texture_depth_2d_array;
 @group(1) @binding(1) var shadowSmp: sampler_comparison;
 @group(1) @binding(2) var linSmp: sampler;
 @group(2) @binding(0) var depthTex: texture_depth_2d;
-${shadowLibSimple}
+${simpleShadowLibrary}
 fn hg(mu: f32, g: f32) -> f32 { return (1.0 - g * g) / (4.0 * PI * pow(1.0 + g * g - 2.0 * g * mu, 1.5)); }
 
 @fragment fn fs(in: FSO) -> @location(0) vec4f {
@@ -64,14 +60,9 @@ fn hg(mu: f32, g: f32) -> f32 { return (1.0 - g * g) / (4.0 * PI * pow(1.0 + g *
   let ph = select(hg(mu, 0.55), hg(mu, 0.5), uw) * 4.0 * PI;
   return vec4f(acc * ph * select(0.3, 0.14, uw), 1.0);
 }
-`;
-
-// Temporal anti-aliasing with variance clipping.
-export const taaWGSL =
-  frameStruct +
-  fullscreenVS +
-  sceneDistFn +
-  /* wgsl */ `
+`,
+  // Temporal anti-aliasing with variance clipping.
+  taaWGSL = /* wgsl */ `${frameStruct}${fullscreenVS}${depthReconstructionLibrary}
 @group(1) @binding(0) var curTex: texture_2d<f32>;
 @group(1) @binding(1) var volTex: texture_2d<f32>;
 @group(1) @binding(2) var histTex: texture_2d<f32>;
@@ -148,11 +139,8 @@ fn catmull(uv: vec2f) -> vec3f {
   if (any(res != res)) { res = vec3f(0.0); }
   return vec4f(res, 1.0);
 }
-`;
-
-export const bloomDownWGSL =
-  fullscreenVS +
-  /* wgsl */ `
+`,
+  bloomDownWGSL = /* wgsl */ `${fullscreenVS}
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var smp: sampler;
 struct BP { texel: vec2f, karis: f32, pad: f32 };
@@ -175,11 +163,8 @@ fn s(uv: vec2f) -> vec3f { return min(textureSampleLevel(src, smp, uv, 0.0).rgb,
   }
   return vec4f(o, 1.0);
 }
-`;
-
-export const bloomUpWGSL =
-  fullscreenVS +
-  /* wgsl */ `
+`,
+  bloomUpWGSL = `${fullscreenVS}
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var smp: sampler;
 struct BP { texel: vec2f, karis: f32, pad: f32 };
@@ -193,13 +178,9 @@ struct BP { texel: vec2f, karis: f32, pad: f32 };
      + textureSampleLevel(src, smp, uv + vec2f(t.x, -t.y), 0.0).rgb + textureSampleLevel(src, smp, uv + vec2f(-t.x, t.y), 0.0).rgb;
   return vec4f(o / 16.0 * B.karis, 1.0);
 }
-`;
-
-// Final: bloom, exposure, filmic tonemap, grade, vignette, grain, output encoding.
-export const compositeWGSL =
-  frameStruct +
-  fullscreenVS +
-  /* wgsl */ `
+`,
+  // Final: bloom, exposure, filmic tonemap, grade, vignette, grain, output encoding.
+  compositeWGSL = /* wgsl */ `${frameStruct}${fullscreenVS}
 @group(1) @binding(0) var colTex: texture_2d<f32>;
 @group(1) @binding(1) var bloomTex: texture_2d<f32>;
 @group(1) @binding(2) var smp: sampler;
@@ -271,3 +252,5 @@ fn toSRGB(c: vec3f) -> vec3f {
 fn luma(c: vec3f) -> f32 { return dot(c, vec3f(0.2126, 0.7152, 0.0722)); }
 fn sat3(c: vec3f) -> vec3f { return clamp(c, vec3f(0.0), vec3f(1.0)); }
 `;
+
+export { bloomDownWGSL, bloomUpWGSL, compositeWGSL, taaWGSL, volumeWGSL };

@@ -2,11 +2,9 @@
 // fixed texture budget: a pixel blends at most two materials; each one costs
 // two fetches (stochastic tiling on flat ground) or up to three (triplanar on
 // cliffs), times two textures. Plus the shared PBR lighting for the ground.
-import { groundLib } from './materials.js';
+import { groundLibrary } from './materials.js';
 
-export const groundSampleLib =
-  groundLib +
-  /* wgsl */ `
+const groundSampleLibrary = /* wgsl */ `${groundLibrary}
 @group(2) @binding(0) var groundA: texture_2d_array<f32>;  // sqrt(albedo), height
 @group(2) @binding(1) var groundB: texture_2d_array<f32>;  // normal xy, roughness, occlusion
 @group(2) @binding(2) var groundSmp: sampler;
@@ -99,11 +97,10 @@ fn heightBlend(h0: f32, w0: f32, h1: f32, w1: f32) -> f32 {
 fn blendSurf(a: GroundSurf, b: GroundSurf, t: f32) -> GroundSurf {
   return GroundSurf(mix(a.alb, b.alb, t), mix(a.h, b.h, t), normalize(mix(a.n, b.n, t)), mix(a.rough, b.rough, t), mix(a.ao, b.ao, t));
 }
-`;
-
-// Physically based ground lighting: Lambert diffuse plus GGX specular with
-// Schlick Fresnel, and a specular ambient term from the baked sky radiance.
-export const groundShadingLib = /* wgsl */ `
+`,
+  // Physically based ground lighting: Lambert diffuse plus GGX specular with
+  // Schlick Fresnel, and a specular ambient term from the baked sky radiance.
+  groundShadingLibrary = /* wgsl */ `
 const GROUND_F0: f32 = 0.04; // dielectric reflectance at normal incidence
 
 // analytic fit of the pre-integrated environment BRDF (Karis)
@@ -139,3 +136,5 @@ fn shadeGround(alb: vec3f, n: vec3f, rough: f32, rel: vec3f, lt: GroundLight) ->
   return col;
 }
 `;
+
+export { groundSampleLibrary, groundShadingLibrary };

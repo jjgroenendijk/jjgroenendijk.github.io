@@ -4,20 +4,21 @@
 // (slot, instance, triangle) per pixel; a fullscreen resolve then rebuilds
 // that triangle, interpolates it at the pixel and shades each pixel once,
 // however many layers of foliage overlap there.
-import { frameStruct, commonLib, shadowLib } from './common.js';
-import { propVS, propSurface, propShading, slotInfoLib, foliageSurfaceLib } from './props.js';
-import { foliageLib } from './leaves.js';
-import { MAT, CARD_GRID, CARD_SIZE } from '../scene/catalog.js';
+import { CARD_GRID, CARD_SIZE, MAT } from '../scene/catalog.js';
+import { commonLibrary, frameStruct, shadowLibrary } from './common.js';
 
-export const EMPTY = 0xffffffff; // visibility texel with no prop
-export const ID_FORMAT = 'rg32uint';
+import { foliageSurfaceLibrary, propShading, propSurface, propVS, slotInfoLibrary } from './props.js';
+import { foliageLibrary } from './leaves.js';
 
-// Geometry, impostor atlas and leaf textures shared by the raster and resolve
-// passes (group 2).
-const propData =
-  slotInfoLib +
-  foliageLib(2, 7) +
-  /* wgsl */ `
+// Visibility texel with no prop.
+const EMPTY = 0xff_ff_ff_ff,
+  ID_FORMAT = 'rg32uint',
+  // First binding of the leaf textures in group 2, after the geometry and impostor atlas.
+  LEAF_BINDING = 7,
+  // Geometry, impostor atlas and leaf textures shared by the raster and resolve
+  // passes (group 2).
+
+  propData = /* wgsl */ `${slotInfoLibrary}${foliageLibrary(2, LEAF_BINDING)}
 @group(2) @binding(0) var cardAlb: texture_2d_array<f32>;
 @group(2) @binding(1) var cardNrm: texture_2d_array<f32>;
 @group(2) @binding(2) var<storage, read> verts: array<f32>;      // 10 floats per vertex
@@ -94,16 +95,8 @@ fn cardImpostor(in: PV, rel: vec3f, pixel: f32) -> CardTap {
   let e = cardView(sp, g2, xl, vl, radius, lod);
   return CardTap(a.alb * w.x + b.alb * w.y + e.alb * w.z, a.nrm * w.x + b.nrm * w.y + e.nrm * w.z);
 }
-`;
-
-export const visibilityWGSL =
-  frameStruct +
-  commonLib +
-  shadowLib +
-  propVS +
-  propSurface +
-  propData +
-  /* wgsl */ `
+`,
+  visibilityWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${shadowLibrary}${propVS}${propSurface}${propData}
 struct VO {
   @builtin(position) pos: vec4f,
   @location(0) lp: vec3f,
@@ -163,18 +156,8 @@ fn slotOf(v: u32) -> u32 {
   }
   return in.id;
 }
-`;
-
-export const resolveWGSL =
-  frameStruct +
-  commonLib +
-  shadowLib +
-  propVS +
-  propSurface +
-  propShading +
-  propData +
-  foliageSurfaceLib +
-  /* wgsl */ `
+`,
+  resolveWGSL = /* wgsl */ `${frameStruct}${commonLibrary}${shadowLibrary}${propVS}${propSurface}${propShading}${propData}${foliageSurfaceLibrary}
 @group(3) @binding(0) var ids: texture_2d<u32>;
 
 struct FO { @builtin(position) pos: vec4f };
@@ -255,3 +238,5 @@ fn cardSurface(in: PV, pixel: f32) -> Surf {
   return vec4f(shadeProp(pv, sf, frag.xy), 1.0);
 }
 `;
+
+export { EMPTY, ID_FORMAT, resolveWGSL, visibilityWGSL };

@@ -3,7 +3,7 @@
 // footprints along the camera path.
 
 // in sync with the rolling surf of the water shader (same phase at depth 0)
-export const shoreLib = /* wgsl */ `
+export const shoreLibrary = /* wgsl */ `
 const SURF_RATE: f32 = 1.15;   // rad / s, as in the water vertex shader
 const SWASH_BASE: f32 = 0.08;  // height the sea always reaches (m)
 const SWASH_RUN: f32 = 0.55;   // extra height of a wave's run-up (m)
