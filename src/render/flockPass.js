@@ -13,7 +13,7 @@ export class FlockPass {
     this.step = buffer(device, 16, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 'flock-step');
     const layout = bindLayout(device, 'flock', [entry.uniform(), entry.storage()]);
     this.group = bindGroup(device, layout, [this.step, this.state], 'flock');
-    this.pipeline = device.createComputePipeline({
+    this.pipeline = device.createComputePipelineAsync({
       label: 'flock',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, layout] }),
       compute: { module: shader(device, flockWGSL, 'flock'), entryPoint: 'main' },

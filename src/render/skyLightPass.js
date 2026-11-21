@@ -16,7 +16,7 @@ export class SkyLightPass {
     const layout = bindLayout(device, 'sky-bake', [entry.uniform(), at(6, entry.storageTexture(FORMAT)), at(7, entry.storageTexture(FORMAT))]);
     this.group = bindGroup(device, layout, [frameBuffer, at(6, this.lutView), at(7, this.shView)], 'sky-bake');
     const module = shader(device, skyBakeWGSL, 'sky-bake');
-    const pipeline = (entryPoint) => device.createComputePipeline({
+    const pipeline = (entryPoint) => device.createComputePipelineAsync({
       label: `sky-${entryPoint}`, layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
       compute: { module, entryPoint },
     });

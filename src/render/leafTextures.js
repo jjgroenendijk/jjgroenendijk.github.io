@@ -20,7 +20,7 @@ export class LeafTextures {
     });
     // textures and sampler, in the binding order of foliageLib
     this.resources = [this.albedo.createView({ dimension: '2d-array' }), this.normal.createView({ dimension: '2d-array' }), this.sampler];
-    this.bake();
+    this.ready = this.bake(); // pipelines compile asynchronously
   }
 
   // layout entries matching `resources`, for the stages that draw foliage
@@ -28,10 +28,10 @@ export class LeafTextures {
     return [entry.texture('float', '2d-array', visibility), entry.texture('float', '2d-array', visibility), entry.sampler('filtering', visibility)];
   }
 
-  bake() {
+  async bake() {
     const d = this.device;
     const level = (t, m) => t.createView({ dimension: '2d-array', baseMipLevel: m, mipLevelCount: 1 });
-    const pipeline = (code, label, layout) => d.createComputePipeline({
+    const pipeline = (code, label, layout) => d.createComputePipelineAsync({
       label, layout: d.createPipelineLayout({ bindGroupLayouts: [layout] }),
       compute: { module: shader(d, code, label), entryPoint: 'main' },
     });
@@ -40,13 +40,13 @@ export class LeafTextures {
     const pass = enc.beginComputePass({ label: 'leaf-bake' });
 
     const bakeLayout = bindLayout(d, 'leaf-bake', [entry.storageTexture(FORMAT, '2d-array'), entry.storageTexture(FORMAT, '2d-array')]);
-    pass.setPipeline(pipeline(leafBakeWGSL, 'leaf-bake', bakeLayout));
+    pass.setPipeline(await pipeline(leafBakeWGSL, 'leaf-bake', bakeLayout));
     pass.setBindGroup(0, bindGroup(d, bakeLayout, [level(this.albedo, 0), level(this.normal, 0)]));
     pass.dispatchWorkgroups(...groups(LEAF_TEX));
 
     const mipLayout = bindLayout(d, 'leaf-mip', [entry.texture('float', '2d-array', C), entry.texture('float', '2d-array', C),
       entry.storageTexture(FORMAT, '2d-array'), entry.storageTexture(FORMAT, '2d-array')]);
-    pass.setPipeline(pipeline(cardMipWGSL, 'leaf-mip', mipLayout));
+    pass.setPipeline(await pipeline(cardMipWGSL, 'leaf-mip', mipLayout));
     for (let m = 1; m < MIPS; m++) {
       pass.setBindGroup(0, bindGroup(d, mipLayout, [level(this.albedo, m - 1), level(this.normal, m - 1), level(this.albedo, m), level(this.normal, m)]));
       pass.dispatchWorkgroups(...groups(LEAF_TEX >> m));

@@ -102,14 +102,14 @@ export class PropsPass {
     this.scatterLayout = bindLayout(device, 'scatter', [entry.uniform(true), entry.storage(), entry.storage(),
       entry.texture('unfilterable-float', '2d', GPUShaderStage.COMPUTE), entry.storage(true)]);
     this.setHiZ(null);
-    this.scatterPipeline = device.createComputePipeline({
+    this.scatterPipeline = device.createComputePipelineAsync({
       label: 'scatter',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.scatterLayout] }),
       compute: { module: shader(device, scatterWGSL, 'scatter'), entryPoint: 'main' },
     });
     const finalizeLayout = bindLayout(device, 'prop-finalize', [entry.storage(), entry.storage(true), entry.storage(true), entry.storage(), entry.storage()]);
     this.finalizeGroup = bindGroup(device, finalizeLayout, [this.argsBuffer, this.capsBuffer, this.slotBuffer, this.startBuffer, this.drawArgs]);
-    this.finalizePipeline = device.createComputePipeline({
+    this.finalizePipeline = device.createComputePipelineAsync({
       label: 'prop-finalize',
       layout: device.createPipelineLayout({ bindGroupLayouts: [finalizeLayout] }),
       compute: { module: shader(device, finalizeWGSL, 'prop-finalize'), entryPoint: 'main' },
@@ -142,7 +142,7 @@ export class PropsPass {
     this.setupCards(device, shared, merged, withCards);
 
     const sh = shader(device, withCards(propShadowWGSL), 'props-shadow');
-    this.shadowPipeline = device.createRenderPipeline({
+    this.shadowPipeline = device.createRenderPipelineAsync({
       label: 'props-shadow',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.cascade, this.leafLayout] }),
       vertex: { module: sh, entryPoint: 'vs', buffers: vertexBuffers },
@@ -168,7 +168,7 @@ export class PropsPass {
     this.bakeBuffer = buffer(device, PARAM_STRIDE * layers, GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST, 'card-bake');
     this.bakeGroup = bindGroup(device, this.bakeLayout, [{ buffer: this.bakeBuffer, size: 48 }]);
     const bake = shader(device, withCards(cardBakeWGSL), 'card-bake');
-    this.bakePipeline = device.createRenderPipeline({
+    this.bakePipeline = device.createRenderPipelineAsync({
       label: 'card-bake',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.bakeLayout, this.leafLayout] }),
       vertex: { module: bake, entryPoint: 'vs', buffers: [{ arrayStride: 40, attributes: [
@@ -182,7 +182,7 @@ export class PropsPass {
     const mipLayout = bindLayout(device, 'card-mip', [
       entry.texture('float', '2d-array', GPUShaderStage.COMPUTE), entry.texture('float', '2d-array', GPUShaderStage.COMPUTE),
       entry.storageTexture('rgba8unorm', '2d-array'), entry.storageTexture('rgba8unorm', '2d-array')]);
-    this.mipPipeline = device.createComputePipeline({
+    this.mipPipeline = device.createComputePipelineAsync({
       label: 'card-mip',
       layout: device.createPipelineLayout({ bindGroupLayouts: [mipLayout] }),
       compute: { module: shader(device, cardMipWGSL, 'card-mip'), entryPoint: 'main' },

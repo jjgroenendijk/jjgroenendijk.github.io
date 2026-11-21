@@ -13,7 +13,7 @@ export class WaterPass {
     this.sceneLayout = bindLayout(device, 'water-scene', [entry.texture(), entry.texture('depth'), entry.texture()]);
     this.reflLayout = bindLayout(device, 'water-reflection', [entry.texture(), entry.texture('depth'), entry.sampler()]);
     const refl = shader(device, reflectionWGSL, 'water-reflection');
-    this.reflPipeline = device.createRenderPipeline({
+    this.reflPipeline = device.createRenderPipelineAsync({
       label: 'water-reflection',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.reflLayout] }),
       vertex: { module: refl, entryPoint: 'vs' },
@@ -21,7 +21,7 @@ export class WaterPass {
       primitive: { topology: 'triangle-list' },
     });
     const water = shader(device, waterWGSL, 'water');
-    this.pipeline = device.createRenderPipeline({
+    this.pipeline = device.createRenderPipelineAsync({
       label: 'water',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, this.sceneLayout] }),
       vertex: { module: water, entryPoint: 'vs' },
@@ -31,7 +31,7 @@ export class WaterPass {
     });
     const particles = shader(device, particleWGSL, 'particles');
     const additive = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } };
-    this.particlePipeline = device.createRenderPipeline({
+    this.particlePipeline = device.createRenderPipelineAsync({
       label: 'particles',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow] }),
       vertex: { module: particles, entryPoint: 'vs' },

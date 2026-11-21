@@ -33,7 +33,7 @@ export class HiZPass {
       entry.storageTexture('r32float'),
     ]);
     this.layouts = [layout(true), layout(false)];
-    this.pipelines = [true, false].map((depth, k) => device.createComputePipeline({
+    this.pipelines = [true, false].map((depth, k) => device.createComputePipelineAsync({
       label: 'hiz',
       layout: device.createPipelineLayout({ bindGroupLayouts: [this.layouts[k]] }),
       compute: { module: shader(device, reduceWGSL(depth), 'hiz'), entryPoint: 'main' },

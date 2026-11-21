@@ -231,6 +231,8 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + sho
   let forest = in.misc.z;
 
   // distant rainforest: per-pixel tree crowns (bumps that catch the light, dark gaps between)
+  // (materials are chosen from the true slope, before the crown bumps below)
+  let slope = 1.0 - n.y;
   let crownW = forest * smoothstep(120.0, 450.0, dist) * smoothstep(-0.5, 3.0, h);
   var crownShade = 1.0;
   if (crownW > 0.01) {
@@ -241,7 +243,6 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + sho
     n = normalize(n - vec3f(cx - c0, 0.0, cz - c0) * 9.0 * crownW);
     crownShade = mix(1.0, 0.45 + 0.9 * smoothstep(-0.4, 0.5, c0), crownW);
   }
-  let slope = 1.0 - n.y;
   // low-frequency variation: metres (mn), tens of metres (big), half a kilometre (macroV)
   let mn = fbm(pw.xz, 2048, 2, 211u);
   let big = fbm(pw.xz, 256, 3, 213u);
@@ -266,7 +267,8 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + sho
   var w: array<f32, ${GROUND_COUNT}>;
   let landW = select(smoothstep(beachH - 0.4, beachH + 0.6, h), 0.0, underwater);
   let beach = 1.0 - landW;
-  let rockness = sat(smoothstep(0.42, 0.62, slope + mn * 0.2 + convex * 0.25 - hollow * 0.2)
+  // tropical hillsides stay green under forest; only cliffs and the highest peaks are bare
+  let rockness = sat(smoothstep(0.42 + 0.2 * forest, 0.62 + 0.2 * forest, slope + mn * 0.2 + convex * 0.25 - hollow * 0.2)
                    + smoothstep(160.0, 260.0, h + big * 40.0) * 0.7);
   let rockOnShore = smoothstep(0.35, 0.6, slope);
   w[G_SAND] = beach * (1.0 - rg.y) * (1.0 - rockOnShore);

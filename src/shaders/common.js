@@ -16,8 +16,8 @@ var<private> ${name}Q: array<f32, ${list.length}> = array<f32, ${list.length}>($
 
 export const LEVELS = 9; // terrain clipmap levels
 // float offsets of the members that follow the clipmap levels
-export const FRAME_OFS = { levels: 192, cloud: 192 + LEVELS * 4, extra: 196 + LEVELS * 4, fx: 200 + LEVELS * 4, cloudMap: 204 + LEVELS * 4, caustic: 208 + LEVELS * 4 };
-export const FRAME_FLOATS = 212 + LEVELS * 4;
+export const FRAME_OFS = { levels: 192, cloud: 192 + LEVELS * 4, extra: 196 + LEVELS * 4, fx: 200 + LEVELS * 4, cloudMap: 204 + LEVELS * 4, caustic: 208 + LEVELS * 4, path: 212 + LEVELS * 4 };
+export const FRAME_FLOATS = 224 + LEVELS * 4;
 // cloud shadow map: CLOUD_MAP_N^2 texels covering CLOUD_MAP_SPAN metres of the cloud layer
 export const CLOUD_MAP_N = 256;
 export const CLOUD_MAP_SPAN = 8192;
@@ -51,6 +51,7 @@ struct Frame {
   fx: vec4f,          // x rainbow, y morning mist, z vegetation draw distance, w ground wetness after rain
   cloudMap: vec4f,    // xy cloud shadow map origin (cloud plane), z 1/span, w unused
   caustic: vec4f,     // xy caustic map origin, z 1/span, w map valid
+  path: array<vec4f, 3>, // camera path terms: x amplitude, y waves per period, z phase; path[0].w sideways offset
 };
 @group(0) @binding(0) var<uniform> F: Frame;
 // baked lighting shared by every pass (see SkyLightPass and CausticsPass)
@@ -148,7 +149,10 @@ ${waveArr('RP', RIPPLES)}
 // ------------------------------------------------------------ terrain
 fn pathX(z: f32) -> f32 {
   let k = TAU / W;
-  return 140.0 * sin(k * 7.0 * z) + 50.0 * sin(k * 19.0 * z + 1.3) + 18.0 * sin(k * 41.0 * z + 0.4);
+  // the path is drawn per visit (world/path.js) and passed in, so the shader source stays cacheable
+  var x = F.path[0].w;
+  for (var i = 0; i < 3; i++) { let q = F.path[i]; x += q.x * sin(k * q.y * z + q.z); }
+  return x;
 }
 fn smin(a: f32, b: f32, k: f32) -> f32 {
   let h = max(k - abs(a - b), 0.0) / k;

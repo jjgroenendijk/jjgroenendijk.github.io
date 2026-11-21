@@ -13,7 +13,7 @@ export class CloudMapPass {
     this.view = this.texture.createView();
     const layout = bindLayout(device, 'cloud-map', [entry.storageTexture('rgba16float')]);
     this.group = bindGroup(device, layout, [this.view], 'cloud-map');
-    this.pipeline = device.createComputePipeline({
+    this.pipeline = device.createComputePipelineAsync({
       label: 'cloud-map',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, layout] }),
       compute: { module: shader(device, cloudMapWGSL, 'cloud-map'), entryPoint: 'main' },

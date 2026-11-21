@@ -72,9 +72,10 @@ fn leafAt(layer: u32, i: u32) -> Leaf {
 fn leafCount(layer: u32) -> u32 { return select(select(24u, 30u, layer == ${LEAF.small}u), 7u, layer == ${LEAF.broad}u); }
 
 fn leafColor(layer: u32, tone: f32) -> vec3f {
-  let young = vec3f(0.20, 0.36, 0.06);
-  let old = select(vec3f(0.04, 0.14, 0.03), vec3f(0.06, 0.17, 0.04), layer == ${LEAF.small}u);
-  return mix(old, young, tone * tone * 0.8);
+  // deep rainforest greens; fresh growth only a little lighter, not lime
+  let young = vec3f(0.11, 0.21, 0.06);
+  let old = select(vec3f(0.035, 0.10, 0.04), vec3f(0.05, 0.12, 0.045), layer == ${LEAF.small}u);
+  return mix(old, young, tone * tone * 0.6);
 }
 
 // The leaf blade: s along (0 at the stalk, 1 at the tip), t across in half widths.

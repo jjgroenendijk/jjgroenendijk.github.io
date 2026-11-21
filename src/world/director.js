@@ -3,6 +3,7 @@
 import { W, CYCLE, hashu } from './noise.js';
 import { pathX, pathDX, terrainHeight, smoothstep } from './terrain.js';
 import { waveHeight } from './waves.js';
+import { PATH_SEED } from './path.js';
 
 // Camera height plan within a cycle (u = fract(z / CYCLE)).
 export const SPEEDS = [
@@ -66,7 +67,8 @@ export class Director {
     const z = this.z;
     const x = pathX(z);
     const cyc = this.cycleIndex();
-    const seed = hashu(cyc * 7919 + 13) / 4294967296;
+    const seed = hashu((cyc * 7919 + 13 + PATH_SEED * 104729) >>> 0) / 4294967296;
+    const s2 = hashu((cyc * 7919 + 29 + PATH_SEED * 104729) >>> 0) / 4294967296;
 
     const m = modeWeights(u);
     // aerial altitude: keep clear of terrain ahead
@@ -98,9 +100,9 @@ export class Director {
     let yaw = Math.atan2(dx, 1);
     const speed = speedAt(u);
     const pan = m.aer * (0.45 * Math.sin(t * 0.045 + seed * 10) + 0.15 * Math.sin(t * 0.11))
-      + m.land * (0.32 * Math.sin(t * 0.07 + 1.0) + 0.1 * Math.sin(t * 0.19))
-      + m.und * (0.3 * Math.sin(t * 0.06 + 2.0) + 0.08 * Math.sin(t * 0.17))
-      + m.glide * 0.18 * Math.sin(t * 0.08);
+      + m.land * (0.32 * Math.sin(t * 0.07 + s2 * 13) + 0.1 * Math.sin(t * 0.19))
+      + m.und * (0.3 * Math.sin(t * 0.06 + s2 * 17) + 0.08 * Math.sin(t * 0.17))
+      + m.glide * 0.18 * Math.sin(t * 0.08 + seed * 7);
     yaw += pan;
     const climb = Math.atan2(this.vy, Math.max(speed, 1.5));
     let pitch = m.aer * -0.30 + m.glide * -0.02 + m.land * 0.06 + m.und * -0.08;

@@ -11,14 +11,14 @@ export class SkyPass {
     this.shared = shared;
     const clouds = shader(device, cloudWGSL, 'clouds');
     this.skyLayout = bindLayout(device, 'sky', [entry.texture(), entry.sampler()]);
-    this.cloudPipeline = device.createRenderPipeline({
+    this.cloudPipeline = device.createRenderPipelineAsync({
       label: 'clouds',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.skyLayout] }),
       vertex: { module: clouds, entryPoint: 'vs' },
       fragment: { module: clouds, entryPoint: 'fs', targets: [{ format: HDR }] },
     });
     const sky = shader(device, skyWGSL, 'sky');
-    this.pipeline = device.createRenderPipeline({
+    this.pipeline = device.createRenderPipelineAsync({
       label: 'sky',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.skyLayout] }),
       vertex: { module: sky, entryPoint: 'vs' },

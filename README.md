@@ -20,11 +20,12 @@ Useful URL parameters while developing:
 | parameter | effect |
 |-----------|--------|
 | `u=0.4` | start at this point of the shot cycle (0 aerial, 0.25 lagoon, 0.4 jungle, 0.7 reef) |
+| `path=42` | which camera path to fly (a new one every visit by default) |
 | `cycle=3` | which of the eight shot cycles to play (random by default) |
-| `seed=0.3` | weather seed (random by default); with `cycle` it makes runs repeatable |
+| `seed=0.3` | weather seed (random by default); with `path` and `cycle` it makes runs repeatable |
 | `tod=0.7` | time of day (0 midnight, 0.5 noon, 0.75 sunset) |
 | `q=low\|medium\|high` | quality preset |
-| `scale=0.8` | fixed render scale (disables adaptive resolution) |
+| `px=1.5` | fixed render resolution in pixels per CSS pixel (disables adaptive resolution) |
 | `freeze` | stop time |
 | `capture=N` | render offscreen and show frame N as an image (for headless/software GPUs) |
 | `skip=water,props` | leave out render passes (debugging) |

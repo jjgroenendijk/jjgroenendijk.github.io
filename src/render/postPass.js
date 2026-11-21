@@ -9,7 +9,7 @@ export class PostPass {
     this.shared = shared;
     const fullscreen = (label, code, layouts, format, blend) => {
       const module = shader(device, code, label);
-      return device.createRenderPipeline({
+      return device.createRenderPipelineAsync({
         label,
         layout: device.createPipelineLayout({ bindGroupLayouts: layouts }),
         vertex: { module, entryPoint: 'vs' },

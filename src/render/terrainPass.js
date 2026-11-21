@@ -75,7 +75,7 @@ export class TerrainPass {
     this.bakeBuffer = buffer(device, BAKE_BYTES, U.UNIFORM | U.COPY_DST, 'terrain-bake');
     const cacheLayout = bindLayout(device, 'terrain-cache', [entry.uniform(), entry.storageTexture('rgba32float', '2d-array'), at(6, entry.uniform())]);
     this.cacheLayout = cacheLayout;
-    this.cachePipeline = device.createComputePipeline({
+    this.cachePipeline = device.createComputePipelineAsync({
       label: 'terrain-cache',
       layout: device.createPipelineLayout({ bindGroupLayouts: [cacheLayout] }),
       compute: { module: shader(device, terrainCacheWGSL, 'terrain-cache'), entryPoint: 'main' },
@@ -96,13 +96,13 @@ export class TerrainPass {
     this.drawIndices = buffer(device, maxIndices * 4, U.STORAGE | U.INDEX, 'terrain-visible-indices');
     this.cullLayout = bindLayout(device, 'terrain-cull', [entry.storage(true), entry.storage(),
       entry.texture('unfilterable-float', '2d', GPUShaderStage.COMPUTE), entry.storage(true), entry.storage()]);
-    this.cullPipeline = device.createComputePipeline({
+    this.cullPipeline = device.createComputePipelineAsync({
       label: 'terrain-cull',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.cullLayout] }),
       compute: { module: shader(device, terrainCullWGSL, 'terrain-cull'), entryPoint: 'main' },
     });
     const main = shader(device, terrainWGSL, 'terrain');
-    this.pipeline = device.createRenderPipeline({
+    this.pipeline = device.createRenderPipelineAsync({
       label: 'terrain',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, groundLayout] }),
       vertex: { module: main, entryPoint: 'vs', buffers: vertexBuffers },
@@ -111,7 +111,7 @@ export class TerrainPass {
       depthStencil: depthState(),
     });
     const sh = shader(device, terrainShadowWGSL, 'terrain-shadow');
-    this.shadowPipeline = device.createRenderPipeline({
+    this.shadowPipeline = device.createRenderPipelineAsync({
       label: 'terrain-shadow',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.cascade] }),
       vertex: { module: sh, entryPoint: 'vs', buffers: vertexBuffers },

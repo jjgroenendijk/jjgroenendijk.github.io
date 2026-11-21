@@ -1,6 +1,7 @@
 // Terrain height field: an endless archipelago, plus a "corridor" along the
 // camera path that guarantees lagoon -> beach -> jungle -> beach -> reef.
 import { W, CYCLE, fbm, gnoise, gnoiseD, hashu, wrapi } from './noise.js';
+import { PATH_TERMS, PATH_OFFSET } from './path.js';
 
 const TAU = Math.PI * 2;
 export const smoothstep = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
@@ -8,11 +9,15 @@ const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; retu
 
 export function pathX(z) {
   const k = TAU / W;
-  return 140 * Math.sin(k * 7 * z) + 50 * Math.sin(k * 19 * z + 1.3) + 18 * Math.sin(k * 41 * z + 0.4);
+  let x = PATH_OFFSET;
+  for (const [a, f, ph] of PATH_TERMS) x += a * Math.sin(k * f * z + ph);
+  return x;
 }
 export function pathDX(z) {
   const k = TAU / W;
-  return 140 * k * 7 * Math.cos(k * 7 * z) + 50 * k * 19 * Math.cos(k * 19 * z + 1.3) + 18 * k * 41 * Math.cos(k * 41 * z + 0.4);
+  let dx = 0;
+  for (const [a, f, ph] of PATH_TERMS) dx += a * k * f * Math.cos(k * f * z + ph);
+  return dx;
 }
 
 // Corridor knots along one cycle: [u, targetHeight, strength, valley, width]
