@@ -1,0 +1,6 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": ["src/main.js"],
+  "project": ["src/**/*.js"],
+  "ignoreBinaries": ["actionlint"]
+}

@@ -1,0 +1,58 @@
+[
+  {
+    "type": "dependency",
+    "from": "src/scene/catalog.js",
+    "to": "src/shaders/flock.js",
+    "unresolvedTo": "../shaders/flock.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-scene-to-shaders-render-audio-debug"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/scene/trees.js",
+    "to": "src/shaders/leaves.js",
+    "unresolvedTo": "../shaders/leaves.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-scene-to-shaders-render-audio-debug"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/shaders/props.js",
+    "to": "src/scene/catalog.js",
+    "unresolvedTo": "../scene/catalog.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-shaders-to-scene-render-audio-debug"
+    }
+  },
+  {
+    "type": "dependency",
+    "from": "src/shaders/propsVisibility.js",
+    "to": "src/scene/catalog.js",
+    "unresolvedTo": "../scene/catalog.js",
+    "dependencyTypes": [
+      "local",
+      "import"
+    ],
+    "rule": {
+      "severity": "error",
+      "name": "no-shaders-to-scene-render-audio-debug"
+    }
+  }
+]
