@@ -2,3 +2,5 @@
 .vscode
 node_modules/
 _site/
+# reference images: local only, never published
+/ref_img_*
