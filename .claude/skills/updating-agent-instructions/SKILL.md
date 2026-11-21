@@ -23,13 +23,12 @@ the repo.
 
 ## Where it goes
 
-| Content                                                                     | Home                                                          |
-| --------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| What the repo is, how to run it, gotchas that bite anyone touching the code | `CLAUDE.md`, loaded every session                             |
-| A procedure, checklist or opinionated how-to                                | a skill in `.claude/skills/<name>/SKILL.md`, loaded on demand |
-| A rule that only applies to certain files                                   | `.claude/rules/*.md` with a `paths:` glob                     |
-| Something that must happen every time, or must never happen                 | a hook or permission in `.claude/settings.json`               |
-| Long reference material for a skill                                         | a separate file next to its `SKILL.md`, linked from it        |
+- **`CLAUDE.md`**, loaded every session: what the repo is, how to run it, and gotchas that bite anyone touching the
+  code.
+- **A skill** in `.claude/skills/<name>/SKILL.md`, loaded on demand: a procedure, checklist or opinionated how-to.
+- **`.claude/rules/*.md` with a `paths:` glob**: a rule that only applies to certain files.
+- **A hook or permission** in `.claude/settings.json`: something that must happen every time, or must never happen.
+- **A separate file next to a skill's `SKILL.md`**, linked from it: long reference material for that skill.
 
 A rule phrased "always do X after Y" or "never do Z" is a hook or permission candidate, because instructions get weighed
 against context and hooks don't. Keep `CLAUDE.md` to about 200 lines at most, and keep it an index: when a section grows

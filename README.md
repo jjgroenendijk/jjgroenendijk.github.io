@@ -33,7 +33,7 @@ Useful URL parameters while developing:
 
 ## How it works
 
-```
+```text
 src/
   main.js            boot, main loop, adaptive resolution
   controls.js        drag-to-look and the sound toggle

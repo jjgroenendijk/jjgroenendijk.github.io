@@ -9,15 +9,19 @@ textures, sound) is generated in code, so there are no binary assets to add.
 ## Running
 
 `python3 -m http.server 8000`, then open <http://localhost:8000> in a WebGPU browser. URL parameters are listed in the
-README; `main.js` also reads `t=` (start time), `look=yawDeg,pitchDeg` and `sync` (lockstep frames). The browser console
-is the only error surface: `core/gpu.js` `shader()` prints WGSL compile errors with the shader label and source line. To
-check a change visually, use the `checking-rendering` skill.
+README; the code also reads `t=` (start time), `look=yawDeg,pitchDeg`, `sync` (lockstep frames) and `path=N` (repeat one
+camera path; random per visit otherwise, see `world/path.js`). The browser console is the only error surface:
+`core/gpu.js` `shader()` prints WGSL compile errors with the shader label and source line. To check a change visually,
+use the `checking-rendering` skill.
+
+Dev tooling is Node-only and never shipped: `npm ci` once, `npm run format` to format, `npm run check` for the format
+check plus every linter (what CI runs). See the `linting-and-formatting` skill.
 
 ## Deployment
 
-Pushing to `main` deploys to GitHub Pages via `.github/workflows/pages.yml`, which copies only `index.html` and `src/`.
-New runtime files must live under `src/` or the workflow must change. The untracked `public/`, `themes/` and
-`.hugo_build.lock` are leftovers of an old Hugo site, unrelated to this app.
+`.github/workflows/pages.yml` runs `npm run check` on pull requests and pushes, then deploys `main` to GitHub Pages by
+copying only `index.html` and `src/`. New runtime files must live under `src/` or the workflow must change. The
+untracked `public/`, `themes/` and `.hugo_build.lock` are leftovers of an old Hugo site, unrelated to this app.
 
 ## Gotchas
 
