@@ -139,7 +139,7 @@ fn luma(c: vec3f) -> f32 { return dot(c, vec3f(0.2126, 0.7152, 0.0722)); }
 `;
 
 export const commonLib = noiseLib + /* wgsl */ `
-const WATER_EXT: vec3f = vec3f(0.20, 0.058, 0.034);
+const WATER_EXT: vec3f = vec3f(0.17, 0.042, 0.032);
 // lighting attenuation is kept gentler than view extinction so reefs stay colourful
 const LIGHT_EXT: vec3f = vec3f(0.075, 0.035, 0.03);
 ${knotArr}

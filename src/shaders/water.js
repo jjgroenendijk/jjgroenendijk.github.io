@@ -98,7 +98,7 @@ fn windPatch(p: vec2f, t: f32) -> f32 {
 }
 
 fn waterScatter() -> vec3f {
-  return (F.lightColor.rgb * max(F.lightDir.y, 0.0) * 0.55 + F.skyAmb.rgb * 0.8) * vec3f(0.006, 0.06, 0.12);
+  return (F.lightColor.rgb * max(F.lightDir.y, 0.0) * 0.55 + F.skyAmb.rgb * 0.8) * vec3f(0.003, 0.05, 0.19);
 }
 
 @fragment fn fs(in: WV2, @builtin(front_facing) ff: bool) -> @location(0) vec4f {
@@ -168,8 +168,9 @@ fn waterScatter() -> vec3f {
   let fres = 0.02 + (max(1.0 - alpha * 1.6, 0.02) - 0.02) * pow(1.0 - max(dot(n, V), 0.0), 5.0);
   var col = mix(refrC, refl, fres);
   let sh = shadowAt(in.rel, vec3f(0.0, 1.0, 0.0), in.pos.xy) * cloudShadow(pw);
-  // sun glitter: the wider lobe far away draws the long sun path
-  col += F.lightColor.rgb * ggx(n, V, L, sqrt(alpha)) * sh * 0.6;
+  // sun glitter: a tight, bright path from the slopes actually there, and only
+  // a faint wide sheen (a wide lobe alone smears into a white blur)
+  col += F.lightColor.rgb * (ggx(n, V, L, max(alpha, 0.03)) * 0.5 + ggx(n, V, L, sqrt(alpha)) * 0.06) * sh;
   // and sparkles nearby where single ripple facets catch the sun
   let fq0 = pw.xz * 3.0 + vec2f(t * 0.7, t * 0.4);
   let glint = pow(hf(hashu(u32(floor(fq0.x)) * 7919u + u32(floor(fq0.y)) * 104729u + u32(t * 6.0))), 60.0);
