@@ -642,12 +642,13 @@ fn fishColor(h: f32, lp: vec3f) -> vec3f {
 fn coralColor(h: f32) -> vec3f {
   let k = u32(h * 6.0);
   switch (k) {
-    case 0u: { return vec3f(0.55, 0.20, 0.55); }
-    case 1u: { return vec3f(0.95, 0.42, 0.16); }
-    case 2u: { return vec3f(0.95, 0.42, 0.55); }
-    case 3u: { return vec3f(0.92, 0.80, 0.30); }
-    case 4u: { return vec3f(0.20, 0.62, 0.58); }
-    default: { return vec3f(0.80, 0.30, 0.30); }
+    // living reef colours are mostly earthy: tan, ochre, beige, olive, with some mauve and dusty pink
+    case 0u: { return vec3f(0.42, 0.28, 0.42); }
+    case 1u: { return vec3f(0.72, 0.52, 0.28); }
+    case 2u: { return vec3f(0.80, 0.66, 0.46); }
+    case 3u: { return vec3f(0.66, 0.54, 0.22); }
+    case 4u: { return vec3f(0.46, 0.44, 0.26); }
+    default: { return vec3f(0.74, 0.46, 0.40); }
   }
 }
 
@@ -858,9 +859,9 @@ fn surface(in: PV, ff: bool) -> Surf {
       trans = 0.5;
     }
     case 35u: {
-      var c = vec3f(0.55, 0.20, 0.60);
-      if (hue > 0.35) { c = vec3f(0.95, 0.55, 0.15); }
-      if (hue > 0.7) { c = vec3f(0.85, 0.80, 0.25); }
+      var c = vec3f(0.48, 0.30, 0.46);
+      if (hue > 0.35) { c = vec3f(0.80, 0.50, 0.22); }
+      if (hue > 0.7) { c = vec3f(0.74, 0.66, 0.34); }
       alb = c * (0.55 + 0.45 * in.ex.x) * (0.85 + 0.3 * vnoise3(lp * 25.0));
     }
     case 36u: {

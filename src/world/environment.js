@@ -72,18 +72,19 @@ export class Environment {
     let exposure = 0.6 / Math.pow(Math.max(sceneLum, 1e-5), 0.8) * Math.pow(0.4, 0.2);
     exposure = Math.min(exposure, 40);
     // our eyes adapt to the shade under the canopy
-    exposure *= 1 + 2.6 * shot.modes.land + 0.3 * shot.modes.und;
+    exposure *= 1 + 2.6 * shot.modes.land + 0.6 * shot.modes.und;
     if (this.exposure === null) this.exposure = exposure;
     this.exposure *= Math.pow(exposure / this.exposure, 1 - Math.exp(-dt * 1.5));
 
     const waterLight = lightColor.map((v, i) => v * Math.max(lightDir[1], 0) * 0.55 + skyAmb[i] * 0.9);
-    const waterFog = waterLight.map((v, i) => v * [0.008, 0.06, 0.115][i]);
+    // clear tropical water: bright turquoise in-scatter, not a dark navy
+    const waterFog = waterLight.map((v, i) => v * [0.025, 0.12, 0.17][i]);
 
     return {
       tod: this.tod, sun, moon, lightDir, lightColor, isSun: useSun ? 1 : 0, night,
       stars: smoothstep(-0.05, -0.25, sun[1]),
       skyAmb, groundAmb, exposure: this.exposure,
-      fog: [0.00004 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
+      fog: [0.000028 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
       waterFog, coverage, wind, rainbow, mist, wetness: this.wetness,
     };
   }
