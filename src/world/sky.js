@@ -1,61 +1,72 @@
 // Analytic atmosphere (mirrors skyBase() in WGSL) and the day/night cycle.
 import { smoothstep } from './terrain.js';
 
-const TAU = Math.PI * 2;
-const BR = [5.8e-6, 13.5e-6, 33.1e-6],
-  BM = 21e-6;
-function airmass(c) {
-  const zd = (Math.acos(Math.min(Math.max(c, -1), 1)) * 180) / Math.PI;
-  return 1 / (Math.max(c, 0) + 0.50572 * Math.pow(Math.max(96.07995 - zd, 0.1), -1.6364));
-}
-export function sunTransmittance(sy) {
-  const m = airmass(sy);
-  const fade = smoothstep(-0.12, 0.02, sy);
-  return BR.map((b) => Math.exp(-(b * 8000 + BM * 1200) * m) * fade);
-}
-export const SKY_E = 22;
-export function skyRadiance(rd, sun, E) {
-  const mu = rd[0] * sun[0] + rd[1] * sun[1] + rd[2] * sun[2];
-  const pR = (3 / (16 * Math.PI)) * (1 + mu * mu);
-  const g = 0.76;
-  const pM = (1 - g * g) / (4 * Math.PI * Math.pow(1 + g * g - 2 * g * mu, 1.5));
-  const mv = airmass(Math.max(rd[1], 0));
-  const Ts0 = sunTransmittance(sun[1]);
-  const thin = 1 - 0.7 * Math.min(Math.max(rd[1] * 1.6, 0), 1);
-  const fade = smoothstep(-0.12, 0.02, sun[1]);
-  const Ts = Ts0.map((v) => Math.pow(Math.max(v / Math.max(fade, 1e-6), 1e-6), thin) * fade);
-  const out = [0, 0, 0];
-  for (let i = 0; i < 3; i++) {
-    const dR = 8000 * mv,
-      dM = 1200 * mv;
-    const ext = BR[i] * dR + BM * dM;
-    const sc = ((BR[i] * pR * dR + BM * pM * dM) / ext) * (1 - Math.exp(-ext));
-    out[i] = E * Ts[i] * sc;
-  }
-  // twilight glow
-  const tw = smoothstep(-0.25, 0.0, sun[1]) * (1 - smoothstep(0.0, 0.25, sun[1]));
-  const twc = [0.1, 0.07, 0.12];
-  for (let i = 0; i < 3; i++) out[i] += E * 0.012 * tw * twc[i] * (1 - rd[1] * 0.5);
-  return out;
-}
+// Scattering coefficients (1/m): Rayleigh per RGB channel and Mie, with the scale heights (m) of air and haze.
+const BETA_MIE = 21e-6,
+  BETA_RAYLEIGH = [5.8e-6, 13.5e-6, 33.1e-6],
+  MIE_DEPTH = 1200,
+  // Henyey-Greenstein asymmetry of the haze.
+  MIE_G = 0.76,
+  RAYLEIGH_DEPTH = 8000,
+  SKY_E = 22,
+  TAU = Math.PI * 2,
+  // Colour of the twilight glow.
+  TWILIGHT = [0.1, 0.07, 0.12],
+  // About 22 minutes per full day before warping (in days per second).
+  DAY_RATE = 1 / (22 * 60),
+  // Unit vector at an azimuth and elevation.
+  aim = (az, elevation) => [
+    Math.cos(az) * Math.cos(elevation),
+    Math.sin(elevation),
+    Math.sin(az) * Math.cos(elevation),
+  ],
+  airmass = (c) => {
+    const zd = (Math.acos(Math.min(Math.max(c, -1), 1)) * 180) / Math.PI;
+    return 1 / (Math.max(c, 0) + 0.50572 * Math.max(96.07995 - zd, 0.1) ** -1.6364);
+  },
+  sunTransmittance = (sy) => {
+    const m = airmass(sy),
+      fade = smoothstep(-0.12, 0.02, sy);
+    return BETA_RAYLEIGH.map((b) => Math.exp(-(b * RAYLEIGH_DEPTH + BETA_MIE * MIE_DEPTH) * m) * fade);
+  },
+  // Single scattering of one channel along a view ray of airmass mv, with Rayleigh and Mie phases pR and pM.
+  inScatter = (beta, mv, pR, pM) => {
+    const dR = RAYLEIGH_DEPTH * mv,
+      dM = MIE_DEPTH * mv,
+      extinction = beta * dR + BETA_MIE * dM;
+    return ((beta * pR * dR + BETA_MIE * pM * dM) / extinction) * (1 - Math.exp(-extinction));
+  },
+  skyRadiance = (rd, sun, intensity) => {
+    const mu = rd[0] * sun[0] + rd[1] * sun[1] + rd[2] * sun[2],
+      pR = (3 / (16 * Math.PI)) * (1 + mu * mu),
+      pM = (1 - MIE_G * MIE_G) / (4 * Math.PI * (1 + MIE_G * MIE_G - 2 * MIE_G * mu) ** 1.5),
+      mv = airmass(Math.max(rd[1], 0)),
+      thin = 1 - 0.7 * Math.min(Math.max(rd[1] * 1.6, 0), 1),
+      fade = smoothstep(-0.12, 0.02, sun[1]),
+      // Twilight glow.
+      tw = smoothstep(-0.25, 0, sun[1]) * (1 - smoothstep(0, 0.25, sun[1]));
+    return sunTransmittance(sun[1]).map(
+      (v, channel) =>
+        intensity *
+          (Math.max(v / Math.max(fade, 1e-6), 1e-6) ** thin * fade) *
+          inScatter(BETA_RAYLEIGH[channel], mv, pR, pM) +
+        intensity * 0.012 * tw * TWILIGHT[channel] * (1 - rd[1] * 0.5),
+    );
+  },
+  // Sun and moon directions for tod in [0, 1), where 0 is midnight.
+  celestial = (tod) => {
+    const elevation = Math.asin(0.93 * Math.sin((tod - 0.25) * TAU)),
+      az = tod * TAU + Math.PI - 0.35,
+      mel = Math.asin(0.8 * Math.sin((tod - 0.25 + 0.47) * TAU));
+    return { moon: aim(az + Math.PI + 0.4, mel), sun: aim(az, elevation) };
+  },
+  // Time of day progresses slower around sunrise and sunset (the pretty part).
+  todRate = (tod) => {
+    const [, sunY] = celestial(tod).sun,
+      golden = Math.exp(-(((sunY - 0.06) / 0.16) ** 2)),
+      night = smoothstep(-0.05, -0.3, sunY);
+    // Nights pass quickly: the island is mostly seen in the sun.
+    return DAY_RATE * (1.25 - 0.8 * golden + 1.6 * night);
+  };
 
-// tod in [0,1): 0 = midnight. Returns sun and moon directions.
-export function celestial(tod) {
-  const el = Math.asin(0.93 * Math.sin((tod - 0.25) * TAU));
-  const az = tod * TAU + Math.PI - 0.35;
-  const sun = [Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)];
-  const mel = Math.asin(0.8 * Math.sin((tod - 0.25 + 0.47) * TAU));
-  const maz = az + Math.PI + 0.4;
-  const moon = [Math.cos(maz) * Math.cos(mel), Math.sin(mel), Math.sin(maz) * Math.cos(mel)];
-  return { sun, moon };
-}
-// Time of day progresses slower around sunrise/sunset (the pretty part).
-export function todRate(tod) {
-  const { sun } = celestial(tod);
-  const e = sun[1];
-  const golden = Math.exp(-Math.pow((e - 0.06) / 0.16, 2));
-  const night = smoothstep(-0.05, -0.3, e);
-  const base = 1 / (22 * 60); // ~22 min per full day before warping
-  // nights pass quickly: the island is mostly seen in the sun
-  return base * (1.25 - 0.8 * golden + 1.6 * night);
-}
+export { SKY_E, celestial, skyRadiance, sunTransmittance, todRate };
