@@ -30,9 +30,6 @@
     "sonarjs/pseudo-random": {
       "count": 15
     },
-    "sort-vars": {
-      "count": 2
-    },
     "unicorn/name-replacements": {
       "count": 9
     },
@@ -198,9 +195,6 @@
       "count": 7
     },
     "sort-keys": {
-      "count": 1
-    },
-    "sort-vars": {
       "count": 1
     },
     "unicorn/name-replacements": {
@@ -481,14 +475,8 @@
     }
   },
   "src/render/hiz-pass.js": {
-    "capitalized-comments": {
-      "count": 1
-    },
     "no-bitwise": {
       "count": 3
-    },
-    "no-inline-comments": {
-      "count": 1
     },
     "no-magic-numbers": {
       "count": 2
@@ -507,9 +495,6 @@
     },
     "sort-keys": {
       "count": 4
-    },
-    "sort-vars": {
-      "count": 1
     },
     "unicorn/no-undeclared-class-members": {
       "count": 8
@@ -607,9 +592,6 @@
     "sort-keys": {
       "count": 11
     },
-    "sort-vars": {
-      "count": 1
-    },
     "unicorn/consistent-boolean-name": {
       "count": 1
     },
@@ -687,14 +669,11 @@
     "sort-keys": {
       "count": 58
     },
-    "sort-vars": {
-      "count": 2
-    },
     "unicorn/consistent-function-scoping": {
       "count": 3
     },
     "unicorn/name-replacements": {
-      "count": 17
+      "count": 14
     },
     "unicorn/no-for-each": {
       "count": 6
@@ -742,9 +721,6 @@
     },
     "sort-keys": {
       "count": 16
-    },
-    "unicorn/name-replacements": {
-      "count": 4
     },
     "unicorn/no-undeclared-class-members": {
       "count": 8
@@ -800,7 +776,7 @@
       "count": 1
     },
     "unicorn/name-replacements": {
-      "count": 4
+      "count": 2
     },
     "unicorn/no-null": {
       "count": 1
@@ -853,7 +829,7 @@
       "count": 7
     },
     "unicorn/name-replacements": {
-      "count": 4
+      "count": 3
     },
     "unicorn/no-computed-property-existence-check": {
       "count": 2
@@ -942,9 +918,6 @@
     "sort-keys": {
       "count": 4
     },
-    "sort-vars": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 1
     },
@@ -1000,9 +973,6 @@
     },
     "sort-keys": {
       "count": 21
-    },
-    "sort-vars": {
-      "count": 1
     },
     "unicorn/consistent-boolean-name": {
       "count": 1
@@ -1132,9 +1102,6 @@
     },
     "sort-keys": {
       "count": 2
-    },
-    "sort-vars": {
-      "count": 3
     },
     "unicorn/consistent-function-scoping": {
       "count": 5
@@ -1281,9 +1248,6 @@
     },
     "sort-keys": {
       "count": 9
-    },
-    "sort-vars": {
-      "count": 4
     },
     "unicorn/consistent-boolean-name": {
       "count": 1
@@ -1495,9 +1459,6 @@
     "sort-keys": {
       "count": 39
     },
-    "sort-vars": {
-      "count": 2
-    },
     "unicorn/consistent-boolean-name": {
       "count": 2
     },
@@ -1540,10 +1501,10 @@
   },
   "src/shaders/common.js": {
     "capitalized-comments": {
-      "count": 8
+      "count": 2
     },
     "no-inline-comments": {
-      "count": 7
+      "count": 1
     },
     "no-magic-numbers": {
       "count": 15
@@ -1571,11 +1532,8 @@
     }
   },
   "src/shaders/flock.js": {
-    "capitalized-comments": {
-      "count": 2
-    },
     "no-inline-comments": {
-      "count": 3
+      "count": 1
     },
     "no-unused-vars": {
       "count": 1
@@ -1597,12 +1555,6 @@
     }
   },
   "src/shaders/ground.js": {
-    "capitalized-comments": {
-      "count": 2
-    },
-    "no-inline-comments": {
-      "count": 2
-    },
     "one-var": {
       "count": 1
     },
@@ -1614,12 +1566,6 @@
     }
   },
   "src/shaders/leaves.js": {
-    "capitalized-comments": {
-      "count": 2
-    },
-    "no-inline-comments": {
-      "count": 2
-    },
     "one-var": {
       "count": 2
     },
@@ -1635,10 +1581,10 @@
   },
   "src/shaders/lighting.js": {
     "capitalized-comments": {
-      "count": 7
+      "count": 4
     },
     "no-inline-comments": {
-      "count": 7
+      "count": 4
     },
     "no-magic-numbers": {
       "count": 2
@@ -1658,10 +1604,10 @@
   },
   "src/shaders/materials.js": {
     "capitalized-comments": {
-      "count": 7
+      "count": 2
     },
     "no-inline-comments": {
-      "count": 6
+      "count": 1
     },
     "no-magic-numbers": {
       "count": 1
@@ -1683,12 +1629,6 @@
     }
   },
   "src/shaders/post.js": {
-    "capitalized-comments": {
-      "count": 6
-    },
-    "no-inline-comments": {
-      "count": 6
-    },
     "one-var": {
       "count": 5
     },
@@ -1704,10 +1644,10 @@
   },
   "src/shaders/props-visibility.js": {
     "capitalized-comments": {
-      "count": 4
+      "count": 1
     },
     "no-inline-comments": {
-      "count": 4
+      "count": 1
     },
     "no-magic-numbers": {
       "count": 1
@@ -1722,19 +1662,13 @@
       "count": 4
     },
     "unicorn/name-replacements": {
-      "count": 10
+      "count": 5
     },
     "unicorn/numeric-separators-style": {
       "count": 1
     }
   },
   "src/shaders/props.js": {
-    "capitalized-comments": {
-      "count": 10
-    },
-    "no-inline-comments": {
-      "count": 10
-    },
     "no-magic-numbers": {
       "count": 1
     },
@@ -1754,27 +1688,15 @@
       "count": 3
     },
     "unicorn/name-replacements": {
-      "count": 13
+      "count": 8
     }
   },
   "src/shaders/shore.js": {
-    "capitalized-comments": {
-      "count": 1
-    },
-    "no-inline-comments": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 1
     }
   },
   "src/shaders/sky.js": {
-    "capitalized-comments": {
-      "count": 5
-    },
-    "no-inline-comments": {
-      "count": 5
-    },
     "one-var": {
       "count": 4
     },
@@ -1790,10 +1712,10 @@
   },
   "src/shaders/terrain.js": {
     "capitalized-comments": {
-      "count": 11
+      "count": 4
     },
     "no-inline-comments": {
-      "count": 10
+      "count": 3
     },
     "no-magic-numbers": {
       "count": 1
@@ -1812,12 +1734,6 @@
     }
   },
   "src/shaders/water.js": {
-    "capitalized-comments": {
-      "count": 3
-    },
-    "no-inline-comments": {
-      "count": 3
-    },
     "one-var": {
       "count": 2
     },
@@ -1880,9 +1796,6 @@
     "sort-keys": {
       "count": 6
     },
-    "sort-vars": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 2
     },
@@ -1939,9 +1852,6 @@
     "sort-keys": {
       "count": 11
     },
-    "sort-vars": {
-      "count": 1
-    },
     "unicorn/consistent-boolean-name": {
       "count": 1
     },
@@ -1982,9 +1892,6 @@
     },
     "one-var": {
       "count": 23
-    },
-    "sort-vars": {
-      "count": 2
     },
     "unicorn/name-replacements": {
       "count": 2
@@ -2056,9 +1963,6 @@
     "sort-keys": {
       "count": 1
     },
-    "sort-vars": {
-      "count": 2
-    },
     "unicorn/name-replacements": {
       "count": 5
     },
@@ -2102,9 +2006,6 @@
     },
     "sort-imports": {
       "count": 3
-    },
-    "sort-vars": {
-      "count": 2
     },
     "unicorn/name-replacements": {
       "count": 5
