@@ -401,7 +401,7 @@
       "count": 2
     },
     "sort-imports": {
-      "count": 3
+      "count": 5
     },
     "sort-keys": {
       "count": 2
@@ -1129,13 +1129,13 @@
       "count": 54
     },
     "one-var": {
-      "count": 6
+      "count": 8
     },
     "sort-imports": {
       "count": 1
     },
     "sort-keys": {
-      "count": 125
+      "count": 126
     },
     "unicorn/numeric-separators-style": {
       "count": 3
@@ -1204,6 +1204,11 @@
     },
     "unicorn/prefer-minimal-ternary": {
       "count": 1
+    }
+  },
+  "src/scene/flocks.js": {
+    "one-var": {
+      "count": 6
     }
   },
   "src/scene/geometry.js": {
@@ -1650,14 +1655,20 @@
     "no-magic-numbers": {
       "count": 1
     },
+    "no-unused-vars": {
+      "count": 1
+    },
     "one-var": {
-      "count": 9
+      "count": 2
     },
     "prefer-template": {
       "count": 1
     },
-    "sort-imports": {
+    "sonarjs/unused-import": {
       "count": 1
+    },
+    "sort-imports": {
+      "count": 3
     },
     "unicorn/name-replacements": {
       "count": 2
@@ -1691,12 +1702,12 @@
       "count": 2
     },
     "one-var": {
-      "count": 4
+      "count": 2
     },
     "prefer-template": {
       "count": 1
     },
-    "sort-keys": {
+    "sort-imports": {
       "count": 1
     },
     "unicorn/name-replacements": {

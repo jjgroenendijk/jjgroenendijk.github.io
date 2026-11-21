@@ -9,9 +9,8 @@
 // Vertex extra = [material, occlusion, flex, t]; flex is the branch's bend
 // weight for the wind (0 on the trunk), and foliage cards pack their texture
 // coordinates into t.
-import { MAT } from './catalog.js';
+import { MAT, LEAF } from './catalog.js';
 import { MeshBuilder, add, sub, mul, cross, norm, len, rng, vnoise } from './geometry.js';
-import { LEAF } from '../shaders/leaves.js';
 
 // Species. Lengths are in mesh units: a tree is about one unit tall and the
 // scatter scales it to metres.

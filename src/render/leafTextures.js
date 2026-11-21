@@ -1,7 +1,8 @@
 // Bakes the foliage card textures once at start-up (see shaders/leaves.js),
 // with coverage-weighted mips from the impostor mip filter.
 import { shader, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { leafBakeWGSL, LEAF_TEX, LEAF_COUNT } from '../shaders/leaves.js';
+import { leafBakeWGSL, LEAF_TEX } from '../shaders/leaves.js';
+import { LEAF_COUNT } from '../scene/catalog.js';
 import { cardMipWGSL } from '../shaders/props.js';
 
 const FORMAT = 'rgba8unorm';

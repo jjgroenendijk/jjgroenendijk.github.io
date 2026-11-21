@@ -11,7 +11,7 @@
     "lint:md": "markdownlint-cli2 \"**/*.md\"",
     "lint:html": "html-validate index.html",
     "lint:css": "stylelint index.html --max-warnings 0",
-    "lint:arch": "depcruise src --config .dependency-cruiser.cjs --ignore-known",
+    "lint:arch": "depcruise src --config .dependency-cruiser.cjs",
     "lint:dup": "jscpd src",
     "lint:dead": "knip",
     "lint:actions": "if command -v actionlint >/dev/null; then actionlint; else echo \"actionlint not installed: skipped here, CI runs it\"; fi",

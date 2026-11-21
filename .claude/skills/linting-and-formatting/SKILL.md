@@ -31,9 +31,10 @@ the site stays build-free.
 - **Markdown** (`.markdownlint-cli2.jsonc`): all rules, lines at most 120 characters, tables and code included.
 - **HTML and CSS** (`index.html`): html-validate (recommended, document, a11y) and Stylelint standard through
   postcss-html.
-- **Architecture** (`.dependency-cruiser.cjs`): imports point down `main.js` → `render/` → `scene/`, `shaders/` →
-  `world/` → `core/`. `audio/` and `debug/` are leaves used only by `main.js`. No cycles, orphans or imports from
-  outside `src/`.
+- **Architecture** (`.dependency-cruiser.cjs`): imports point down `main.js` → `render/` → `shaders/` → `scene/` →
+  `world/` → `core/`. Shaders are generated from the scene's ids and sizes (`scene/catalog.js`, `scene/flocks.js`), so
+  scene code never imports from `shaders/`. `audio/` and `debug/` are leaves used only by `main.js`. No cycles, orphans
+  or imports from outside `src/`.
 - **Duplication** (`.jscpd.json`): capped just above the current 0.7%, so it can only go down. The JS/WGSL twins are
   intended duplication across two languages and are not what jscpd measures.
 - **Dead code** (`knip.json`): no unused files, exports or dev dependencies.
@@ -46,10 +47,6 @@ Code that predates the strict setup is recorded, not exempted from the rules:
 
 - `eslint-suppressions.json`: per-file, per-rule counts of existing ESLint violations. A file may not gain violations;
   when you touch a file, fixing some of its entries and running `npm run lint:prune` is welcome.
-- `.dependency-cruiser-known-violations.json`: the four imports where `scene/` and `shaders/` depend on each other
-  (constants such as `TYPE`, `MAT`, `LEAF`, `FISH_COUNT`). Remove them by moving the shared constants so they point one
-  way, then regenerate it with
-  `npx depcruise src -c .dependency-cruiser.cjs -T baseline -f .dependency-cruiser-known-violations.json`.
 
 Never regenerate a baseline to make new violations pass.
 

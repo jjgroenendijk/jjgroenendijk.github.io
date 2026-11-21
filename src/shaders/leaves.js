@@ -6,10 +6,9 @@
 // Premultiplied texels let the shared card mip filter average them without
 // the transparent background bleeding into the leaf colour.
 import { noiseLib } from './common.js';
+import { LEAF } from '../scene/catalog.js';
 
 export const LEAF_TEX = 256;
-export const LEAF = { broad: 0, small: 1, pinnate: 2 };
-export const LEAF_COUNT = Object.keys(LEAF).length;
 
 // Sampling, for any shader that draws foliage (uv and layer as unpacked by
 // unpackLeafUV in the prop vertex stage). The textures and

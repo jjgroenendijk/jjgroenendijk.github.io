@@ -1,5 +1,6 @@
 // Architecture rules. Imports point down the layer stack only:
-// main.js and controls.js, then render/, then scene/ and shaders/, then world/, then core/.
+// main.js and controls.js, then render/, then shaders/, then scene/, then world/, then core/.
+// Shaders are generated from the scene's ids and sizes, so shaders/ may import scene/ but never the reverse.
 // Audio/ and debug/ are leaves used by main.js. Known violations live in .dependency-cruiser-known-violations.json
 // and may only shrink.
 const layer = (name, mayNotImport) => ({
@@ -23,7 +24,7 @@ module.exports = {
     layer('core', 'world|scene|shaders|render|audio|debug'),
     layer('world', 'scene|shaders|render|audio|debug'),
     layer('scene', 'shaders|render|audio|debug'),
-    layer('shaders', 'scene|render|audio|debug'),
+    layer('shaders', 'render|audio|debug'),
     layer('render', 'audio|debug'),
     layer('audio', 'core|world|scene|shaders|render|debug'),
     layer('debug', 'world|scene|shaders|render|audio'),

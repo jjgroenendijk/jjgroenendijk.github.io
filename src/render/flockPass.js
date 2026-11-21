@@ -1,7 +1,8 @@
 // Steps the fish schools and bird flocks once per frame. The agents live in a
 // storage buffer that persists between frames; the scatter pass reads it.
 import { shader, buffer, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { flockWGSL, FISH_COUNT, BIRD_COUNT, FLOCK_GROUPS, AGENT_BYTES } from '../shaders/flock.js';
+import { flockWGSL, AGENT_BYTES } from '../shaders/flock.js';
+import { FISH_COUNT, BIRD_COUNT, FLOCK_GROUPS } from '../scene/flocks.js';
 
 const MAX_STEP = 0.1; // s: longer frames (a hitch, a hidden tab) are slowed down
 const TIME_WRAP = 10000; // s: keeps the shader's time precise

@@ -1,8 +1,12 @@
 // Catalogue of everything that gets scattered over the world.
 // Shared by the mesh builder, the scatter compute shader and the renderer.
-import { FISH_COUNT, BIRD_COUNT } from '../shaders/flock.js';
+import { FISH_COUNT, BIRD_COUNT } from './flocks.js';
 
 // Material ids (stored per vertex in extra.x, interpreted by the prop shader)
+// Leaf texture layers baked at start-up, one per kind of leaf card.
+export const LEAF = { broad: 0, small: 1, pinnate: 2 };
+export const LEAF_COUNT = Object.keys(LEAF).length;
+
 export const MAT = {
   palmBark: 0,
   palmFrond: 1,
