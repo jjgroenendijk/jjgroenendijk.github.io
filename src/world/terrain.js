@@ -4,8 +4,14 @@ import { W, CYCLE, fbm, gnoise, gnoiseD, hashu, wrapi } from './noise.js';
 import { PATH_TERMS, PATH_OFFSET } from './path.js';
 
 const TAU = Math.PI * 2;
-export const smoothstep = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
-const smin = (a, b, k) => { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; };
+export const smoothstep = (a, b, x) => {
+  const t = Math.min(Math.max((x - a) / (b - a), 0), 1);
+  return t * t * (3 - 2 * t);
+};
+const smin = (a, b, k) => {
+  const h = Math.max(k - Math.abs(a - b), 0) / k;
+  return Math.min(a, b) - h * h * k * 0.25;
+};
 
 export function pathX(z) {
   const k = TAU / W;
@@ -24,40 +30,41 @@ export function pathDX(z) {
 // The terrain is gently forced to these heights near the camera path so the
 // director can rely on: lagoon -> beach -> jungle -> beach -> reef -> open sea.
 export const KNOTS = [
-  [0.00, -22, 0.0, 0.0, 300],
+  [0.0, -22, 0.0, 0.0, 300],
   [0.13, -22, 0.0, 0.0, 300],
   [0.19, -13, 1.0, 0.0, 300],
   [0.245, -3.2, 1.0, 0.0, 280],
   [0.285, -0.6, 1.0, 0.0, 260],
-  [0.300, 1.4, 1.0, 0.3, 250],
-  [0.320, 3.2, 1.0, 0.8, 250],
-  [0.360, 6.0, 1.0, 1.0, 240],
-  [0.420, 9.0, 1.0, 1.0, 240],
-  [0.480, 6.5, 1.0, 1.0, 240],
+  [0.3, 1.4, 1.0, 0.3, 250],
+  [0.32, 3.2, 1.0, 0.8, 250],
+  [0.36, 6.0, 1.0, 1.0, 240],
+  [0.42, 9.0, 1.0, 1.0, 240],
+  [0.48, 6.5, 1.0, 1.0, 240],
   [0.515, 3.0, 1.0, 0.7, 250],
   [0.535, 1.0, 1.0, 0.2, 260],
-  [0.550, -0.9, 1.0, 0.0, 270],
+  [0.55, -0.9, 1.0, 0.0, 270],
   [0.575, -6.0, 1.0, -0.05, 280],
-  [0.610, -9.5, 1.0, -0.12, 300],
-  [0.700, -10.5, 1.0, -0.14, 300],
-  [0.780, -8.5, 1.0, -0.12, 300],
-  [0.820, -6.5, 1.0, -0.08, 300],
-  [0.850, -3.4, 1.0, -0.03, 300],
-  [0.880, -10.0, 0.6, 0.0, 300],
-  [0.940, -22, 0.0, 0.0, 300],
-  [1.000, -22, 0.0, 0.0, 300],
+  [0.61, -9.5, 1.0, -0.12, 300],
+  [0.7, -10.5, 1.0, -0.14, 300],
+  [0.78, -8.5, 1.0, -0.12, 300],
+  [0.82, -6.5, 1.0, -0.08, 300],
+  [0.85, -3.4, 1.0, -0.03, 300],
+  [0.88, -10.0, 0.6, 0.0, 300],
+  [0.94, -22, 0.0, 0.0, 300],
+  [1.0, -22, 0.0, 0.0, 300],
 ];
 
 function corridorAt(z) {
-  let u = z / CYCLE; u -= Math.floor(u);
+  let u = z / CYCLE;
+  u -= Math.floor(u);
   let i = 0;
   for (let k = 0; k < KNOTS.length - 1; k++) if (u >= KNOTS[k + 1][0]) i = k + 1;
-  const a = KNOTS[i], b = KNOTS[Math.min(i + 1, KNOTS.length - 1)];
+  const a = KNOTS[i],
+    b = KNOTS[Math.min(i + 1, KNOTS.length - 1)];
   let t = Math.min(Math.max((u - a[0]) / Math.max(b[0] - a[0], 1e-5), 0), 1);
   t = t * t * (3 - 2 * t);
   return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t, a[4] + (b[4] - a[4]) * t];
 }
-
 
 // Mirrors of the WGSL in shaders/common.js (fbmD, gullies, baseHeight).
 const sat = (x) => Math.min(Math.max(x, 0), 1);
@@ -66,30 +73,44 @@ const hf = (x) => hashu(x >>> 0) / 4294967295;
 // fbm with its derivative (world units); octaves from damp0 on are damped by the slope below
 function fbmD(x, z, per0, oct, seed, damp0) {
   const s = [0, 0, 0];
-  let a = 0.5, per = per0, sx = 0, sz = 0;
+  let a = 0.5,
+    per = per0,
+    sx = 0,
+    sz = 0;
   for (let i = 0; i < oct; i++) {
     const n = gnoiseD(x * (per / W), z * (per / W), per, (seed + i * 101) >>> 0);
     const damp = i >= damp0 ? 1 / (1 + 0.35 * (sx * sx + sz * sz)) : 1;
     s[0] += n[0] * a * damp;
     s[1] += n[1] * (per / W) * a * damp;
     s[2] += n[2] * (per / W) * a * damp;
-    sx += n[1]; sz += n[2];
-    per *= 2; a *= 0.5;
+    sx += n[1];
+    sz += n[2];
+    per *= 2;
+    a *= 0.5;
   }
   return s;
 }
 
 function gullyOctave(x, z, gx, gz, cell) {
   const n = Math.round(W / cell);
-  const qx = x / cell, qz = z / cell;
-  const cx = Math.floor(qx), cz = Math.floor(qz);
-  let ax = -gz + 1e-6, az = gx;
-  const al = Math.hypot(ax, az); ax /= al; az /= al;
-  let v = 0, dvx = 0, dvz = 0, wsum = 0;
+  const qx = x / cell,
+    qz = z / cell;
+  const cx = Math.floor(qx),
+    cz = Math.floor(qz);
+  let ax = -gz + 1e-6,
+    az = gx;
+  const al = Math.hypot(ax, az);
+  ax /= al;
+  az /= al;
+  let v = 0,
+    dvx = 0,
+    dvz = 0,
+    wsum = 0;
   for (let j = -1; j <= 1; j++) {
     for (let i = -1; i <= 1; i++) {
       const h = hashu((Math.imul(wrapi(cx + i, n), 3) + hashu((wrapi(cz + j, n) + 977) >>> 0)) >>> 0);
-      const dx = qx - (cx + i) - hf(h), dz = qz - (cz + j) - hf(h + 1);
+      const dx = qx - (cx + i) - hf(h),
+        dz = qz - (cz + j) - hf(h + 1);
       const wt = Math.exp(-(dx * dx + dz * dz) * 1.5);
       const ph = (dx * ax + dz * az) * Math.PI * 2;
       v += Math.cos(ph) * wt;
@@ -109,7 +130,7 @@ function gullies(x, z, gx, gz) {
   return (o1[0] * 3.5 + o2[0] * 1.2 - 1) * steep;
 }
 
-export function baseHeight(x, z) {
+function baseHeight(x, z) {
   const c = fbmD(x, z, 8, 3, 11, 99);
   const n = fbmD(x, z, 32, 6, 23, 2);
   const e = n[0] * 1.5 + c[0] * 1.2 - 0.1;

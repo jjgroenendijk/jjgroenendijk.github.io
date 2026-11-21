@@ -3,7 +3,7 @@
 import { shader, buffer, bindLayout, bindGroup, entry } from '../core/gpu.js';
 import { flockWGSL, FISH_COUNT, BIRD_COUNT, FLOCK_GROUPS, AGENT_BYTES } from '../shaders/flock.js';
 
-const MAX_STEP = 0.1;    // s: longer frames (a hitch, a hidden tab) are slowed down
+const MAX_STEP = 0.1; // s: longer frames (a hitch, a hidden tab) are slowed down
 const TIME_WRAP = 10000; // s: keeps the shader's time precise
 
 export class FlockPass {

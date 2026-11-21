@@ -11,7 +11,11 @@ export class WaterPass {
     this.device = device;
     this.shared = shared;
     this.sceneLayout = bindLayout(device, 'water-scene', [entry.texture(), entry.texture('depth'), entry.texture()]);
-    this.reflLayout = bindLayout(device, 'water-reflection', [entry.texture(), entry.texture('depth'), entry.sampler()]);
+    this.reflLayout = bindLayout(device, 'water-reflection', [
+      entry.texture(),
+      entry.texture('depth'),
+      entry.sampler(),
+    ]);
     const refl = shader(device, reflectionWGSL, 'water-reflection');
     this.reflPipeline = device.createRenderPipelineAsync({
       label: 'water-reflection',
@@ -43,16 +47,31 @@ export class WaterPass {
   resize(targets) {
     this.refl?.destroy();
     this.refl = this.device.createTexture({
-      label: 'water-reflection', size: [Math.max(1, targets.width >> 1), Math.max(1, targets.height >> 1)], format: HDR,
+      label: 'water-reflection',
+      size: [Math.max(1, targets.width >> 1), Math.max(1, targets.height >> 1)],
+      format: HDR,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.reflView = this.refl.createView();
-    this.sceneGroup = bindGroup(this.device, this.sceneLayout, [targets.views.sceneCopy, targets.views.depth, this.reflView], 'water-scene');
-    this.reflGroup = bindGroup(this.device, this.reflLayout, [targets.views.sceneCopy, targets.views.depth, this.shared.linear], 'water-reflection-in');
+    this.sceneGroup = bindGroup(
+      this.device,
+      this.sceneLayout,
+      [targets.views.sceneCopy, targets.views.depth, this.reflView],
+      'water-scene',
+    );
+    this.reflGroup = bindGroup(
+      this.device,
+      this.reflLayout,
+      [targets.views.sceneCopy, targets.views.depth, this.shared.linear],
+      'water-reflection-in',
+    );
   }
 
   encode(encoder, targets, frameGroup, shadowGroup, terrain) {
-    encoder.copyTextureToTexture({ texture: targets.hdr }, { texture: targets.sceneCopy }, [targets.width, targets.height]);
+    encoder.copyTextureToTexture({ texture: targets.hdr }, { texture: targets.sceneCopy }, [
+      targets.width,
+      targets.height,
+    ]);
     const rp = encoder.beginRenderPass({
       label: 'water-reflection',
       colorAttachments: [{ view: this.reflView, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 0] }],

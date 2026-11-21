@@ -1,0 +1,7 @@
+node_modules/
+_site/
+public/
+themes/
+package-lock.json
+eslint-suppressions.json
+.dependency-cruiser-known-violations.json

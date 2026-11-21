@@ -31,11 +31,12 @@ import { PropsVisibility } from './propsVisibility.js';
 
 const NEAR = 0.1;
 
-export function cameraBasis(yaw, pitch, roll) {
+function cameraBasis(yaw, pitch, roll) {
   const fwd = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)];
   let right = vec3.normalize(vec3.cross(fwd, [0, 1, 0]));
   let up = vec3.cross(right, fwd);
-  const c = Math.cos(roll), s = Math.sin(roll);
+  const c = Math.cos(roll),
+    s = Math.sin(roll);
   [right, up] = [vec3.add(vec3.scale(right, c), vec3.scale(up, s)), vec3.sub(vec3.scale(up, c), vec3.scale(right, s))];
   return { fwd, right, up };
 }
@@ -63,8 +64,19 @@ export class Renderer {
     this.hiz = new HiZPass(device);
     this.skyLight = new SkyLightPass(device, this.uniforms.buffer);
     this.caustics = new CausticsPass(device, this.uniforms.buffer, this.terrain.cacheView);
-    this.frameGroup = bindGroup(device, this.shared.frame, [this.uniforms.buffer, this.terrain.cacheView,
-      this.skyLight.lutView, this.skyLight.shView, this.caustics.view, this.shared.frameSampler], 'frame');
+    this.frameGroup = bindGroup(
+      device,
+      this.shared.frame,
+      [
+        this.uniforms.buffer,
+        this.terrain.cacheView,
+        this.skyLight.lutView,
+        this.skyLight.shView,
+        this.caustics.view,
+        this.shared.frameSampler,
+      ],
+      'frame',
+    );
     this.cacheGroup = this.terrain.cacheBindGroup(this.uniforms.buffer);
     this.frame = 0;
     this.history = 0;
@@ -81,8 +93,18 @@ export class Renderer {
     for (const part of Object.values(this)) {
       if (!part || typeof part !== 'object') continue;
       for (const [k, v] of Object.entries(part)) {
-        if (v instanceof Promise) jobs.push(v.then((p) => { part[k] = p; }));
-        else if (Array.isArray(v) && v.some((x) => x instanceof Promise)) jobs.push(Promise.all(v).then((a) => { part[k] = a; }));
+        if (v instanceof Promise)
+          jobs.push(
+            v.then((p) => {
+              part[k] = p;
+            }),
+          );
+        else if (Array.isArray(v) && v.some((x) => x instanceof Promise))
+          jobs.push(
+            Promise.all(v).then((a) => {
+              part[k] = a;
+            }),
+          );
       }
     }
     await Promise.all(jobs);
@@ -110,7 +132,7 @@ export class Renderer {
 
     // matrices (camera-relative: the camera sits at the origin)
     const n = (this.frame % 16) + 1;
-    const jitter = [(halton(n, 2) - 0.5) * 2 / t.width, (halton(n, 3) - 0.5) * 2 / t.height];
+    const jitter = [((halton(n, 2) - 0.5) * 2) / t.width, ((halton(n, 3) - 0.5) * 2) / t.height];
     const view = mat4.viewFromBasis(right, up, fwd);
     const projNJ = mat4.perspectiveReverseZ(fovY, aspect, NEAR);
     const proj = mat4.perspectiveReverseZ(fovY, aspect, NEAR, jitter[0], jitter[1]);
@@ -119,27 +141,52 @@ export class Renderer {
     let prevViewProj = viewProjNJ;
     if (this.prev) {
       const d = vec3.sub(pos, this.prev.pos);
-      for (const k of [0, 2]) { if (d[k] > W / 2) d[k] -= W; if (d[k] < -W / 2) d[k] += W; }
+      for (const k of [0, 2]) {
+        if (d[k] > W / 2) d[k] -= W;
+        if (d[k] < -W / 2) d[k] += W;
+      }
       prevViewProj = mat4.multiply(this.prev.viewProjNJ, mat4.translation(d[0], d[1], d[2]));
     }
 
     const levels = this.terrain.updateLevels(pos, this.frame === 0);
     const frustum = frustumPlanes(viewProjNJ);
     // last frame's depth is useless for occlusion after a cut or a big turn
-    const cut = !this.prev || this.resetHistory || vec3.length(vec3.sub(pos, this.prev.pos)) > 30 || vec3.dot(fwd, this.prev.fwd) < 0.9;
+    const cut =
+      !this.prev ||
+      this.resetHistory ||
+      vec3.length(vec3.sub(pos, this.prev.pos)) > 30 ||
+      vec3.dot(fwd, this.prev.fwd) < 0.9;
     this.shadows.update({ pos, fwd, fov: fovY, aspect }, env.lightDir, this.frame);
 
     this.uniforms.write({
-      viewProj, invViewProj: mat4.invert(viewProj), prevViewProj, viewProjNoJitter: viewProjNJ,
-      camPos: pos, camFwd: fwd, underwater: shot.underwater, time, env,
-      waterLevel: shot.water, width: t.width, height: t.height, jitter, resetHistory: this.resetHistory, noOcclusion: cut,
-      frame: this.frame, cycleU: shot.u, quality: this.quality.level, splits: [...SPLITS, 0],
-      cascades: this.shadows.matrices, frustum, levels: levels.data,
-      modes: shot.modes, fade, vegDist: this.props.vegDist,
+      viewProj,
+      invViewProj: mat4.invert(viewProj),
+      prevViewProj,
+      viewProjNoJitter: viewProjNJ,
+      camPos: pos,
+      camFwd: fwd,
+      underwater: shot.underwater,
+      time,
+      env,
+      waterLevel: shot.water,
+      width: t.width,
+      height: t.height,
+      jitter,
+      resetHistory: this.resetHistory,
+      noOcclusion: cut,
+      frame: this.frame,
+      cycleU: shot.u,
+      quality: this.quality.level,
+      splits: [...SPLITS, 0],
+      cascades: this.shadows.matrices,
+      frustum,
+      levels: levels.data,
+      modes: shot.modes,
+      fade,
+      vegDist: this.props.vegDist,
       cloudMap: this.cloudMap.origin(pos, env.lightDir),
       caustic: this.caustics.placement(pos, env.lightDir),
     });
-
 
     const encoder = this.device.createCommandEncoder();
     const on = (name) => !this.skip.has(name);

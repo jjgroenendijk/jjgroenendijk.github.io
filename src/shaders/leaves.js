@@ -31,7 +31,9 @@ fn leafCoverage(uvl: vec3f, gx: vec2f, gy: vec2f) -> f32 {
 }
 `;
 
-export const leafBakeWGSL = noiseLib + /* wgsl */ `
+export const leafBakeWGSL =
+  noiseLib +
+  /* wgsl */ `
 @group(0) @binding(0) var outA: texture_storage_2d_array<rgba8unorm, write>;
 @group(0) @binding(1) var outB: texture_storage_2d_array<rgba8unorm, write>;
 

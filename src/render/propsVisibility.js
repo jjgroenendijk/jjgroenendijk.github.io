@@ -11,9 +11,11 @@ export class PropsVisibility {
   constructor(device, shared, props) {
     this.device = device;
     this.props = props;
-    const F = GPUShaderStage.FRAGMENT, VF = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
+    const F = GPUShaderStage.FRAGMENT,
+      VF = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
     const dataLayout = bindLayout(device, 'prop-data', [
-      entry.texture('float', '2d-array', F), entry.texture('float', '2d-array', F),
+      entry.texture('float', '2d-array', F),
+      entry.texture('float', '2d-array', F),
       ...Array.from({ length: 5 }, () => entry.storage(true, VF)),
       ...LeafTextures.entries(F),
     ]);
@@ -33,7 +35,9 @@ export class PropsVisibility {
     const resolve = shader(device, props.withCards(resolveWGSL), 'prop-resolve');
     this.resolvePipeline = device.createRenderPipelineAsync({
       label: 'prop-resolve',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, dataLayout, this.idLayout] }),
+      layout: device.createPipelineLayout({
+        bindGroupLayouts: [shared.frame, shared.shadow, dataLayout, this.idLayout],
+      }),
       vertex: { module: resolve, entryPoint: 'vs' },
       fragment: { module: resolve, entryPoint: 'fs', targets: [{ format: HDR }] },
       primitive,
@@ -45,7 +49,9 @@ export class PropsVisibility {
   resize(targets) {
     this.ids?.destroy();
     this.ids = this.device.createTexture({
-      label: 'prop-ids', size: [targets.width, targets.height], format: ID_FORMAT,
+      label: 'prop-ids',
+      size: [targets.width, targets.height],
+      format: ID_FORMAT,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.idView = this.ids.createView();
@@ -57,7 +63,12 @@ export class PropsVisibility {
     const pass = encoder.beginRenderPass({
       label: 'prop-visibility',
       colorAttachments: [{ view: this.idView, loadOp: 'clear', storeOp: 'store', clearValue: [EMPTY, 0, 0, 0] }],
-      depthStencilAttachment: { view: targets.views.depth, depthClearValue: 0, depthLoadOp: 'clear', depthStoreOp: 'store' },
+      depthStencilAttachment: {
+        view: targets.views.depth,
+        depthClearValue: 0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+      },
     });
     if (drawProps) {
       pass.setPipeline(this.rasterPipeline);

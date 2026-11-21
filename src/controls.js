@@ -23,7 +23,9 @@ export function attachControls(canvas, director, audio) {
     director.lookYaw = Math.max(-1.2, Math.min(1.2, dragging.yaw - (e.clientX - dragging.x) * s));
     director.lookPitch = Math.max(-0.6, Math.min(0.6, dragging.pitch + (e.clientY - dragging.y) * s));
   });
-  const end = () => { dragging = null; };
+  const end = () => {
+    dragging = null;
+  };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
 

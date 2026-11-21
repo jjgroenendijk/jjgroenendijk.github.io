@@ -14,7 +14,10 @@ export const ID_FORMAT = 'rg32uint';
 
 // Geometry, impostor atlas and leaf textures shared by the raster and resolve
 // passes (group 2).
-const propData = slotInfoLib + foliageLib(2, 7) + /* wgsl */ `
+const propData =
+  slotInfoLib +
+  foliageLib(2, 7) +
+  /* wgsl */ `
 @group(2) @binding(0) var cardAlb: texture_2d_array<f32>;
 @group(2) @binding(1) var cardNrm: texture_2d_array<f32>;
 @group(2) @binding(2) var<storage, read> verts: array<f32>;      // 10 floats per vertex
@@ -93,7 +96,14 @@ fn cardImpostor(in: PV, rel: vec3f, pixel: f32) -> CardTap {
 }
 `;
 
-export const visibilityWGSL = frameStruct + commonLib + shadowLib + propVS + propSurface + propData + /* wgsl */ `
+export const visibilityWGSL =
+  frameStruct +
+  commonLib +
+  shadowLib +
+  propVS +
+  propSurface +
+  propData +
+  /* wgsl */ `
 struct VO {
   @builtin(position) pos: vec4f,
   @location(0) lp: vec3f,
@@ -155,7 +165,16 @@ fn slotOf(v: u32) -> u32 {
 }
 `;
 
-export const resolveWGSL = frameStruct + commonLib + shadowLib + propVS + propSurface + propShading + propData + foliageSurfaceLib + /* wgsl */ `
+export const resolveWGSL =
+  frameStruct +
+  commonLib +
+  shadowLib +
+  propVS +
+  propSurface +
+  propShading +
+  propData +
+  foliageSurfaceLib +
+  /* wgsl */ `
 @group(3) @binding(0) var ids: texture_2d<u32>;
 
 struct FO { @builtin(position) pos: vec4f };

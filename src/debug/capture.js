@@ -9,7 +9,11 @@ export function offscreenContext(device, canvas) {
     getCurrentTexture() {
       if (!tex || tex.width !== canvas.width || tex.height !== canvas.height) {
         tex?.destroy();
-        tex = device.createTexture({ size: [canvas.width, canvas.height], format: 'rgba8unorm', usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC });
+        tex = device.createTexture({
+          size: [canvas.width, canvas.height],
+          format: 'rgba8unorm',
+          usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC,
+        });
       }
       return tex;
     },
@@ -19,7 +23,8 @@ export function offscreenContext(device, canvas) {
 
 export async function captureToCanvas(device, ctx, canvas) {
   const tex = ctx.texture();
-  const w = tex.width, h = tex.height;
+  const w = tex.width,
+    h = tex.height;
   const bpr = Math.ceil((w * 4) / 256) * 256;
   const buf = device.createBuffer({ size: bpr * h, usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ });
   const enc = device.createCommandEncoder();
@@ -31,7 +36,8 @@ export async function captureToCanvas(device, ctx, canvas) {
   for (let y = 0; y < h; y++) img.data.set(src.subarray(y * bpr, y * bpr + w * 4), y * w * 4);
   buf.unmap();
   const out = document.createElement('canvas');
-  out.width = w; out.height = h;
+  out.width = w;
+  out.height = h;
   out.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;z-index:5';
   out.getContext('2d').putImageData(img, 0, 0);
   document.body.appendChild(out);

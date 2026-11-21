@@ -4,7 +4,13 @@ import { flockReadLib } from './flock.js';
 import { TYPE, MAT } from '../scene/catalog.js';
 import { foliageLib } from './leaves.js';
 
-export const scatterWGSL = frameStruct + commonLib + hizLib + cacheLib + flockReadLib(1, 4) + /* wgsl */ `
+export const scatterWGSL =
+  frameStruct +
+  commonLib +
+  hizLib +
+  cacheLib +
+  flockReadLib(1, 4) +
+  /* wgsl */ `
 struct SP {
   cell: f32, radius: f32, maxDist: f32, minDist: f32,
   kind: u32, count: u32, variants: u32, lodCount: u32, // slots hold lodCount LODs per variant
@@ -462,7 +468,9 @@ struct SlotInfo {
 };
 `;
 export const MAX_SLOTS = 64;
-export const finalizeWGSL = slotInfoLib + /* wgsl */ `
+export const finalizeWGSL =
+  slotInfoLib +
+  /* wgsl */ `
 @group(0) @binding(0) var<storage, read_write> args: array<u32>;
 @group(0) @binding(1) var<storage, read> caps: array<u32>;
 @group(0) @binding(2) var<storage, read> slots: array<SlotInfo>;
@@ -919,7 +927,12 @@ fn shadeProp(in: PV, s: Surf, frag: vec2f) -> vec3f {
 `;
 
 // Shadow casters; foliage cards cast the shape of their leaves.
-export const propShadowWGSL = frameStruct + commonLib + propVS + foliageLib(2, 0) + /* wgsl */ `
+export const propShadowWGSL =
+  frameStruct +
+  commonLib +
+  propVS +
+  foliageLib(2, 0) +
+  /* wgsl */ `
 struct Cascade { vp: mat4x4f };
 @group(1) @binding(0) var<uniform> CS: Cascade;
 struct SO { @builtin(position) pos: vec4f, @location(0) uv: vec3f, @location(1) @interpolate(flat) leaf: u32 };
@@ -938,7 +951,14 @@ struct SO { @builtin(position) pos: vec4f, @location(0) uv: vec3f, @location(1) 
 // (premultiplied albedo + coverage, premultiplied normal + translucency).
 // The view looks at the bounding sphere's centre against dir; right and up
 // span the image (see cardBasis).
-export const cardBakeWGSL = frameStruct + commonLib + propVS + propSurface + foliageLib(2, 0) + foliageSurfaceLib + /* wgsl */ `
+export const cardBakeWGSL =
+  frameStruct +
+  commonLib +
+  propVS +
+  propSurface +
+  foliageLib(2, 0) +
+  foliageSurfaceLib +
+  /* wgsl */ `
 struct BakeU { right: vec4f, up: vec4f, dir: vec4f };   // right.w radius, up.w centre height
 @group(1) @binding(0) var<uniform> B: BakeU;
 @vertex fn vs(@location(0) pos: vec3f, @location(1) nrm: vec3f, @location(2) ex: vec4f) -> PV {

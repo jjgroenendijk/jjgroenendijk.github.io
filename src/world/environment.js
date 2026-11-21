@@ -5,20 +5,22 @@ import { smoothstep } from './terrain.js';
 import { celestial, todRate, sunTransmittance, skyRadiance, SKY_E } from './sky.js';
 
 const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-const mix3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 // cosine-weighted average radiance of the sky dome
 function skyIrradiance(sun, moon, E) {
   const out = [0, 0, 0];
   let wsum = 0;
-  for (let i = 0; i < 6; i++) for (let j = 0; j < 4; j++) {
-    const az = (i / 6) * Math.PI * 2, el = ((j + 0.5) / 4) * Math.PI / 2;
-    const d = [Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)];
-    const w = Math.sin(el);
-    const s = skyRadiance(d, sun, E), m = skyRadiance(d, moon, E * 0.0035);
-    for (let k = 0; k < 3; k++) out[k] += (s[k] + m[k] * [0.75, 0.85, 1.1][k]) * w;
-    wsum += w;
-  }
+  for (let i = 0; i < 6; i++)
+    for (let j = 0; j < 4; j++) {
+      const az = (i / 6) * Math.PI * 2,
+        el = (((j + 0.5) / 4) * Math.PI) / 2;
+      const d = [Math.cos(az) * Math.cos(el), Math.sin(el), Math.sin(az) * Math.cos(el)];
+      const w = Math.sin(el);
+      const s = skyRadiance(d, sun, E),
+        m = skyRadiance(d, moon, E * 0.0035);
+      for (let k = 0; k < 3; k++) out[k] += (s[k] + m[k] * [0.75, 0.85, 1.1][k]) * w;
+      wsum += w;
+    }
   const night = [0.0009, 0.0016, 0.0034];
   return out.map((v, k) => v / wsum + night[k] * smoothstep(0.0, -0.2, sun[1]));
 }
@@ -50,7 +52,8 @@ export class Environment {
 
     // weather: mostly fair, with fair-weather cumulus drifting by
     const s = this.seed * 100;
-    const coverage = -0.15 + 0.08 * Math.sin(t / 530 + s) + 0.07 * Math.sin(t / 233 + s * 1.7) + 0.04 * Math.sin(t / 97 + s * 2.3);
+    const coverage =
+      -0.15 + 0.08 * Math.sin(t / 530 + s) + 0.07 * Math.sin(t / 233 + s * 1.7) + 0.04 * Math.sin(t / 97 + s * 2.3);
     const wind = [(t * 7 + s * 1000) % W, (t * 3 + s * 700) % W];
     // passing showers leave a rainbow opposite a low sun now and then
     const shower = Math.max(0, Math.sin(t / 151 + s * 3.1)) * smoothstep(-0.08, 0.06, coverage);
@@ -62,14 +65,14 @@ export class Environment {
     const rainbow = Math.pow(shower, 3) * smoothstep(0.03, 0.12, sun[1]) * smoothstep(0.75, 0.4, sun[1]);
     // mist settles before sunrise and burns off in the morning; stronger on some days
     const dayIndex = Math.floor((t + this.tod * 1320) / 1320);
-    const mistDay = 0.2 + 0.4 * ((Math.sin(dayIndex * 12.9898 + s) * 43758.5453) % 1 + 1) % 1;
+    const mistDay = 0.2 + ((0.4 * (((Math.sin(dayIndex * 12.9898 + s) * 43758.5453) % 1) + 1)) % 1);
     const mist = mistDay * smoothstep(-0.25, -0.02, sun[1]) * smoothstep(0.3, 0.06, sun[1]) * (this.tod < 0.5 ? 1 : 0);
 
     // exposure from the light actually falling on the scene
     // (the constant light term accounts for low suns glaring straight into view)
     const sceneLum = lum(lightColor) * (Math.max(lightDir[1], 0.12) * 0.55 + 0.14) + lum(skyAmb) * 1.1;
     // eyes adapt, but not fully: nights stay dark and blue
-    let exposure = 0.6 / Math.pow(Math.max(sceneLum, 1e-5), 0.8) * Math.pow(0.4, 0.2);
+    let exposure = (0.6 / Math.pow(Math.max(sceneLum, 1e-5), 0.8)) * Math.pow(0.4, 0.2);
     exposure = Math.min(exposure, 40);
     // our eyes adapt to the shade under the canopy
     exposure *= 1 + 2.6 * shot.modes.land + 0.6 * shot.modes.und;
@@ -81,13 +84,24 @@ export class Environment {
     const waterFog = waterLight.map((v, i) => v * [0.025, 0.12, 0.17][i]);
 
     return {
-      tod: this.tod, sun, moon, lightDir, lightColor, isSun: useSun ? 1 : 0, night,
+      tod: this.tod,
+      sun,
+      moon,
+      lightDir,
+      lightColor,
+      isSun: useSun ? 1 : 0,
+      night,
       stars: smoothstep(-0.05, -0.25, sun[1]),
-      skyAmb, groundAmb, exposure: this.exposure,
+      skyAmb,
+      groundAmb,
+      exposure: this.exposure,
       fog: [0.000028 * (1 + Math.max(coverage, 0) * 3), 1 / 650, shot.haze, SKY_E],
-      waterFog, coverage, wind, rainbow, mist, wetness: this.wetness,
+      waterFog,
+      coverage,
+      wind,
+      rainbow,
+      mist,
+      wetness: this.wetness,
     };
   }
 }
-
-export { lum, mix3 };

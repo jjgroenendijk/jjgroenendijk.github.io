@@ -13,13 +13,19 @@ export class SkyLightPass {
     this.sh = device.createTexture({ label: 'sky-sh', size: [9, 1], format: FORMAT, usage });
     this.lutView = this.lut.createView();
     this.shView = this.sh.createView();
-    const layout = bindLayout(device, 'sky-bake', [entry.uniform(), at(6, entry.storageTexture(FORMAT)), at(7, entry.storageTexture(FORMAT))]);
+    const layout = bindLayout(device, 'sky-bake', [
+      entry.uniform(),
+      at(6, entry.storageTexture(FORMAT)),
+      at(7, entry.storageTexture(FORMAT)),
+    ]);
     this.group = bindGroup(device, layout, [frameBuffer, at(6, this.lutView), at(7, this.shView)], 'sky-bake');
     const module = shader(device, skyBakeWGSL, 'sky-bake');
-    const pipeline = (entryPoint) => device.createComputePipelineAsync({
-      label: `sky-${entryPoint}`, layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
-      compute: { module, entryPoint },
-    });
+    const pipeline = (entryPoint) =>
+      device.createComputePipelineAsync({
+        label: `sky-${entryPoint}`,
+        layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
+        compute: { module, entryPoint },
+      });
     this.lutPipeline = pipeline('lut');
     this.shPipeline = pipeline('irradiance');
     this.key = null;

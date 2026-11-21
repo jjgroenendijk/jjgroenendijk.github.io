@@ -4,10 +4,10 @@
 // scatter pass reads it to place the instances.
 import { frameStruct, commonLib } from './common.js';
 
-export const FISH_SCHOOLS = 13;
-export const FISH_PER_SCHOOL = 32;
-export const BIRD_FLOCKS = 6;
-export const BIRDS_PER_FLOCK = 6;
+const FISH_SCHOOLS = 13;
+const FISH_PER_SCHOOL = 32;
+const BIRD_FLOCKS = 6;
+const BIRDS_PER_FLOCK = 6;
 export const FISH_COUNT = FISH_SCHOOLS * FISH_PER_SCHOOL;
 export const BIRD_COUNT = BIRD_FLOCKS * BIRDS_PER_FLOCK;
 export const FLOCK_GROUPS = FISH_SCHOOLS + BIRD_FLOCKS;
@@ -25,7 +25,10 @@ fn agentAt(k: u32) -> Agent {
 }
 `;
 
-export const flockWGSL = frameStruct + commonLib + /* wgsl */ `
+export const flockWGSL =
+  frameStruct +
+  commonLib +
+  /* wgsl */ `
 struct Step { dt: f32, t: f32, pad0: f32, pad1: f32 };
 @group(1) @binding(0) var<uniform> S: Step;
 @group(1) @binding(1) var<storage, read_write> flock: array<vec4f>;

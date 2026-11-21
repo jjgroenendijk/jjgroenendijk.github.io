@@ -15,34 +15,71 @@ import { LEAF } from '../shaders/leaves.js';
 
 // Species. Lengths are in mesh units: a tree is about one unit tall and the
 // scatter scales it to metres.
-export const SPECIES = {
+const SPECIES = {
   // broad, rounded canopy tree: the bulk of the forest
   canopy: {
-    trunk: 0.3, crown: [0, 0.64, 0], radii: [0.44, 0.3, 0.44], lumps: 0.35, flatBottom: 0.55,
-    points: 560, step: 0.022, influence: 0.16, kill: 0.04, tropism: 0.12,
-    leaf: LEAF.broad, card: 0.085, buttress: 1.6, lianas: 4, epiphytes: 5,
+    trunk: 0.3,
+    crown: [0, 0.64, 0],
+    radii: [0.44, 0.3, 0.44],
+    lumps: 0.35,
+    flatBottom: 0.55,
+    points: 560,
+    step: 0.022,
+    influence: 0.16,
+    kill: 0.04,
+    tropism: 0.12,
+    leaf: LEAF.broad,
+    card: 0.085,
+    buttress: 1.6,
+    lianas: 4,
+    epiphytes: 5,
   },
   // emergent giant: a tall bare bole with buttress roots and a flat umbrella crown
   emergent: {
-    trunk: 0.64, crown: [0, 0.86, 0], radii: [0.46, 0.14, 0.46], lumps: 0.35, flatBottom: 0.75,
-    points: 480, step: 0.02, influence: 0.17, kill: 0.04, tropism: 0.1,
-    leaf: LEAF.small, card: 0.07, buttress: 3.2, lianas: 3, epiphytes: 6,
+    trunk: 0.64,
+    crown: [0, 0.86, 0],
+    radii: [0.46, 0.14, 0.46],
+    lumps: 0.35,
+    flatBottom: 0.75,
+    points: 480,
+    step: 0.02,
+    influence: 0.17,
+    kill: 0.04,
+    tropism: 0.1,
+    leaf: LEAF.small,
+    card: 0.07,
+    buttress: 3.2,
+    lianas: 3,
+    epiphytes: 6,
   },
   // slender understory tree with feathery compound leaves
   understory: {
-    trunk: 0.42, crown: [0, 0.72, 0], radii: [0.2, 0.27, 0.2], lumps: 0.2, flatBottom: 0.3,
-    points: 260, step: 0.026, influence: 0.15, kill: 0.045, tropism: 0.45,
-    leaf: LEAF.pinnate, card: 0.14, buttress: 0.6, lianas: 0, epiphytes: 0,
+    trunk: 0.42,
+    crown: [0, 0.72, 0],
+    radii: [0.2, 0.27, 0.2],
+    lumps: 0.2,
+    flatBottom: 0.3,
+    points: 260,
+    step: 0.026,
+    influence: 0.15,
+    kill: 0.045,
+    tropism: 0.45,
+    leaf: LEAF.pinnate,
+    card: 0.14,
+    buttress: 0.6,
+    lianas: 0,
+    epiphytes: 0,
   },
 };
 
-const DA_VINCI = 2.4;  // exponent of the branch radius rule
-const TWIG = 0.0022;   // radius of a terminal twig
+const DA_VINCI = 2.4; // exponent of the branch radius rule
+const TWIG = 0.0022; // radius of a terminal twig
 
 // ------------------------------------------------------------------ skeleton
 // Nodes: { p, parent, children, r, depth (path length from the root) }.
 function grow(sp, R) {
-  const [cx, cy, cz] = sp.crown, [rx, ry, rz] = sp.radii;
+  const [cx, cy, cz] = sp.crown,
+    [rx, ry, rz] = sp.radii;
   // attraction points in a lumpy ellipsoid, with a flattened underside
   const pts = [];
   const lumpSeed = R() * 100;
@@ -63,7 +100,10 @@ function grow(sp, R) {
   const lean = [(R() - 0.5) * 0.04, 0, (R() - 0.5) * 0.04];
   // (past its nominal height until the crown's attraction points are in reach)
   const reached = (q) => pts.some((a) => len(sub(a, q)) < sp.influence * 0.9);
-  while (nodes[nodes.length - 1].p[1] < sp.trunk || (!reached(nodes[nodes.length - 1].p) && nodes[nodes.length - 1].p[1] < cy)) {
+  while (
+    nodes[nodes.length - 1].p[1] < sp.trunk ||
+    (!reached(nodes[nodes.length - 1].p) && nodes[nodes.length - 1].p[1] < cy)
+  ) {
     const last = nodes[nodes.length - 1];
     const y = last.p[1] + sp.step * 1.5;
     const p = [lean[0] * y + 0.006 * Math.sin(y * 9 + lumpSeed), y, lean[2] * y + 0.006 * Math.cos(y * 7)];
@@ -76,12 +116,18 @@ function grow(sp, R) {
     let any = false;
     for (let a = 0; a < pts.length; a++) {
       if (!alive[a]) continue;
-      let best = -1, bd = sp.influence * sp.influence;
+      let best = -1,
+        bd = sp.influence * sp.influence;
       for (let n = 0; n < nodes.length; n++) {
         const q = nodes[n].p;
-        const dx = pts[a][0] - q[0], dy = pts[a][1] - q[1], dz = pts[a][2] - q[2];
+        const dx = pts[a][0] - q[0],
+          dy = pts[a][1] - q[1],
+          dz = pts[a][2] - q[2];
         const d2 = dx * dx + dy * dy + dz * dz;
-        if (d2 < bd) { bd = d2; best = n; }
+        if (d2 < bd) {
+          bd = d2;
+          best = n;
+        }
       }
       if (best < 0) continue;
       any = true;
@@ -100,13 +146,22 @@ function grow(sp, R) {
     if (!fresh.length) break;
     for (let a = 0; a < pts.length; a++) {
       if (!alive[a]) continue;
-      for (const n of fresh) if (len(sub(pts[a], nodes[n].p)) < sp.kill) { alive[a] = false; break; }
+      for (const n of fresh)
+        if (len(sub(pts[a], nodes[n].p)) < sp.kill) {
+          alive[a] = false;
+          break;
+        }
     }
   }
   // radii from the twigs down (children always come after their parent)
   for (let i = nodes.length - 1; i >= 0; i--) {
     const nd = nodes[i];
-    nd.r = nd.children.length ? Math.pow(nd.children.reduce((s, c) => s + Math.pow(nodes[c].r, DA_VINCI), 0), 1 / DA_VINCI) : TWIG;
+    nd.r = nd.children.length
+      ? Math.pow(
+          nd.children.reduce((s, c) => s + Math.pow(nodes[c].r, DA_VINCI), 0),
+          1 / DA_VINCI,
+        )
+      : TWIG;
   }
   return nodes;
 }
@@ -140,16 +195,23 @@ function chains(nodes) {
 // Crown-space helpers: rho is the normalised distance from the crown centre
 // (1 on the envelope); the crown normal points outwards from the centre.
 function crownFrame(sp) {
-  const [cx, cy, cz] = sp.crown, [rx, ry, rz] = sp.radii;
+  const [cx, cy, cz] = sp.crown,
+    [rx, ry, rz] = sp.radii;
   const local = (p) => [(p[0] - cx) / rx, (p[1] - cy) / ry, (p[2] - cz) / rz];
   return {
     rho: (p) => len(local(p)),
-    normal: (p) => { const l = local(p); return norm([l[0] / rx, l[1] / ry + 0.4, l[2] / rz]); },
+    normal: (p) => {
+      const l = local(p);
+      return norm([l[0] / rx, l[1] / ry + 0.4, l[2] / rz]);
+    },
     // interior occlusion: dark in the core and underneath, open on the outside
     ao: (p) => {
       const l = local(p);
       const rho = len(l);
-      return Math.min(1, 0.22 + 0.78 * Math.pow(Math.min(rho, 1), 1.6) * (0.7 + 0.3 * Math.max(-1, Math.min(1, l[1] * 0.7 + 0.3))));
+      return Math.min(
+        1,
+        0.22 + 0.78 * Math.pow(Math.min(rho, 1), 1.6) * (0.7 + 0.3 * Math.max(-1, Math.min(1, l[1] * 0.7 + 0.3))),
+      );
     },
   };
 }
@@ -171,7 +233,8 @@ const LOD = [
 const skeletons = new Map();
 function skeleton(kind, variant) {
   const key = `${kind}/${variant}`;
-  if (!skeletons.has(key)) skeletons.set(key, grow(SPECIES[kind], rng(1000 + variant * 97 + Object.keys(SPECIES).indexOf(kind) * 13)));
+  if (!skeletons.has(key))
+    skeletons.set(key, grow(SPECIES[kind], rng(1000 + variant * 97 + Object.keys(SPECIES).indexOf(kind) * 13)));
   return skeletons.get(key);
 }
 
@@ -194,11 +257,23 @@ export function tree(kind, variant, lod) {
     const isTrunk = ch[0] === 0;
     const at = (t) => {
       const x = t * (pts.length - 1);
-      const i = Math.min(Math.floor(x), pts.length - 2), f = x - i;
+      const i = Math.min(Math.floor(x), pts.length - 2),
+        f = x - i;
       // Catmull-Rom through the nodes
-      const p0 = pts[Math.max(i - 1, 0)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(i + 2, pts.length - 1)];
-      const f2 = f * f, f3 = f2 * f;
-      return [0, 1, 2].map((k) => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * f + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * f2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * f3));
+      const p0 = pts[Math.max(i - 1, 0)],
+        p1 = pts[i],
+        p2 = pts[i + 1],
+        p3 = pts[Math.min(i + 2, pts.length - 1)];
+      const f2 = f * f,
+        f3 = f2 * f;
+      return [0, 1, 2].map(
+        (k) =>
+          0.5 *
+          (2 * p1[k] +
+            (-p0[k] + p2[k]) * f +
+            (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * f2 +
+            (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * f3),
+      );
     };
     const node = (t) => ch[Math.min(Math.round(t * (ch.length - 1)), ch.length - 1)];
     const r0 = nodes[ch[1]].r;
@@ -215,7 +290,12 @@ export function tree(kind, variant, lod) {
     const segs = Math.max(2, Math.ceil((ch.length - 1) / (lod + 1)));
     mb.tube(at, radius, segs, L.radial(r0), (t) => {
       const p = at(t);
-      return [MAT.bark, isTrunk && p[1] < sp.trunk ? 0.75 + 0.25 * p[1] / sp.trunk : crown.ao(p) * 0.9, flexOf(node(t)), p[1]];
+      return [
+        MAT.bark,
+        isTrunk && p[1] < sp.trunk ? 0.75 + (0.25 * p[1]) / sp.trunk : crown.ao(p) * 0.9,
+        flexOf(node(t)),
+        p[1],
+      ];
     });
   }
 
@@ -232,8 +312,10 @@ export function tree(kind, variant, lod) {
       const size0 = sp.card * (0.75 + 0.5 * T());
       // the cluster points along the twig and outwards, droops a little,
       // and faces mostly up (leaves turn to the light)
-      const dir = norm(add(add(mul(twig, 0.6), mul(out, 0.5)), [(T() - 0.5) * 0.8, -0.25 + (T() - 0.5) * 0.4, (T() - 0.5) * 0.8]));
-      const face = norm(add([0, 0.9, 0], add(mul(out, 0.5), [(T() - 0.5), 0, (T() - 0.5)])));
+      const dir = norm(
+        add(add(mul(twig, 0.6), mul(out, 0.5)), [(T() - 0.5) * 0.8, -0.25 + (T() - 0.5) * 0.4, (T() - 0.5) * 0.8]),
+      );
+      const face = norm(add([0, 0.9, 0], add(mul(out, 0.5), [T() - 0.5, 0, T() - 0.5])));
       if (c >= L.perTip) break;
       const size = size0 * L.size;
       let side = cross(face, dir);
@@ -243,7 +325,12 @@ export function tree(kind, variant, lod) {
       const centre = add(nd.p, mul(dir, size0 * 0.38));
       const base = add(centre, mul(dir, -size * 0.5));
       const tip = add(centre, mul(dir, size * 0.5));
-      const corners = [[sub(base, side), 0, 1], [add(base, side), 1, 1], [add(tip, side), 1, 0], [sub(tip, side), 0, 0]];
+      const corners = [
+        [sub(base, side), 0, 1],
+        [add(base, side), 1, 1],
+        [add(tip, side), 1, 0],
+        [sub(tip, side), 0, 0],
+      ];
       const ids = corners.map(([p, u, v]) => {
         // crown normal, a little of the card's own orientation for variety
         const n = norm(add(mul(crown.normal(p), 0.75), mul(norm(cross(dir, side)), 0.25)));
@@ -262,19 +349,30 @@ export function tree(kind, variant, lod) {
 
 // Vines hanging from the lower limbs in sagging loops.
 function lianas(mb, nodes, sp, R, crown) {
-  const anchors = nodes.map((n, i) => i).filter((i) => nodes[i].r > 0.004 && nodes[i].r < 0.012 && nodes[i].p[1] > sp.trunk);
+  const anchors = nodes
+    .map((n, i) => i)
+    .filter((i) => nodes[i].r > 0.004 && nodes[i].r < 0.012 && nodes[i].p[1] > sp.trunk);
   for (let k = 0; k < sp.lianas && anchors.length; k++) {
     const a = nodes[anchors[Math.floor(R() * anchors.length)]].p;
     const drop = 0.25 + R() * (a[1] - 0.15);
     const swing = [(R() - 0.5) * 0.12, 0, (R() - 0.5) * 0.12];
-    const path = (t) => add(a, add(mul(swing, Math.sin(t * Math.PI)), [0.01 * Math.sin(t * 17), -drop * t, 0.01 * Math.cos(t * 13)]));
-    mb.tube(path, (t) => 0.0022 * (1 - 0.4 * t), 10, 3, (t) => [MAT.stem, crown.ao(path(t)) * 0.8, 0.4 + 0.6 * t, t]);
+    const path = (t) =>
+      add(a, add(mul(swing, Math.sin(t * Math.PI)), [0.01 * Math.sin(t * 17), -drop * t, 0.01 * Math.cos(t * 13)]));
+    mb.tube(
+      path,
+      (t) => 0.0022 * (1 - 0.4 * t),
+      10,
+      3,
+      (t) => [MAT.stem, crown.ao(path(t)) * 0.8, 0.4 + 0.6 * t, t],
+    );
   }
 }
 
 // Bromeliad-like rosettes sitting in the forks of the big limbs.
 function epiphytes(mb, nodes, sp, R) {
-  const forks = nodes.map((n, i) => i).filter((i) => nodes[i].children.length > 1 && nodes[i].r > 0.006 && nodes[i].p[1] > sp.trunk * 0.95);
+  const forks = nodes
+    .map((n, i) => i)
+    .filter((i) => nodes[i].children.length > 1 && nodes[i].r > 0.006 && nodes[i].p[1] > sp.trunk * 0.95);
   for (let k = 0; k < sp.epiphytes && forks.length; k++) {
     const c = add(nodes[forks[Math.floor(R() * forks.length)]].p, [0, 0.006, 0]);
     const hue = R();
@@ -300,7 +398,9 @@ function epiphytes(mb, nodes, sp, R) {
 export function bound(mesh) {
   let b = 0.05;
   for (let i = 0; i < mesh.v.length; i += 10) {
-    const x = mesh.v[i], y = mesh.v[i + 1], z = mesh.v[i + 2];
+    const x = mesh.v[i],
+      y = mesh.v[i + 1],
+      z = mesh.v[i + 2];
     while (Math.hypot(x, y - b / 2, z) > b) b *= 1.02;
   }
   return b;

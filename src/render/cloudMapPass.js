@@ -7,7 +7,9 @@ import { CLOUD_MAP_N, CLOUD_MAP_SPAN, CLOUD_ALT } from '../shaders/common.js';
 export class CloudMapPass {
   constructor(device, shared) {
     this.texture = device.createTexture({
-      label: 'cloud-map', size: [CLOUD_MAP_N, CLOUD_MAP_N], format: 'rgba16float',
+      label: 'cloud-map',
+      size: [CLOUD_MAP_N, CLOUD_MAP_N],
+      format: 'rgba16float',
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.view = this.texture.createView();

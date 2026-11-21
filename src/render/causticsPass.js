@@ -9,22 +9,38 @@ const MAX_ALTITUDE = 150; // above this the sea floor detail is too small to mat
 export class CausticsPass {
   constructor(device, frameBuffer, cacheView) {
     this.texture = device.createTexture({
-      label: 'caustics', size: [CAUSTIC_N, CAUSTIC_N], format: 'rgba16float',
+      label: 'caustics',
+      size: [CAUSTIC_N, CAUSTIC_N],
+      format: 'rgba16float',
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.view = this.texture.createView();
-    this.photons = buffer(device, CAUSTIC_N * CAUSTIC_N * 4, GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST, 'caustic-photons');
+    this.photons = buffer(
+      device,
+      CAUSTIC_N * CAUSTIC_N * 4,
+      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      'caustic-photons',
+    );
     const C = GPUShaderStage.COMPUTE;
-    const splatLayout = bindLayout(device, 'caustic-splat', [entry.uniform(), entry.texture('unfilterable-float', '2d-array', C), at(6, entry.storage())]);
+    const splatLayout = bindLayout(device, 'caustic-splat', [
+      entry.uniform(),
+      entry.texture('unfilterable-float', '2d-array', C),
+      at(6, entry.storage()),
+    ]);
     this.splatGroup = bindGroup(device, splatLayout, [frameBuffer, cacheView, at(6, this.photons)], 'caustic-splat');
     this.splatPipeline = device.createComputePipelineAsync({
-      label: 'caustic-splat', layout: device.createPipelineLayout({ bindGroupLayouts: [splatLayout] }),
+      label: 'caustic-splat',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [splatLayout] }),
       compute: { module: shader(device, causticSplatWGSL, 'caustic-splat'), entryPoint: 'main' },
     });
-    const resolveLayout = bindLayout(device, 'caustic-resolve', [entry.storage(true), entry.storageTexture('rgba16float')]);
+    const resolveLayout = bindLayout(device, 'caustic-resolve', [
+      entry.storage(true),
+      entry.storageTexture('rgba16float'),
+    ]);
     this.resolveGroup = bindGroup(device, resolveLayout, [this.photons, this.view], 'caustic-resolve');
     this.resolvePipeline = device.createComputePipelineAsync({
-      label: 'caustic-resolve', layout: device.createPipelineLayout({ bindGroupLayouts: [resolveLayout] }),
+      label: 'caustic-resolve',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [resolveLayout] }),
       compute: { module: shader(device, causticResolveWGSL, 'caustic-resolve'), entryPoint: 'main' },
     });
   }

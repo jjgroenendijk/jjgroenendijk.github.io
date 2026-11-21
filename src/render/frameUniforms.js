@@ -7,12 +7,21 @@ export class FrameUniforms {
   constructor(device) {
     this.device = device;
     this.data = new Float32Array(FRAME_FLOATS);
-    this.buffer = device.createBuffer({ label: 'frame', size: FRAME_FLOATS * 4, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
+    this.buffer = device.createBuffer({
+      label: 'frame',
+      size: FRAME_FLOATS * 4,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
   }
 
   write(f) {
     const d = this.data;
-    const v4 = (o, a, w = 0) => { d[o] = a[0]; d[o + 1] = a[1]; d[o + 2] = a[2]; d[o + 3] = a.length > 3 ? a[3] : w; };
+    const v4 = (o, a, w = 0) => {
+      d[o] = a[0];
+      d[o + 1] = a[1];
+      d[o + 2] = a[2];
+      d[o + 3] = a.length > 3 ? a[3] : w;
+    };
     d.set(f.viewProj, 0);
     d.set(f.invViewProj, 16);
     d.set(f.prevViewProj, 32);

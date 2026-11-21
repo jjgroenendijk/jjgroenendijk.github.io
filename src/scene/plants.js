@@ -7,14 +7,25 @@ export function palm(lod) {
   const mb = new MB();
   const R = rng(lod === 0 ? 11 : 12);
   const trunk = (t) => [0.05 * Math.sin(t * 2.4) * t, t, 0.02 * Math.sin(t * 3.1)];
-  mb.tube(trunk, (t) => 0.019 * (1 + 0.7 * Math.exp(-t * 14)) * (1 - 0.25 * t), [12, 5, 3][lod], [7, 5, 3][lod],
-    (t) => [MAT.palmBark, 0.55 + 0.45 * t, 0, t]);
+  mb.tube(
+    trunk,
+    (t) => 0.019 * (1 + 0.7 * Math.exp(-t * 14)) * (1 - 0.25 * t),
+    [12, 5, 3][lod],
+    [7, 5, 3][lod],
+    (t) => [MAT.palmBark, 0.55 + 0.45 * t, 0, t],
+  );
   const top = trunk(1);
   if (lod < 2) mb.ico(add(top, [0, 0.005, 0]), 0.032, 1, () => [MAT.coconut, 0.6, 0.1, 1]);
-  if (lod === 0) for (let k = 0; k < 5; k++) {
-    const a = k * 2.4;
-    mb.ico(add(top, [Math.cos(a) * 0.03, -0.03 - R() * 0.01, Math.sin(a) * 0.03]), 0.017, 1, () => [MAT.coconut, 0.5, 0.05, 1]);
-  }
+  if (lod === 0)
+    for (let k = 0; k < 5; k++) {
+      const a = k * 2.4;
+      mb.ico(add(top, [Math.cos(a) * 0.03, -0.03 - R() * 0.01, Math.sin(a) * 0.03]), 0.017, 1, () => [
+        MAT.coconut,
+        0.5,
+        0.05,
+        1,
+      ]);
+    }
   const nf = [13, 9, 7][lod];
   for (let k = 0; k < nf; k++) {
     const phi = k * 2.39996 + R() * 0.3;
@@ -22,23 +33,47 @@ export function palm(lod) {
     const Lf = 0.38 + R() * 0.1;
     const dirH = [Math.cos(phi), 0, Math.sin(phi)];
     const side = [-Math.sin(phi), 0, Math.cos(phi)];
-    const spine = (s) => add(top, add(mul(dirH, Lf * s * Math.cos(el * 0.6)), [0, Lf * (Math.sin(el) * s - 0.55 * s * s), 0]));
+    const spine = (s) =>
+      add(top, add(mul(dirH, Lf * s * Math.cos(el * 0.6)), [0, Lf * (Math.sin(el) * s - 0.55 * s * s), 0]));
     if (lod === 0) {
       const N = 18;
       for (let i = 0; i < N; i++) {
-        const s0 = i / N, s1 = (i + 1) / N;
-        const a = spine(s0), b = spine(s1);
+        const s0 = i / N,
+          s1 = (i + 1) / N;
+        const a = spine(s0),
+          b = spine(s1);
         // spine strip
         const w = 0.004;
-        mb.flatTri(add(a, mul(side, w)), add(b, mul(side, w)), add(a, mul(side, -w)), [MAT.palmFrond, 0.8, s0, 1], [MAT.palmFrond, 0.8, s1, 1], [MAT.palmFrond, 0.8, s0, 1]);
-        mb.flatTri(add(b, mul(side, w)), add(b, mul(side, -w)), add(a, mul(side, -w)), [MAT.palmFrond, 0.8, s1, 1], [MAT.palmFrond, 0.8, s1, 1], [MAT.palmFrond, 0.8, s0, 1]);
+        mb.flatTri(
+          add(a, mul(side, w)),
+          add(b, mul(side, w)),
+          add(a, mul(side, -w)),
+          [MAT.palmFrond, 0.8, s0, 1],
+          [MAT.palmFrond, 0.8, s1, 1],
+          [MAT.palmFrond, 0.8, s0, 1],
+        );
+        mb.flatTri(
+          add(b, mul(side, w)),
+          add(b, mul(side, -w)),
+          add(a, mul(side, -w)),
+          [MAT.palmFrond, 0.8, s1, 1],
+          [MAT.palmFrond, 0.8, s1, 1],
+          [MAT.palmFrond, 0.8, s0, 1],
+        );
         if (i === 0) continue;
         const T = norm(sub(b, a));
         const ll = 0.025 + 0.14 * Math.pow(Math.sin(Math.PI * Math.min(s0 * 1.1, 1)), 0.6);
         for (const sg of [-1, 1]) {
           const dir = norm(add(add(mul(side, sg * 0.85), mul(T, 0.5)), [0, -0.38 - s0 * 0.3, 0]));
           const tip = add(a, mul(dir, ll));
-          mb.flatTri(a, add(a, mul(T, 0.022)), tip, [MAT.palmFrond, 0.75, s0, 1], [MAT.palmFrond, 0.75, s0, 1], [MAT.palmFrond, 0.95, Math.min(s0 + 0.15, 1), 1]);
+          mb.flatTri(
+            a,
+            add(a, mul(T, 0.022)),
+            tip,
+            [MAT.palmFrond, 0.75, s0, 1],
+            [MAT.palmFrond, 0.75, s0, 1],
+            [MAT.palmFrond, 0.95, Math.min(s0 + 0.15, 1), 1],
+          );
         }
       }
     } else {
@@ -53,8 +88,22 @@ export function palm(lod) {
         const row = [l, c, r];
         if (prev) {
           for (let j = 0; j < 2; j++) {
-            mb.flatTri(prev[j], row[j], row[j + 1], [MAT.palmFrond, 0.8, s, 1], [MAT.palmFrond, 0.8, s, 1], [MAT.palmFrond, 0.8, s, 1]);
-            mb.flatTri(prev[j], row[j + 1], prev[j + 1], [MAT.palmFrond, 0.8, s, 1], [MAT.palmFrond, 0.8, s, 1], [MAT.palmFrond, 0.8, s, 1]);
+            mb.flatTri(
+              prev[j],
+              row[j],
+              row[j + 1],
+              [MAT.palmFrond, 0.8, s, 1],
+              [MAT.palmFrond, 0.8, s, 1],
+              [MAT.palmFrond, 0.8, s, 1],
+            );
+            mb.flatTri(
+              prev[j],
+              row[j + 1],
+              prev[j + 1],
+              [MAT.palmFrond, 0.8, s, 1],
+              [MAT.palmFrond, 0.8, s, 1],
+              [MAT.palmFrond, 0.8, s, 1],
+            );
           }
         }
         prev = row;
@@ -82,12 +131,17 @@ export function bush() {
       const s = i / 4;
       const c = spine(s);
       const wd = 0.11 * Math.pow(Math.sin(Math.PI * Math.min(s * 0.95 + 0.05, 1)), 0.7);
-      const row = [add(add(c, mul(side, -wd)), [0, -wd * 0.35, 0]), add(c, [0, 0.008, 0]), add(add(c, mul(side, wd)), [0, -wd * 0.35, 0])];
-      if (prev) for (let j = 0; j < 2; j++) {
-        const e = [MAT.bush, 0.45 + 0.5 * rise, 0.3 + s * 0.7, s];
-        mb.flatTri(prev[j], row[j], row[j + 1], e);
-        mb.flatTri(prev[j], row[j + 1], prev[j + 1], e);
-      }
+      const row = [
+        add(add(c, mul(side, -wd)), [0, -wd * 0.35, 0]),
+        add(c, [0, 0.008, 0]),
+        add(add(c, mul(side, wd)), [0, -wd * 0.35, 0]),
+      ];
+      if (prev)
+        for (let j = 0; j < 2; j++) {
+          const e = [MAT.bush, 0.45 + 0.5 * rise, 0.3 + s * 0.7, s];
+          mb.flatTri(prev[j], row[j], row[j + 1], e);
+          mb.flatTri(prev[j], row[j + 1], prev[j + 1], e);
+        }
       prev = row;
     }
   }
@@ -108,8 +162,10 @@ export function fern() {
     const spine = (s) => add(mul(dirH, Lf * s * 0.8), [0, Lf * (Math.sin(el) * s * 0.9 - 0.75 * s * s), 0]);
     const N = 12;
     for (let i = 1; i < N; i++) {
-      const s0 = i / N, s1 = (i + 1) / N;
-      const a = spine(s0), b = spine(s1);
+      const s0 = i / N,
+        s1 = (i + 1) / N;
+      const a = spine(s0),
+        b = spine(s1);
       const T = norm(sub(b, a));
       const ll = 0.03 + 0.11 * Math.sin(Math.PI * s0) * (1 - s0 * 0.4);
       for (const sg of [-1, 1]) {
@@ -130,7 +186,13 @@ export function banana() {
   const mb = new MB();
   const R = rng(51);
   const H = 0.42;
-  mb.tube((t) => [0, t * H, 0], (t) => 0.035 * (1 - 0.3 * t), 4, 6, (t) => [MAT.stem, 0.5 + 0.5 * t, 0.1 * t, t]);
+  mb.tube(
+    (t) => [0, t * H, 0],
+    (t) => 0.035 * (1 - 0.3 * t),
+    4,
+    6,
+    (t) => [MAT.stem, 0.5 + 0.5 * t, 0.1 * t, t],
+  );
   const top = [0, H, 0];
   const nl = 7;
   for (let k = 0; k < nl; k++) {
@@ -142,7 +204,13 @@ export function banana() {
     // petiole
     const pet = 0.12;
     const p0 = add(top, add(mul(dirH, pet * 0.5), [0, pet * 0.8, 0]));
-    mb.tube((t) => add(top, mul(sub(p0, top), t)), () => 0.008, 2, 4, () => [MAT.stem, 0.7, 0.3, 0.5]);
+    mb.tube(
+      (t) => add(top, mul(sub(p0, top), t)),
+      () => 0.008,
+      2,
+      4,
+      () => [MAT.stem, 0.7, 0.3, 0.5],
+    );
     const spine = (s) => add(p0, add(mul(dirH, Lf * s * 0.85), [0, Lf * (Math.sin(el) * s * 0.7 - 0.85 * s * s), 0]));
     const N = 9;
     let prev = null;
@@ -151,7 +219,7 @@ export function banana() {
       const c = spine(s);
       const wd = 0.13 * Math.pow(Math.sin(Math.PI * Math.min(s * 1.02 + 0.02, 1)), 0.65);
       const droop = wd * 0.45;
-      const tear = (i % 3 === 1 && i > 1) ? 0.92 : 1;
+      const tear = i % 3 === 1 && i > 1 ? 0.92 : 1;
       const row = [
         add(add(c, mul(side, -wd * tear)), [0, -droop, 0]),
         add(add(c, mul(side, -wd * 0.5)), [0, -droop * 0.15, 0]),
@@ -159,11 +227,12 @@ export function banana() {
         add(add(c, mul(side, wd * 0.5)), [0, -droop * 0.15, 0]),
         add(add(c, mul(side, wd * tear)), [0, -droop, 0]),
       ];
-      if (prev) for (let j = 0; j < 4; j++) {
-        const e = [MAT.bananaLeaf, 0.65 + 0.35 * s, 0.4 + s * 0.6, j === 1 || j === 2 ? 0.5 : 0];
-        mb.flatTri(prev[j], row[j], row[j + 1], e, e, e);
-        mb.flatTri(prev[j], row[j + 1], prev[j + 1], e, e, e);
-      }
+      if (prev)
+        for (let j = 0; j < 4; j++) {
+          const e = [MAT.bananaLeaf, 0.65 + 0.35 * s, 0.4 + s * 0.6, j === 1 || j === 2 ? 0.5 : 0];
+          mb.flatTri(prev[j], row[j], row[j + 1], e, e, e);
+          mb.flatTri(prev[j], row[j + 1], prev[j + 1], e, e, e);
+        }
       prev = row;
     }
   }
@@ -188,11 +257,12 @@ export function flowerBush() {
       const c = spine(s);
       const wd = 0.07 * Math.sin(Math.PI * Math.min(s * 0.9 + 0.1, 1));
       const row = [add(c, mul(side, -wd)), add(c, [0, 0.006, 0]), add(c, mul(side, wd))];
-      if (prev) for (let j = 0; j < 2; j++) {
-        const e = [MAT.bush, 0.5 + 0.5 * rise, 0.3 + s * 0.6, s];
-        mb.flatTri(prev[j], row[j], row[j + 1], e);
-        mb.flatTri(prev[j], row[j + 1], prev[j + 1], e);
-      }
+      if (prev)
+        for (let j = 0; j < 2; j++) {
+          const e = [MAT.bush, 0.5 + 0.5 * rise, 0.3 + s * 0.6, s];
+          mb.flatTri(prev[j], row[j], row[j + 1], e);
+          mb.flatTri(prev[j], row[j + 1], prev[j + 1], e);
+        }
       prev = row;
     }
   }
@@ -201,7 +271,8 @@ export function flowerBush() {
     const r = 0.12 + R() * 0.22;
     const c = [Math.cos(a) * r, 0.42 + R() * 0.25 - r * 0.4, Math.sin(a) * r];
     const up = norm([Math.cos(a) * 0.5, 1, Math.sin(a) * 0.5]);
-    const t1 = norm(cross(up, [0, 0, 1])), t2 = cross(up, t1);
+    const t1 = norm(cross(up, [0, 0, 1])),
+      t2 = cross(up, t1);
     for (let p = 0; p < 5; p++) {
       const pa = (p / 5) * Math.PI * 2 + f;
       const pd = add(mul(t1, Math.cos(pa)), mul(t2, Math.sin(pa)));
@@ -209,9 +280,23 @@ export function flowerBush() {
       const tip = add(add(c, mul(pd, 0.11)), mul(up, 0.045));
       const mid = add(add(c, mul(norm(add(pd, pd2)), 0.115)), mul(up, 0.05));
       mb.flatTri(c, tip, mid, [MAT.petal, 0.9, 0.3, 0], [MAT.petal, 1, 0.5, 1], [MAT.petal, 1, 0.5, 1], up);
-      mb.flatTri(c, mid, add(add(c, mul(pd2, 0.11)), mul(up, 0.045)), [MAT.petal, 0.9, 0.3, 0], [MAT.petal, 1, 0.5, 1], [MAT.petal, 1, 0.5, 1], up);
+      mb.flatTri(
+        c,
+        mid,
+        add(add(c, mul(pd2, 0.11)), mul(up, 0.045)),
+        [MAT.petal, 0.9, 0.3, 0],
+        [MAT.petal, 1, 0.5, 1],
+        [MAT.petal, 1, 0.5, 1],
+        up,
+      );
     }
-    mb.tube((t) => add(c, mul(up, t * 0.06)), () => 0.004, 1, 3, () => [MAT.petal, 1, 0.3, 0.05]);
+    mb.tube(
+      (t) => add(c, mul(up, t * 0.06)),
+      () => 0.004,
+      1,
+      3,
+      () => [MAT.petal, 1, 0.3, 0.05],
+    );
   }
   return mb.build();
 }

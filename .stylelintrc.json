@@ -1,0 +1,4 @@
+{
+  "extends": ["stylelint-config-standard"],
+  "overrides": [{ "files": ["**/*.html"], "customSyntax": "postcss-html" }]
+}

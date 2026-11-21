@@ -1,0 +1,8 @@
+{
+  "format": ["javascript"],
+  "threshold": 0.75,
+  "reporters": ["console"],
+  "silent": true,
+  "absolute": false,
+  "gitignore": true
+}

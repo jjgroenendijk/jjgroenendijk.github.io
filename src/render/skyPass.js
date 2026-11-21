@@ -29,7 +29,9 @@ export class SkyPass {
 
   resize(targets) {
     // groups[i] samples clouds[i]; frame i writes clouds[i] while reading clouds[1 - i]
-    this.groups = targets.views.clouds.map((v) => bindGroup(this.device, this.skyLayout, [v, this.shared.linear], 'clouds'));
+    this.groups = targets.views.clouds.map((v) =>
+      bindGroup(this.device, this.skyLayout, [v, this.shared.linear], 'clouds'),
+    );
     this.current = 0;
   }
 
@@ -37,7 +39,9 @@ export class SkyPass {
     this.current = 1 - this.current;
     const pass = encoder.beginRenderPass({
       label: 'clouds',
-      colorAttachments: [{ view: targets.views.clouds[this.current], loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
+      colorAttachments: [
+        { view: targets.views.clouds[this.current], loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] },
+      ],
     });
     pass.setPipeline(this.cloudPipeline);
     pass.setBindGroup(0, frameGroup);

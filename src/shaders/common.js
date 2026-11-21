@@ -11,12 +11,23 @@ const f = (x) => {
 const knotArr = `var<private> KN: array<vec4f, ${KNOTS.length}> = array<vec4f, ${KNOTS.length}>(${KNOTS.map((k) => `vec4f(${f(k[0])},${f(k[1])},${f(k[2])},${f(k[3])})`).join(',')});
 var<private> KW: array<f32, ${KNOTS.length}> = array<f32, ${KNOTS.length}>(${KNOTS.map((k) => f(k[4])).join(',')});`;
 
-export const waveArr = (name, list) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => `vec4f(${f(w[0])},${f(w[1])},${f(w[2])},${f(w[4])})`).join(',')});
+export const waveArr = (
+  name,
+  list,
+) => `var<private> ${name}: array<vec4f, ${list.length}> = array<vec4f, ${list.length}>(${list.map((w) => `vec4f(${f(w[0])},${f(w[1])},${f(w[2])},${f(w[4])})`).join(',')});
 var<private> ${name}Q: array<f32, ${list.length}> = array<f32, ${list.length}>(${list.map((w) => f(w[3])).join(',')});`;
 
 export const LEVELS = 9; // terrain clipmap levels
 // float offsets of the members that follow the clipmap levels
-export const FRAME_OFS = { levels: 192, cloud: 192 + LEVELS * 4, extra: 196 + LEVELS * 4, fx: 200 + LEVELS * 4, cloudMap: 204 + LEVELS * 4, caustic: 208 + LEVELS * 4, path: 212 + LEVELS * 4 };
+export const FRAME_OFS = {
+  levels: 192,
+  cloud: 192 + LEVELS * 4,
+  extra: 196 + LEVELS * 4,
+  fx: 200 + LEVELS * 4,
+  cloudMap: 204 + LEVELS * 4,
+  caustic: 208 + LEVELS * 4,
+  path: 212 + LEVELS * 4,
+};
 export const FRAME_FLOATS = 224 + LEVELS * 4;
 // cloud shadow map: CLOUD_MAP_N^2 texels covering CLOUD_MAP_SPAN metres of the cloud layer
 export const CLOUD_MAP_N = 256;
@@ -138,7 +149,9 @@ fn luma(c: vec3f) -> f32 { return dot(c, vec3f(0.2126, 0.7152, 0.0722)); }
 
 `;
 
-export const commonLib = noiseLib + /* wgsl */ `
+export const commonLib =
+  noiseLib +
+  /* wgsl */ `
 const WATER_EXT: vec3f = vec3f(0.17, 0.042, 0.032);
 // lighting attenuation is kept gentler than view extinction so reefs stay colourful
 const LIGHT_EXT: vec3f = vec3f(0.075, 0.035, 0.03);
