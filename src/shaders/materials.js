@@ -9,7 +9,7 @@ import { noiseLib } from './common.js';
 export const MAT_TEX = 512; // texels per side
 // id, metres covered by one tile (a power of two so it tiles the 16 km world),
 // relief depth in metres (scales the baked normals)
-export const GROUND = {
+const GROUND = {
   sand: { id: 0, tile: 4, depth: 0.025 },
   blackSand: { id: 1, tile: 4, depth: 0.025 },
   grass: { id: 2, tile: 2, depth: 0.05 },

@@ -109,7 +109,7 @@ function gullies(x, z, gx, gz) {
   return (o1[0] * 3.5 + o2[0] * 1.2 - 1) * steep;
 }
 
-export function baseHeight(x, z) {
+function baseHeight(x, z) {
   const c = fbmD(x, z, 8, 3, 11, 99);
   const n = fbmD(x, z, 32, 6, 23, 2);
   const e = n[0] * 1.5 + c[0] * 1.2 - 0.1;

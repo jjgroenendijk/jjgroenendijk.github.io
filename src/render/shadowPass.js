@@ -4,7 +4,7 @@ import { mat4, vec3, frustumPlanes } from '../core/math.js';
 import { DEPTH } from './layouts.js';
 import { W } from '../world/noise.js';
 
-export const CASCADES = 3;
+const CASCADES = 3;
 export const SPLITS = [16, 60, 280];
 const CASTER_RANGE = 700; // how far towards the light casters are captured
 // shadow cache: maximum age in frames per cascade, and what forces a re-render

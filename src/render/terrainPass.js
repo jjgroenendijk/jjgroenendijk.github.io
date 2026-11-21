@@ -7,8 +7,6 @@ import { terrainCacheWGSL, terrainWGSL, terrainShadowWGSL, terrainCullWGSL, GRID
 import { HDR, DEPTH, depthState } from './layouts.js';
 import { LEVELS } from '../shaders/common.js';
 
-export { LEVELS };
-
 const BASE_CELL = 0.5;
 const REFRESH_ROWS = 16; // horizon shadow rows re-baked per frame
 const FIRST_SHADOWED = 2; // finer levels carry no horizon shadow

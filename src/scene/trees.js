@@ -15,7 +15,7 @@ import { LEAF } from '../shaders/leaves.js';
 
 // Species. Lengths are in mesh units: a tree is about one unit tall and the
 // scatter scales it to metres.
-export const SPECIES = {
+const SPECIES = {
   // broad, rounded canopy tree: the bulk of the forest
   canopy: {
     trunk: 0.3, crown: [0, 0.64, 0], radii: [0.44, 0.3, 0.44], lumps: 0.35, flatBottom: 0.55,

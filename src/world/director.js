@@ -6,7 +6,7 @@ import { waveHeight } from './waves.js';
 import { PATH_SEED } from './path.js';
 
 // Camera height plan within a cycle (u = fract(z / CYCLE)).
-export const SPEEDS = [
+const SPEEDS = [
   // [u, speed m/s]
   [0.00, 17], [0.14, 16], [0.20, 8], [0.25, 6.5], [0.285, 4.5], [0.31, 3.2], [0.50, 3.2], [0.53, 4.0],
   [0.56, 4.0], [0.60, 2.8], [0.82, 2.8], [0.86, 4], [0.90, 10], [0.95, 16], [1.0, 17],
@@ -19,7 +19,7 @@ function lerpTable(tab, u) {
   t = t * t * (3 - 2 * t);
   return a[1] + (b[1] - a[1]) * t;
 }
-export const speedAt = (u) => lerpTable(SPEEDS, u);
+const speedAt = (u) => lerpTable(SPEEDS, u);
 
 // Mode weights: aerial / water glide / land / underwater
 function modeWeights(u) {

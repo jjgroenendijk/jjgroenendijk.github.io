@@ -31,7 +31,7 @@ import { PropsVisibility } from './propsVisibility.js';
 
 const NEAR = 0.1;
 
-export function cameraBasis(yaw, pitch, roll) {
+function cameraBasis(yaw, pitch, roll) {
   const fwd = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)];
   let right = vec3.normalize(vec3.cross(fwd, [0, 1, 0]));
   let up = vec3.cross(right, fwd);

@@ -5,7 +5,6 @@ import { smoothstep } from './terrain.js';
 import { celestial, todRate, sunTransmittance, skyRadiance, SKY_E } from './sky.js';
 
 const lum = (c) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-const mix3 = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 // cosine-weighted average radiance of the sky dome
 function skyIrradiance(sun, moon, E) {
@@ -89,5 +88,3 @@ export class Environment {
     };
   }
 }
-
-export { lum, mix3 };
