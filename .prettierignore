@@ -5,3 +5,4 @@ themes/
 package-lock.json
 eslint-suppressions.json
 .dependency-cruiser-known-violations.json
+.claude/settings.local.json
