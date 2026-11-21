@@ -1,242 +1,248 @@
 // Catalogue of everything that gets scattered over the world.
 // Shared by the mesh builder, the scatter compute shader and the renderer.
-import { FISH_COUNT, BIRD_COUNT } from './flocks.js';
+import { BIRD_COUNT, FISH_COUNT } from './flocks.js';
 
-// Material ids (stored per vertex in extra.x, interpreted by the prop shader)
-// Leaf texture layers baked at start-up, one per kind of leaf card.
-export const LEAF = { broad: 0, small: 1, pinnate: 2 };
-export const LEAF_COUNT = Object.keys(LEAF).length;
-
-export const MAT = {
-  palmBark: 0,
-  palmFrond: 1,
-  coconut: 2,
-  bark: 3,
-  fern: 5,
-  bananaLeaf: 6,
-  rock: 7,
-  coralBranch: 8,
-  coralBrain: 9,
-  seaFan: 10,
-  seagrass: 11,
-  fish: 12,
-  bird: 13,
-  bush: 14,
-  stem: 15,
-  wood: 16,
-  sail: 17,
-  flag: 18,
-  wreck: 19,
-  gold: 20,
-  iron: 21,
-  manta: 22,
-  shell: 23,
-  skin: 24,
-  deck: 25,
-  dolphin: 26,
-  petal: 27,
-  butterfly: 28,
-  leaf: 29,
-  shark: 30,
-  jelly: 31,
-  starfish: 32,
-  crab: 33,
-  anemone: 34,
-  sponge: 35,
-  softCoral: 36,
-  foliage: 37, // leaf cluster card, textured from the baked leaf textures
-  card: 40, // impostor quad, textured from the baked card atlas
-};
-
-// Impostor views per species: an N x N grid of directions over the upper
-// hemisphere (hemi-octahedral mapping)
-export const CARD_GRID = 6;
-export const CARD_SIZE = 128; // texels per view
-export const CARD_VIEWS = CARD_GRID * CARD_GRID;
 // Species with an impostor card, in atlas order: [card mesh, mesh baked into it]
-export const CARDS = [
-  ['palmCard', 'palm0'],
-  ['treeACard', 'treeA0'],
-  ['treeBCard', 'treeB0'],
-  ['emergentCard', 'emergent0'],
-];
+const CARDS = [
+    ['palmCard', 'palm0'],
+    ['treeACard', 'treeA0'],
+    ['treeBCard', 'treeB0'],
+    ['emergentCard', 'emergent0'],
+  ],
+  // Impostor views per species: an N x N grid of directions over the upper
+  // hemisphere (hemi-octahedral mapping)
+  CARD_GRID = 6,
+  // Texels per impostor view.
+  CARD_SIZE = 128,
+  CARD_VIEWS = CARD_GRID * CARD_GRID,
+  // Leaf texture layers baked at start-up, one per kind of leaf card.
+  LEAF = { broad: 0, pinnate: 2, small: 1 },
+  LEAF_COUNT = Object.keys(LEAF).length,
+  // Material ids (stored per vertex in extra.x, interpreted by the prop shader). Ids are explicit, so the key order
+  // carries no meaning.
+  MAT = {
+    anemone: 34,
+    bananaLeaf: 6,
+    bark: 3,
+    bird: 13,
+    bush: 14,
+    butterfly: 28,
+    // Impostor quad, textured from the baked card atlas.
+    card: 40,
+    coconut: 2,
+    coralBrain: 9,
+    coralBranch: 8,
+    crab: 33,
+    deck: 25,
+    dolphin: 26,
+    fern: 5,
+    fish: 12,
+    flag: 18,
+    // Leaf cluster card, textured from the baked leaf textures.
+    foliage: 37,
+    gold: 20,
+    iron: 21,
+    jelly: 31,
+    leaf: 29,
+    manta: 22,
+    palmBark: 0,
+    palmFrond: 1,
+    petal: 27,
+    rock: 7,
+    sail: 17,
+    seaFan: 10,
+    seagrass: 11,
+    shark: 30,
+    shell: 23,
+    skin: 24,
+    softCoral: 36,
+    sponge: 35,
+    starfish: 32,
+    stem: 15,
+    wood: 16,
+    wreck: 19,
+  },
+  // Placement rule ids (interpreted by the scatter compute shader). The pirate set pieces, ship to barrel, must stay
+  // a contiguous id range.
+  TYPE = {
+    anemone: 30,
+    banana: 4,
+    barrel: 18,
+    bird: 11,
+    bush: 2,
+    butterfly: 21,
+    chest: 16,
+    clownfish: 31,
+    coralA: 6,
+    coralB: 7,
+    coralC: 8,
+    coralD: 22,
+    coralE: 23,
+    coralF: 24,
+    crab: 29,
+    dolphin: 19,
+    emergent: 37,
+    fern: 3,
+    fish: 10,
+    flowers: 20,
+    jelly: 26,
+    manta: 12,
+    palm: 0,
+    parrot: 32,
+    ray: 27,
+    rock: 5,
+    rowboat: 17,
+    seagrass: 9,
+    shark: 25,
+    ship: 14,
+    starfish: 28,
+    tree: 1,
+    turtle: 13,
+    understory: 38,
+    wreck: 15,
+  },
+  // A layer with LOD levels: `levels` lists each LOD's slot cap and (after the first) the distance it starts at.
+  // Every variant has the same levels, so the caps repeat per variant.
+  lodLayer = ({ levels, ...layer }) => ({
+    ...layer,
+    caps: Array.from({ length: layer.variants ?? 1 }).flatMap(() => levels.map((level) => level.cap)),
+    lods: levels.slice(1).map((level) => level.from),
+  }),
+  // A layer drawn with one mesh and no LODs; fixed-count layers cap their slot at `count` unless `cap` says otherwise.
+  oneMesh = ({ cap, mesh, ...layer }) => ({ ...layer, caps: [cap ?? layer.count], meshes: [mesh] }),
+  // Scatter layers. Each layer fills one or two draw slots (near / far LOD).
+  //   cell     lattice spacing in metres (must divide the world period)
+  //   maxDist  instances beyond this distance are dropped (they shrink before)
+  //   lods     distances beyond which the 2nd / 3rd mesh is used
+  //   caps     instance capacity of each slot
+  //   reach    radius of the largest instance, enables a cheap frustum pre-cull
+  //   keep     instances this close are kept even when off screen (shadow casters)
+  //   minDist  instances this close belong to another layer
+  //   fadeDist distance over which instances shrink away (default maxDist)
+  //   every    re-scatter only every n-th frame (phase picks which); the
+  //            previous instances are drawn in between
+  //   lodBase  LOD number of the first mesh (for shadow caster selection)
+  //   variants number of model variants: meshes then list each variant's LODs
+  //            in turn, and every instance picks one variant
+  // Neighbouring LODs (and a near layer and the far layer after it) overlap by
+  // a short band in which they cross-fade with complementary dithering.
+  LAYERS = [
+    // Palms and trees come in a near layer (every frame) and a far layer (every
+    // other frame, impostor cards)
+    lodLayer({
+      cell: 8,
+      fadeDist: 1500,
+      keep: 60,
+      levels: [{ cap: 500 }, { cap: 3000, from: 90 }],
+      maxDist: 320,
+      meshes: ['palm0', 'palm1'],
+      reach: 16,
+      type: 'palm',
+    }),
+    lodLayer({
+      cell: 8,
+      every: 2,
+      keep: 0,
+      levels: [{ cap: 5000 }, { cap: 12_000, from: 650 }],
+      lodBase: 2,
+      maxDist: 1500,
+      meshes: ['palm2', 'palmCard'],
+      minDist: 320,
+      phase: 0,
+      reach: 16,
+      type: 'palm',
+    }),
+    lodLayer({
+      cell: 8,
+      fadeDist: 1800,
+      keep: 60,
+      levels: [{ cap: 350 }, { cap: 3500, from: 110 }],
+      maxDist: 340,
+      meshes: ['treeA0', 'treeA1', 'treeB0', 'treeB1'],
+      reach: 28,
+      type: 'tree',
+      variants: 2,
+    }),
+    lodLayer({
+      cell: 8,
+      every: 2,
+      keep: 0,
+      levels: [{ cap: 4000 }, { cap: 15_000, from: 700 }],
+      lodBase: 2,
+      maxDist: 1800,
+      meshes: ['treeA2', 'treeACard', 'treeB2', 'treeBCard'],
+      minDist: 340,
+      phase: 1,
+      reach: 28,
+      type: 'tree',
+      variants: 2,
+    }),
+    // Rare giants towering over the canopy, and slender trees beneath it
+    lodLayer({
+      cell: 16,
+      fadeDist: 2400,
+      keep: 80,
+      levels: [{ cap: 120 }, { cap: 900, from: 130 }],
+      maxDist: 400,
+      meshes: ['emergent0', 'emergent1'],
+      reach: 44,
+      type: 'emergent',
+    }),
+    lodLayer({
+      cell: 16,
+      every: 2,
+      keep: 0,
+      levels: [{ cap: 1200 }, { cap: 5000, from: 750 }],
+      lodBase: 2,
+      maxDist: 2400,
+      meshes: ['emergent2', 'emergentCard'],
+      minDist: 400,
+      phase: 0,
+      reach: 44,
+      type: 'emergent',
+    }),
+    lodLayer({
+      cell: 6,
+      keep: 40,
+      levels: [{ cap: 500 }, { cap: 2500, from: 80 }],
+      maxDist: 220,
+      meshes: ['understory0', 'understory1'],
+      reach: 10,
+      type: 'understory',
+    }),
+    oneMesh({ cap: 4000, cell: 4, keep: 30, maxDist: 160, mesh: 'bush', type: 'bush' }),
+    oneMesh({ cap: 1500, cell: 4, keep: 15, maxDist: 110, mesh: 'flowers', type: 'flowers' }),
+    oneMesh({ count: 24, keep: 0, maxDist: 60, mesh: 'butterfly', type: 'butterfly' }),
+    oneMesh({ cap: 3000, cell: 2, keep: 15, maxDist: 70, mesh: 'fern', type: 'fern' }),
+    oneMesh({ cap: 1500, cell: 4, keep: 25, maxDist: 130, mesh: 'banana', type: 'banana' }),
+    oneMesh({ cap: 3000, cell: 4, keep: 20, maxDist: 320, mesh: 'rock', type: 'rock' }),
+    // Six coral kinds share one 1 m lattice, each cell holding at most one of them
+    oneMesh({ cap: 1200, cell: 1, keep: 10, maxDist: 45, mesh: 'coralA', type: 'coralA' }),
+    oneMesh({ cap: 1200, cell: 1, keep: 10, maxDist: 45, mesh: 'coralB', type: 'coralB' }),
+    oneMesh({ cap: 1200, cell: 1, keep: 10, maxDist: 45, mesh: 'coralC', type: 'coralC' }),
+    oneMesh({ cap: 1200, cell: 1, keep: 10, maxDist: 45, mesh: 'coralD', type: 'coralD' }),
+    oneMesh({ cap: 1200, cell: 1, keep: 10, maxDist: 45, mesh: 'coralE', type: 'coralE' }),
+    oneMesh({ cap: 1200, cell: 1, keep: 10, maxDist: 45, mesh: 'coralF', type: 'coralF' }),
+    oneMesh({ cap: 400, cell: 4, keep: 8, maxDist: 60, mesh: 'anemone', type: 'anemone' }),
+    oneMesh({ cap: 400, cell: 4, keep: 0, maxDist: 40, mesh: 'fish', type: 'clownfish' }),
+    oneMesh({ cap: 600, cell: 2, keep: 0, maxDist: 45, mesh: 'starfish', type: 'starfish' }),
+    oneMesh({ cap: 5000, cell: 1, keep: 8, maxDist: 45, mesh: 'seagrass', type: 'seagrass' }),
+    oneMesh({ count: FISH_COUNT, keep: 10, maxDist: 70, mesh: 'fish', type: 'fish' }),
+    oneMesh({ count: BIRD_COUNT, keep: 0, maxDist: 900, mesh: 'bird', type: 'bird' }),
+    oneMesh({ count: 4, keep: 0, maxDist: 90, mesh: 'shark', type: 'shark' }),
+    oneMesh({ count: 6, keep: 0, maxDist: 70, mesh: 'manta', type: 'ray' }),
+    oneMesh({ count: 16, keep: 0, maxDist: 60, mesh: 'jelly', type: 'jelly' }),
+    oneMesh({ cap: 800, count: 2025, keep: 0, maxDist: 85, mesh: 'crab', type: 'crab' }),
+    oneMesh({ count: 12, keep: 0, maxDist: 300, mesh: 'bird', type: 'parrot' }),
+    oneMesh({ count: 4, keep: 0, maxDist: 90, mesh: 'manta', type: 'manta' }),
+    oneMesh({ count: 6, keep: 0, maxDist: 400, mesh: 'dolphin', type: 'dolphin' }),
+    oneMesh({ count: 6, keep: 0, maxDist: 70, mesh: 'turtle', type: 'turtle' }),
+    // Pirate set pieces: one of each per cycle, placed relative to the camera path
+    oneMesh({ count: 3, keep: 400, maxDist: 4000, mesh: 'galleon', type: 'ship' }),
+    oneMesh({ count: 3, keep: 40, maxDist: 160, mesh: 'wreck', type: 'wreck' }),
+    oneMesh({ count: 3, keep: 10, maxDist: 90, mesh: 'chest', type: 'chest' }),
+    oneMesh({ count: 3, keep: 30, maxDist: 500, mesh: 'rowboat', type: 'rowboat' }),
+    oneMesh({ count: 15, keep: 20, maxDist: 300, mesh: 'barrel', type: 'barrel' }),
+  ];
 
-// Placement rule ids (interpreted by the scatter compute shader)
-export const TYPE = {
-  palm: 0,
-  tree: 1,
-  emergent: 37,
-  understory: 38,
-  bush: 2,
-  fern: 3,
-  banana: 4,
-  rock: 5,
-  coralA: 6,
-  coralB: 7,
-  coralC: 8,
-  seagrass: 9,
-  fish: 10,
-  bird: 11,
-  manta: 12,
-  turtle: 13,
-  dolphin: 19,
-  flowers: 20,
-  butterfly: 21,
-  coralD: 22,
-  coralE: 23,
-  coralF: 24,
-  shark: 25,
-  jelly: 26,
-  ray: 27,
-  starfish: 28,
-  crab: 29,
-  anemone: 30,
-  clownfish: 31,
-  parrot: 32,
-  ship: 14,
-  wreck: 15,
-  chest: 16,
-  rowboat: 17,
-  barrel: 18,
-};
-
-// Scatter layers. Each layer fills one or two draw slots (near / far LOD).
-//   cell     lattice spacing in metres (must divide the world period)
-//   maxDist  instances beyond this distance are dropped (they shrink before)
-//   lods     distances beyond which the 2nd / 3rd mesh is used
-//   reach    radius of the largest instance, enables a cheap frustum pre-cull
-//   keep     instances this close are kept even when off screen (shadow casters)
-//   minDist  instances this close belong to another layer
-//   fadeDist distance over which instances shrink away (default maxDist)
-//   every    re-scatter only every n-th frame (phase picks which); the
-//            previous instances are drawn in between
-//   lodBase  LOD number of the first mesh (for shadow caster selection)
-//   variants number of model variants: meshes then list each variant's LODs
-//            in turn, and every instance picks one variant
-// Neighbouring LODs (and a near layer and the far layer after it) overlap by
-// a short band in which they cross-fade with complementary dithering.
-export const LAYERS = [
-  // palms and trees come in a near layer (every frame) and a far layer (every
-  // other frame, impostor cards)
-  {
-    type: 'palm',
-    cell: 8,
-    maxDist: 320,
-    fadeDist: 1500,
-    lods: [90],
-    meshes: ['palm0', 'palm1'],
-    caps: [500, 3000],
-    keep: 60,
-    reach: 16,
-  },
-  {
-    type: 'palm',
-    cell: 8,
-    minDist: 320,
-    maxDist: 1500,
-    lods: [650],
-    meshes: ['palm2', 'palmCard'],
-    caps: [5000, 12000],
-    keep: 0,
-    reach: 16,
-    every: 2,
-    phase: 0,
-    lodBase: 2,
-  },
-  {
-    type: 'tree',
-    cell: 8,
-    maxDist: 340,
-    fadeDist: 1800,
-    lods: [110],
-    variants: 2,
-    meshes: ['treeA0', 'treeA1', 'treeB0', 'treeB1'],
-    caps: [350, 3500, 350, 3500],
-    keep: 60,
-    reach: 28,
-  },
-  {
-    type: 'tree',
-    cell: 8,
-    minDist: 340,
-    maxDist: 1800,
-    lods: [700],
-    variants: 2,
-    meshes: ['treeA2', 'treeACard', 'treeB2', 'treeBCard'],
-    caps: [4000, 15000, 4000, 15000],
-    keep: 0,
-    reach: 28,
-    every: 2,
-    phase: 1,
-    lodBase: 2,
-  },
-  // rare giants towering over the canopy, and slender trees beneath it
-  {
-    type: 'emergent',
-    cell: 16,
-    maxDist: 400,
-    fadeDist: 2400,
-    lods: [130],
-    meshes: ['emergent0', 'emergent1'],
-    caps: [120, 900],
-    keep: 80,
-    reach: 44,
-  },
-  {
-    type: 'emergent',
-    cell: 16,
-    minDist: 400,
-    maxDist: 2400,
-    lods: [750],
-    meshes: ['emergent2', 'emergentCard'],
-    caps: [1200, 5000],
-    keep: 0,
-    reach: 44,
-    every: 2,
-    phase: 0,
-    lodBase: 2,
-  },
-  {
-    type: 'understory',
-    cell: 6,
-    maxDist: 220,
-    lods: [80],
-    meshes: ['understory0', 'understory1'],
-    caps: [500, 2500],
-    keep: 40,
-    reach: 10,
-  },
-  { type: 'bush', cell: 4, maxDist: 160, meshes: ['bush'], caps: [4000], keep: 30 },
-  { type: 'flowers', cell: 4, maxDist: 110, meshes: ['flowers'], caps: [1500], keep: 15 },
-  { type: 'butterfly', count: 24, maxDist: 60, meshes: ['butterfly'], caps: [24], keep: 0 },
-  { type: 'fern', cell: 2, maxDist: 70, meshes: ['fern'], caps: [3000], keep: 15 },
-  { type: 'banana', cell: 4, maxDist: 130, meshes: ['banana'], caps: [1500], keep: 25 },
-  { type: 'rock', cell: 4, maxDist: 320, meshes: ['rock'], caps: [3000], keep: 20 },
-  // six coral kinds share one 1 m lattice, each cell holding at most one of them
-  { type: 'coralA', cell: 1, maxDist: 45, meshes: ['coralA'], caps: [1200], keep: 10 },
-  { type: 'coralB', cell: 1, maxDist: 45, meshes: ['coralB'], caps: [1200], keep: 10 },
-  { type: 'coralC', cell: 1, maxDist: 45, meshes: ['coralC'], caps: [1200], keep: 10 },
-  { type: 'coralD', cell: 1, maxDist: 45, meshes: ['coralD'], caps: [1200], keep: 10 },
-  { type: 'coralE', cell: 1, maxDist: 45, meshes: ['coralE'], caps: [1200], keep: 10 },
-  { type: 'coralF', cell: 1, maxDist: 45, meshes: ['coralF'], caps: [1200], keep: 10 },
-  { type: 'anemone', cell: 4, maxDist: 60, meshes: ['anemone'], caps: [400], keep: 8 },
-  { type: 'clownfish', cell: 4, maxDist: 40, meshes: ['fish'], caps: [400], keep: 0 },
-  { type: 'starfish', cell: 2, maxDist: 45, meshes: ['starfish'], caps: [600], keep: 0 },
-  { type: 'seagrass', cell: 1, maxDist: 45, meshes: ['seagrass'], caps: [5000], keep: 8 },
-  { type: 'fish', count: FISH_COUNT, maxDist: 70, meshes: ['fish'], caps: [FISH_COUNT], keep: 10 },
-  { type: 'bird', count: BIRD_COUNT, maxDist: 900, meshes: ['bird'], caps: [BIRD_COUNT], keep: 0 },
-  { type: 'shark', count: 4, maxDist: 90, meshes: ['shark'], caps: [4], keep: 0 },
-  { type: 'ray', count: 6, maxDist: 70, meshes: ['manta'], caps: [6], keep: 0 },
-  { type: 'jelly', count: 16, maxDist: 60, meshes: ['jelly'], caps: [16], keep: 0 },
-  { type: 'crab', count: 2025, maxDist: 85, meshes: ['crab'], caps: [800], keep: 0 },
-  { type: 'parrot', count: 12, maxDist: 300, meshes: ['bird'], caps: [12], keep: 0 },
-  { type: 'manta', count: 4, maxDist: 90, meshes: ['manta'], caps: [4], keep: 0 },
-  { type: 'dolphin', count: 6, maxDist: 400, meshes: ['dolphin'], caps: [6], keep: 0 },
-  { type: 'turtle', count: 6, maxDist: 70, meshes: ['turtle'], caps: [6], keep: 0 },
-  // pirate set pieces: one of each per cycle, placed relative to the camera path
-  { type: 'ship', count: 3, maxDist: 4000, meshes: ['galleon'], caps: [3], keep: 400 },
-  { type: 'wreck', count: 3, maxDist: 160, meshes: ['wreck'], caps: [3], keep: 40 },
-  { type: 'chest', count: 3, maxDist: 90, meshes: ['chest'], caps: [3], keep: 10 },
-  { type: 'rowboat', count: 3, maxDist: 500, meshes: ['rowboat'], caps: [3], keep: 30 },
-  { type: 'barrel', count: 15, maxDist: 300, meshes: ['barrel'], caps: [15], keep: 20 },
-];
+export { CARDS, CARD_GRID, CARD_SIZE, CARD_VIEWS, LEAF, LEAF_COUNT, MAT, TYPE, LAYERS };
