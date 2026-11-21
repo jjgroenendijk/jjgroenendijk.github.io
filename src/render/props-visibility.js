@@ -3,9 +3,9 @@
 // then shades each covered pixel exactly once. Dense, many-layered jungle no
 // longer pays for shading the leaves that end up hidden.
 import { shader, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { visibilityWGSL, resolveWGSL, EMPTY, ID_FORMAT } from '../shaders/propsVisibility.js';
+import { visibilityWGSL, resolveWGSL, EMPTY, ID_FORMAT } from '../shaders/props-visibility.js';
 import { HDR, DEPTH, depthState } from './layouts.js';
-import { LeafTextures } from './leafTextures.js';
+import { LeafTextures } from './leaf-textures.js';
 
 export class PropsVisibility {
   constructor(device, shared, props) {

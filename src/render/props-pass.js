@@ -6,7 +6,7 @@
 import { shader, buffer, bufferWithData, bindLayout, bindGroup, entry } from '../core/gpu.js';
 import { scatterWGSL, finalizeWGSL, propShadowWGSL, cardBakeWGSL, cardMipWGSL, MAX_SLOTS } from '../shaders/props.js';
 import { LAYERS, TYPE, CARDS, CARD_GRID, CARD_VIEWS, CARD_SIZE } from '../scene/catalog.js';
-import { LeafTextures } from './leafTextures.js';
+import { LeafTextures } from './leaf-textures.js';
 import { DEPTH } from './layouts.js';
 
 const PARAM_STRIDE = 256;

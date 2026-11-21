@@ -314,7 +314,7 @@
       "count": 1
     }
   },
-  "src/render/causticsPass.js": {
+  "src/render/caustics-pass.js": {
     "capitalized-comments": {
       "count": 1
     },
@@ -342,9 +342,6 @@
     "sort-keys": {
       "count": 5
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 1
     },
@@ -352,7 +349,7 @@
       "count": 3
     }
   },
-  "src/render/cloudMapPass.js": {
+  "src/render/cloud-map-pass.js": {
     "capitalized-comments": {
       "count": 1
     },
@@ -374,14 +371,11 @@
     "sort-keys": {
       "count": 3
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 1
     }
   },
-  "src/render/flockPass.js": {
+  "src/render/flock-pass.js": {
     "capitalized-comments": {
       "count": 2
     },
@@ -406,9 +400,6 @@
     "sort-keys": {
       "count": 2
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/no-null": {
       "count": 1
     },
@@ -416,7 +407,7 @@
       "count": 1
     }
   },
-  "src/render/frameUniforms.js": {
+  "src/render/frame-uniforms.js": {
     "id-length": {
       "count": 1
     },
@@ -441,9 +432,6 @@
     "sort-imports": {
       "count": 2
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 4
     },
@@ -454,7 +442,7 @@
       "count": 1
     }
   },
-  "src/render/groundMaterials.js": {
+  "src/render/ground-materials.js": {
     "capitalized-comments": {
       "count": 2
     },
@@ -494,14 +482,11 @@
     "unicorn/consistent-function-scoping": {
       "count": 1
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/no-unnecessary-parameters": {
       "count": 1
     }
   },
-  "src/render/hizPass.js": {
+  "src/render/hiz-pass.js": {
     "capitalized-comments": {
       "count": 1
     },
@@ -532,9 +517,6 @@
     "sort-vars": {
       "count": 1
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/no-undeclared-class-members": {
       "count": 8
     }
@@ -562,7 +544,7 @@
       "count": 1
     }
   },
-  "src/render/leafTextures.js": {
+  "src/render/leaf-textures.js": {
     "capitalized-comments": {
       "count": 4
     },
@@ -598,12 +580,9 @@
     },
     "unicorn/consistent-function-scoping": {
       "count": 2
-    },
-    "unicorn/filename-case": {
-      "count": 1
     }
   },
-  "src/render/postPass.js": {
+  "src/render/post-pass.js": {
     "capitalized-comments": {
       "count": 1
     },
@@ -640,9 +619,6 @@
     "unicorn/consistent-boolean-name": {
       "count": 1
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 9
     },
@@ -653,7 +629,7 @@
       "count": 13
     }
   },
-  "src/render/propsPass.js": {
+  "src/render/props-pass.js": {
     "capitalized-comments": {
       "count": 13
     },
@@ -723,9 +699,6 @@
     "unicorn/consistent-function-scoping": {
       "count": 3
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 17
     },
@@ -751,7 +724,7 @@
       "count": 1
     }
   },
-  "src/render/propsVisibility.js": {
+  "src/render/props-visibility.js": {
     "capitalized-comments": {
       "count": 1
     },
@@ -775,9 +748,6 @@
     },
     "sort-keys": {
       "count": 16
-    },
-    "unicorn/filename-case": {
-      "count": 1
     },
     "unicorn/name-replacements": {
       "count": 4
@@ -845,7 +815,7 @@
       "count": 2
     }
   },
-  "src/render/shadowPass.js": {
+  "src/render/shadow-pass.js": {
     "capitalized-comments": {
       "count": 5
     },
@@ -888,9 +858,6 @@
     "sort-keys": {
       "count": 7
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 4
     },
@@ -904,7 +871,7 @@
       "count": 1
     }
   },
-  "src/render/skyLightPass.js": {
+  "src/render/sky-light-pass.js": {
     "capitalized-comments": {
       "count": 2
     },
@@ -929,9 +896,6 @@
     "unicorn/consistent-class-member-order": {
       "count": 1
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 3
     },
@@ -939,7 +903,7 @@
       "count": 1
     }
   },
-  "src/render/skyPass.js": {
+  "src/render/sky-pass.js": {
     "capitalized-comments": {
       "count": 1
     },
@@ -954,9 +918,6 @@
     },
     "sort-keys": {
       "count": 10
-    },
-    "unicorn/filename-case": {
-      "count": 1
     },
     "unicorn/no-undeclared-class-members": {
       "count": 9
@@ -1000,7 +961,7 @@
       "count": 28
     }
   },
-  "src/render/terrainPass.js": {
+  "src/render/terrain-pass.js": {
     "capitalized-comments": {
       "count": 7
     },
@@ -1058,9 +1019,6 @@
     "unicorn/consistent-function-scoping": {
       "count": 1
     },
-    "unicorn/filename-case": {
-      "count": 1
-    },
     "unicorn/name-replacements": {
       "count": 2
     },
@@ -1089,7 +1047,7 @@
       "count": 1
     }
   },
-  "src/render/waterPass.js": {
+  "src/render/water-pass.js": {
     "max-params": {
       "count": 1
     },
@@ -1110,9 +1068,6 @@
     },
     "sort-keys": {
       "count": 23
-    },
-    "unicorn/filename-case": {
-      "count": 1
     },
     "unicorn/no-undeclared-class-members": {
       "count": 10
@@ -1783,6 +1738,32 @@
       "count": 3
     }
   },
+  "src/shaders/props-visibility.js": {
+    "capitalized-comments": {
+      "count": 4
+    },
+    "no-inline-comments": {
+      "count": 4
+    },
+    "no-magic-numbers": {
+      "count": 2
+    },
+    "one-var": {
+      "count": 4
+    },
+    "prefer-template": {
+      "count": 3
+    },
+    "sort-imports": {
+      "count": 4
+    },
+    "unicorn/name-replacements": {
+      "count": 10
+    },
+    "unicorn/numeric-separators-style": {
+      "count": 1
+    }
+  },
   "src/shaders/props.js": {
     "capitalized-comments": {
       "count": 10
@@ -1810,35 +1791,6 @@
     },
     "unicorn/name-replacements": {
       "count": 13
-    }
-  },
-  "src/shaders/propsVisibility.js": {
-    "capitalized-comments": {
-      "count": 4
-    },
-    "no-inline-comments": {
-      "count": 4
-    },
-    "no-magic-numbers": {
-      "count": 2
-    },
-    "one-var": {
-      "count": 4
-    },
-    "prefer-template": {
-      "count": 3
-    },
-    "sort-imports": {
-      "count": 4
-    },
-    "unicorn/filename-case": {
-      "count": 1
-    },
-    "unicorn/name-replacements": {
-      "count": 10
-    },
-    "unicorn/numeric-separators-style": {
-      "count": 1
     }
   },
   "src/shaders/shore.js": {
