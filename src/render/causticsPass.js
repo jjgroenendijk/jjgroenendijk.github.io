@@ -17,13 +17,13 @@ export class CausticsPass {
     const C = GPUShaderStage.COMPUTE;
     const splatLayout = bindLayout(device, 'caustic-splat', [entry.uniform(), entry.texture('unfilterable-float', '2d-array', C), at(6, entry.storage())]);
     this.splatGroup = bindGroup(device, splatLayout, [frameBuffer, cacheView, at(6, this.photons)], 'caustic-splat');
-    this.splatPipeline = device.createComputePipeline({
+    this.splatPipeline = device.createComputePipelineAsync({
       label: 'caustic-splat', layout: device.createPipelineLayout({ bindGroupLayouts: [splatLayout] }),
       compute: { module: shader(device, causticSplatWGSL, 'caustic-splat'), entryPoint: 'main' },
     });
     const resolveLayout = bindLayout(device, 'caustic-resolve', [entry.storage(true), entry.storageTexture('rgba16float')]);
     this.resolveGroup = bindGroup(device, resolveLayout, [this.photons, this.view], 'caustic-resolve');
-    this.resolvePipeline = device.createComputePipeline({
+    this.resolvePipeline = device.createComputePipelineAsync({
       label: 'caustic-resolve', layout: device.createPipelineLayout({ bindGroupLayouts: [resolveLayout] }),
       compute: { module: shader(device, causticResolveWGSL, 'caustic-resolve'), entryPoint: 'main' },
     });

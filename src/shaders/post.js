@@ -214,6 +214,16 @@ fn toSRGB(c: vec3f) -> vec3f {
     textureSampleLevel(colTex, smp, uv - cc * ca, 0.0).r,
     textureSampleLevel(colTex, smp, uv, 0.0).g,
     textureSampleLevel(colTex, smp, uv + cc * ca, 0.0).b);
+  // light sharpening against the softness of TAA and upscaling; the
+  // neighbourhood clamp keeps it from ringing around bright edges
+  let tx = 1.0 / vec2f(textureDimensions(colTex));
+  let n0 = textureSampleLevel(colTex, smp, uv + vec2f(tx.x, 0.0), 0.0).rgb;
+  let n1 = textureSampleLevel(colTex, smp, uv - vec2f(tx.x, 0.0), 0.0).rgb;
+  let n2 = textureSampleLevel(colTex, smp, uv + vec2f(0.0, tx.y), 0.0).rgb;
+  let n3 = textureSampleLevel(colTex, smp, uv - vec2f(0.0, tx.y), 0.0).rgb;
+  let nmin = min(min(n0, n1), min(n2, n3));
+  let nmax = max(max(n0, n1), max(n2, n3));
+  c = clamp(c + (c - (n0 + n1 + n2 + n3) * 0.25) * 0.6, min(nmin, c), max(nmax, c));
   let bl = textureSampleLevel(bloomTex, smp, uv, 0.0).rgb;
   c = mix(c, bl, mix(0.03, 0.06, uw));
   c *= F.skyAmb.w;

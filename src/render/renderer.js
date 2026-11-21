@@ -52,7 +52,8 @@ export class Renderer {
     this.ground = new GroundMaterials(device);
     this.terrain = new TerrainPass(device, this.shared, this.ground);
     this.flock = new FlockPass(device, this.shared);
-    this.props = new PropsPass(device, this.shared, buildMeshes(), quality, this.flock.state, new LeafTextures(device));
+    this.leaves = new LeafTextures(device);
+    this.props = new PropsPass(device, this.shared, buildMeshes(), quality, this.flock.state, this.leaves);
     this.propsVis = new PropsVisibility(device, this.shared, this.props);
     this.cloudMap = new CloudMapPass(device, this.shared);
     this.shadows = new ShadowPass(device, this.shared, quality.shadowSize, this.cloudMap.view);
@@ -70,6 +71,22 @@ export class Renderer {
     this.prev = null;
     this.resetHistory = true;
     this.skip = new Set(quality.skip || []); // debugging aid: passes to leave out
+  }
+
+  // Pipelines are created with create*PipelineAsync, so the browser compiles
+  // them off its GPU thread and the page (and the loader) keeps animating.
+  // The passes hold promises until this swaps in the compiled pipelines.
+  async init() {
+    const jobs = [this.ground.ready, this.leaves.ready];
+    for (const part of Object.values(this)) {
+      if (!part || typeof part !== 'object') continue;
+      for (const [k, v] of Object.entries(part)) {
+        if (v instanceof Promise) jobs.push(v.then((p) => { part[k] = p; }));
+        else if (Array.isArray(v) && v.some((x) => x instanceof Promise)) jobs.push(Promise.all(v).then((a) => { part[k] = a; }));
+      }
+    }
+    await Promise.all(jobs);
+    return this;
   }
 
   resize(width, height) {

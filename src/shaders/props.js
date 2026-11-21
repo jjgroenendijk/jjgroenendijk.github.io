@@ -99,7 +99,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let d = abs(p.x - pathX(p.y));
   var prob = 0.0;
   var scale = 1.0;
-  var excl = 0.0;
+  var excl = 0.0; // camera clearance (m), see below
   var tilt = 0.0;
   var sink = 0.0;
   let yaw = r4 * TAU;
@@ -108,21 +108,21 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     prob = select(0.0, 0.72 * (1.0 - smoothstep(3.0, 16.0, h)) + 0.14 * (1.0 - f), h > 0.8 && h < 40.0);
     scale = mix(8.5, 14.5, r5);
     tilt = mix(0.05, 0.42, r6 * r6) * (1.0 - smoothstep(2.0, 9.0, h) * 0.6);
-    excl = 6.0;
+    excl = 1.6 + tilt * 2.5;
   } else if (kind == ${TYPE.tree}u) {
     // the canopy grows in groves with gaps between them
     let f = forestDensity(p);
     let grove = smoothstep(-0.35, 0.25, fbm(p, 256, 2, 211u));
     prob = select(0.0, f * (0.55 + 0.45 * grove) * 0.95 * smoothstep(4.0, 9.0, h), h > 4.0);
     scale = mix(15.0, 27.0, r5);
-    excl = 6.5;
+    excl = 1.5;
     sink = 0.3;
   } else if (kind == ${TYPE.emergent}u) {
     // giants only where the forest is dense and old
     let f = forestDensity(p);
     prob = select(0.0, 0.2 * smoothstep(0.55, 0.9, f), h > 8.0 && h < 260.0);
     scale = mix(30.0, 44.0, r5);
-    excl = 9.0;
+    excl = 3.5;
     sink = 0.3;
   } else if (kind == ${TYPE.understory}u) {
     // most at the forest edge and in the gaps, sparse in the canopy's deep shade
@@ -130,31 +130,31 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let edge = 1.0 - abs(f - 0.4) * 2.2;
     prob = select(0.0, 0.2 + 0.45 * sat(edge), h > 2.5 && f > 0.08);
     scale = mix(5.0, 10.0, r5);
-    excl = 3.0;
+    excl = 1.1;
     sink = 0.15;
   } else if (kind == ${TYPE.bush}u) {
     let f = forestDensity(p);
     prob = select(0.0, 0.55 * (0.35 + f), h > 2.6);
     scale = mix(1.4, 3.2, r5);
-    excl = 2.8;
+    excl = 0.5 + scale * 0.55;
     sink = 0.1;
   } else if (kind == ${TYPE.flowers}u) {
     prob = select(0.0, 0.35 * smoothstep(1.8, 4.0, h) * (1.0 - 0.5 * region(p).x), h > 1.8);
     scale = mix(1.2, 2.0, r5);
-    excl = 2.4;
+    excl = 0.0;
   } else if (kind == ${TYPE.fern}u) {
     prob = select(0.0, 0.8 * smoothstep(1.3, 3.0, h), h > 1.3);
     scale = mix(0.7, 1.5, r5);
-    excl = 1.4;
+    excl = 0.0;
   } else if (kind == ${TYPE.banana}u) {
     prob = select(0.0, 0.4 * smoothstep(2.2, 5.0, h), h > 2.2);
     scale = mix(2.2, 4.2, r5);
-    excl = 2.8;
+    excl = 0.5 + scale * 0.45;
   } else if (kind == ${TYPE.rock}u) {
     prob = select(0.025, 0.14, h < 2.2 && h > -30.0);
     scale = mix(0.5, 2.4, r5 * r5);
     tilt = (r6 - 0.5) * 0.6;
-    excl = 2.6;
+    excl = select(0.0, 0.4 + scale * 0.6, scale > 1.3);
     sink = 0.35;
   } else if (isCoral(kind)) {
     let reef = reefMask(p);
@@ -163,23 +163,23 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     scale = mix(0.8, 2.2, r5);
     if (kind == ${TYPE.coralE}u || kind == ${TYPE.coralF}u) { scale = mix(0.6, 1.4, r5); }
     tilt = (r6 - 0.5) * 0.35;
-    excl = 1.9;
+    excl = select(0.0, 0.3 + scale * 0.45, scale > 1.5);
     sink = 0.1;
   } else if (kind == ${TYPE.anemone}u || kind == ${TYPE.clownfish}u) {
     prob = select(0.0, 0.12 + reefMask(p) * 0.25, h < -1.5 && h > -14.0);
     scale = mix(0.9, 1.4, r5);
-    excl = 2.2;
+    excl = 0.0;
   } else if (kind == ${TYPE.starfish}u) {
     prob = select(0.0, 0.07 * (1.0 - reefMask(p) * 0.6), h < -0.8 && h > -16.0);
     scale = mix(0.18, 0.32, r5);
-    excl = 1.0;
+    excl = 0.0;
     sink = -0.02;
   } else if (kind == ${TYPE.seagrass}u) {
     let reef = reefMask(p);
     let meadow = smoothstep(0.0, 0.15, fbm(p, 512, 2, 223u));
     prob = select(0.0, 0.75 * (1.0 - reef) * meadow, h < -0.7 && h > -10.0);
     scale = mix(0.6, 1.3, r5);
-    excl = 1.2;
+    excl = 0.0;
   }
   if (isCoral(kind)) { if (r1 * 0.5 + r2 * 0.5 > prob) { return; } }
   else if (r3 * 0.999 > prob) { return; }
@@ -189,9 +189,11 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     let around = cacheHeight(p + vec2f(e, 0.0)) + cacheHeight(p - vec2f(e, 0.0)) + cacheHeight(p + vec2f(0.0, e)) + cacheHeight(p - vec2f(0.0, e));
     scale *= 1.0 + clamp((around * 0.25 - h) * 0.06, -0.15, 0.25);
   }
-  // keep the camera corridor clear
+  // Room for the camera only: excl is how close the parts of this instance at
+  // lens height may come to the camera track (0 for low plants the camera
+  // glides over). Jittered per instance so there is no clean-cut edge.
   let cor = corridorAt(p.y);
-  if (cor.y > 0.01 && d < excl * max(cor.y, 0.25)) { return; }
+  if (excl > 0.0 && cor.y > 0.01 && d < excl * cor.y * (1.0 + 0.5 * hf(seed + 7u))) { return; }
   // shrink near max distance to avoid popping
   scale *= 1.0 - smoothstep(P.fadeDist * 0.8, P.fadeDist, dist);
   if (scale < 0.02) { return; }

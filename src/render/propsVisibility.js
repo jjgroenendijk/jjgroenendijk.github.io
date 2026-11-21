@@ -22,7 +22,7 @@ export class PropsVisibility {
     const primitive = { topology: 'triangle-list', cullMode: 'none' };
 
     const raster = shader(device, props.withCards(visibilityWGSL), 'prop-visibility');
-    this.rasterPipeline = device.createRenderPipeline({
+    this.rasterPipeline = device.createRenderPipelineAsync({
       label: 'prop-visibility',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, dataLayout] }),
       vertex: { module: raster, entryPoint: 'vs' },
@@ -31,7 +31,7 @@ export class PropsVisibility {
       depthStencil: depthState(),
     });
     const resolve = shader(device, props.withCards(resolveWGSL), 'prop-resolve');
-    this.resolvePipeline = device.createRenderPipeline({
+    this.resolvePipeline = device.createRenderPipelineAsync({
       label: 'prop-resolve',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, dataLayout, this.idLayout] }),
       vertex: { module: resolve, entryPoint: 'vs' },
