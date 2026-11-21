@@ -2,10 +2,18 @@
 // frame's scatter and terrain culling test bounding boxes against it, so
 // whatever hid behind the hills and the forest last frame is not drawn.
 // (Reverse-Z: smaller is farther, so each texel keeps the farthest depth.)
-import { shader, bindLayout, bindGroup, entry } from '../core/gpu.js';
+import { bindGroup, bindLayout, entry, flags, shader } from '../core/gpu.js';
 
-const reduceWGSL = (fromDepth) => /* wgsl */ `
-@group(0) @binding(0) var src: ${fromDepth ? 'texture_depth_2d' : 'texture_2d<f32>'};
+// Level 0 reduces the scene depth buffer, every further level the r32float level above it. The reduce shader runs 8x8
+// workgroups.
+const SOURCES = [
+    { channel: '', sampleType: 'depth', texture: 'texture_depth_2d' },
+    { channel: '.x', sampleType: 'unfilterable-float', texture: 'texture_2d<f32>' },
+  ],
+  WORKGROUP = 8,
+  half = (size, mip) => Math.max(1, Math.floor(size / 2 ** mip)),
+  reduceWGSL = (source) => /* wgsl */ `
+@group(0) @binding(0) var src: ${source.texture};
 @group(0) @binding(1) var dst: texture_storage_2d<r32float, write>;
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3u) {
@@ -18,7 +26,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   var z = 1e9;
   for (var y = 2 * i32(gid.y); y <= y1; y++) {
     for (var x = 2 * i32(gid.x); x <= x1; x++) {
-      z = min(z, textureLoad(src, min(vec2i(x, y), sd), 0)${fromDepth ? '' : '.x'});
+      z = min(z, textureLoad(src, min(vec2i(x, y), sd), 0)${source.channel});
     }
   }
   textureStore(dst, vec2i(gid.xy), vec4f(z));
@@ -26,19 +34,23 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 `;
 
 export class HiZPass {
+  steps;
+  texture;
+  view;
+
   constructor(device) {
     this.device = device;
-    const layout = (depth) =>
+    this.layouts = SOURCES.map((source) =>
       bindLayout(device, 'hiz', [
-        entry.texture(depth ? 'depth' : 'unfilterable-float', '2d', GPUShaderStage.COMPUTE),
+        entry.texture(source.sampleType, '2d', GPUShaderStage.COMPUTE),
         entry.storageTexture('r32float'),
-      ]);
-    this.layouts = [layout(true), layout(false)];
-    this.pipelines = [true, false].map((depth, k) =>
+      ]),
+    );
+    this.pipelines = SOURCES.map((source, index) =>
       device.createComputePipelineAsync({
+        compute: { entryPoint: 'main', module: shader(device, reduceWGSL(source), 'hiz') },
         label: 'hiz',
-        layout: device.createPipelineLayout({ bindGroupLayouts: [this.layouts[k]] }),
-        compute: { module: shader(device, reduceWGSL(depth), 'hiz'), entryPoint: 'main' },
+        layout: device.createPipelineLayout({ bindGroupLayouts: [this.layouts[index]] }),
       }),
     );
   }
@@ -46,34 +58,37 @@ export class HiZPass {
   resize(targets) {
     this.texture?.destroy();
     const w = Math.max(1, Math.ceil(targets.width / 2)),
-      h = Math.max(1, Math.ceil(targets.height / 2));
-    const mips = Math.floor(Math.log2(Math.max(w, h))) + 1;
+      h = Math.max(1, Math.ceil(targets.height / 2)),
+      mips = Math.floor(Math.log2(Math.max(w, h))) + 1;
     this.texture = this.device.createTexture({
-      label: 'hiz',
-      size: [w, h],
       format: 'r32float',
+      label: 'hiz',
       mipLevelCount: mips,
-      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+      size: [w, h],
+      usage: flags(GPUTextureUsage.STORAGE_BINDING, GPUTextureUsage.TEXTURE_BINDING),
     });
     this.view = this.texture.createView();
-    const mip = (m) => this.texture.createView({ baseMipLevel: m, mipLevelCount: 1 });
-    this.steps = [];
-    for (let m = 0; m < mips; m++) {
-      const k = m === 0 ? 0 : 1;
-      this.steps.push({
-        pipeline: this.pipelines[k],
-        group: bindGroup(this.device, this.layouts[k], [m === 0 ? targets.views.depth : mip(m - 1), mip(m)]),
-        size: [Math.max(1, w >> m), Math.max(1, h >> m)],
-      });
-    }
+    this.steps = Array.from({ length: mips }, (_, mip) => this.step(targets, mip, [w, h]));
+  }
+
+  // Mip 0 reads the depth buffer with the depth pipeline; the others read the previous mip.
+  step(targets, mip, [w, h]) {
+    const kind = Math.min(mip, 1),
+      level = (index) => this.texture.createView({ baseMipLevel: index, mipLevelCount: 1 }),
+      source = (mip === 0 && targets.views.depth) || level(mip - 1);
+    return {
+      group: bindGroup(this.device, this.layouts[kind], [source, level(mip)]),
+      pipeline: this.pipelines[kind],
+      size: [half(w, mip), half(h, mip)],
+    };
   }
 
   encode(encoder) {
     const pass = encoder.beginComputePass({ label: 'hiz' });
-    for (const s of this.steps) {
-      pass.setPipeline(s.pipeline);
-      pass.setBindGroup(0, s.group);
-      pass.dispatchWorkgroups(Math.ceil(s.size[0] / 8), Math.ceil(s.size[1] / 8));
+    for (const step of this.steps) {
+      pass.setPipeline(step.pipeline);
+      pass.setBindGroup(0, step.group);
+      pass.dispatchWorkgroups(Math.ceil(step.size[0] / WORKGROUP), Math.ceil(step.size[1] / WORKGROUP));
     }
     pass.end();
   }

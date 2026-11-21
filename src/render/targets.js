@@ -1,52 +1,87 @@
 // Screen-sized render targets, recreated whenever the render resolution changes.
-import { HDR, DEPTH } from './layouts.js';
+import { DEPTH, HDR } from './layouts.js';
+import { flags } from '../core/gpu.js';
 
-const U = () => GPUTextureUsage;
+const BLOOM_MIPS = 6,
+  half = (size) => Math.floor(size / 2);
 
 export class Targets {
+  bloom;
+  bloomMips;
+  bloomViews;
+  clouds;
+  depth;
+  generation = 0;
+  hdr;
+  height = 0;
+  history;
+  sceneCopy;
+  views;
+  volume;
+  width = 0;
+
   constructor(device, cloudDiv = 2) {
     this.device = device;
     this.cloudDiv = cloudDiv;
-    this.width = 0;
-    this.height = 0;
+  }
+
+  // Creates one target; size is [width, height], each clamped to at least one texel.
+  texture(label, [width, height], { format, usage, mips = 1 }) {
+    return this.device.createTexture({
+      format,
+      label,
+      mipLevelCount: mips,
+      size: [Math.max(1, width), Math.max(1, height)],
+      usage,
+    });
   }
 
   resize(width, height) {
     if (width === this.width && height === this.height) return false;
     this.destroy();
-    const d = this.device;
-    const tex = (label, w, h, format, usage, mips = 1) =>
-      d.createTexture({ label, size: [Math.max(1, w), Math.max(1, h)], format, usage, mipLevelCount: mips });
-    const RT = U().RENDER_ATTACHMENT | U().TEXTURE_BINDING;
+    const RT = flags(GPUTextureUsage.RENDER_ATTACHMENT, GPUTextureUsage.TEXTURE_BINDING),
+      cloudSize = [Math.ceil(width / this.cloudDiv), Math.ceil(height / this.cloudDiv)],
+      full = [width, height],
+      halfSize = [half(width), half(height)],
+      hdrTarget = { format: HDR, usage: RT };
     this.width = width;
     this.height = height;
-    this.hdr = tex('hdr', width, height, HDR, RT | U().COPY_SRC);
-    this.sceneCopy = tex('scene-copy', width, height, HDR, U().TEXTURE_BINDING | U().COPY_DST);
-    this.depth = tex('depth', width, height, DEPTH, RT);
-    this.volume = tex('volume', width >> 1, height >> 1, HDR, RT);
-    const cw = Math.ceil(width / this.cloudDiv),
-      ch = Math.ceil(height / this.cloudDiv);
-    this.clouds = [tex('clouds-a', cw, ch, HDR, RT), tex('clouds-b', cw, ch, HDR, RT)];
-    this.history = [tex('history-a', width, height, HDR, RT), tex('history-b', width, height, HDR, RT)];
-    this.bloomMips = 6;
-    this.bloom = tex('bloom', width >> 1, height >> 1, HDR, RT, this.bloomMips);
-    this.bloomViews = Array.from({ length: this.bloomMips }, (_, i) =>
-      this.bloom.createView({ baseMipLevel: i, mipLevelCount: 1 }),
-    );
-    this.views = {
-      hdr: this.hdr.createView(),
-      sceneCopy: this.sceneCopy.createView(),
-      depth: this.depth.createView(),
-      volume: this.volume.createView(),
-      clouds: this.clouds.map((t) => t.createView()),
-      history: this.history.map((t) => t.createView()),
-    };
-    this.generation = (this.generation || 0) + 1;
+    this.hdr = this.texture('hdr', full, { format: HDR, usage: flags(RT, GPUTextureUsage.COPY_SRC) });
+    this.sceneCopy = this.texture('scene-copy', full, {
+      format: HDR,
+      usage: flags(GPUTextureUsage.TEXTURE_BINDING, GPUTextureUsage.COPY_DST),
+    });
+    this.depth = this.texture('depth', full, { format: DEPTH, usage: RT });
+    this.volume = this.texture('volume', halfSize, hdrTarget);
+    this.clouds = [this.texture('clouds-a', cloudSize, hdrTarget), this.texture('clouds-b', cloudSize, hdrTarget)];
+    this.history = [this.texture('history-a', full, hdrTarget), this.texture('history-b', full, hdrTarget)];
+    this.createBloom(halfSize, hdrTarget);
+    this.createViews();
+    this.generation += 1;
     return true;
   }
 
+  createBloom(size, target) {
+    this.bloomMips = BLOOM_MIPS;
+    this.bloom = this.texture('bloom', size, { ...target, mips: this.bloomMips });
+    this.bloomViews = Array.from({ length: this.bloomMips }, (_, level) =>
+      this.bloom.createView({ baseMipLevel: level, mipLevelCount: 1 }),
+    );
+  }
+
+  createViews() {
+    this.views = {
+      clouds: this.clouds.map((target) => target.createView()),
+      depth: this.depth.createView(),
+      hdr: this.hdr.createView(),
+      history: this.history.map((target) => target.createView()),
+      sceneCopy: this.sceneCopy.createView(),
+      volume: this.volume.createView(),
+    };
+  }
+
   destroy() {
-    for (const t of [
+    for (const target of [
       this.hdr,
       this.sceneCopy,
       this.depth,
@@ -55,6 +90,6 @@ export class Targets {
       ...(this.clouds || []),
       ...(this.history || []),
     ])
-      t?.destroy();
+      target?.destroy();
   }
 }

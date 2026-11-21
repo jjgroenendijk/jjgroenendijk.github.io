@@ -2,79 +2,93 @@
 // an ID target (slot and instance, triangle) plus depth; a fullscreen resolve
 // then shades each covered pixel exactly once. Dense, many-layered jungle no
 // longer pays for shading the leaves that end up hidden.
-import { shader, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { visibilityWGSL, resolveWGSL, EMPTY, ID_FORMAT } from '../shaders/props-visibility.js';
-import { HDR, DEPTH, depthState } from './layouts.js';
+import { DEPTH, HDR, depthState } from './layouts.js';
+import { EMPTY, ID_FORMAT, resolveWGSL, visibilityWGSL } from '../shaders/props-visibility.js';
+import { bindGroup, bindLayout, entry, flags, shader } from '../core/gpu.js';
 import { LeafTextures } from './leaf-textures.js';
 
-export class PropsVisibility {
-  constructor(device, shared, props) {
-    this.device = device;
-    this.props = props;
-    const F = GPUShaderStage.FRAGMENT,
-      VF = GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
-    const dataLayout = bindLayout(device, 'prop-data', [
-      entry.texture('float', '2d-array', F),
-      entry.texture('float', '2d-array', F),
-      ...Array.from({ length: 5 }, () => entry.storage(true, VF)),
-      ...LeafTextures.entries(F),
+// Storage buffers in the prop data group, after the two card texture arrays.
+const DATA_BUFFERS = 5,
+  FULLSCREEN_VERTICES = 3,
+  // Bind group slots shared by the raster and resolve pipelines.
+  GROUP = { data: 2, frame: 0, ids: 3, shadow: 1 },
+  createDataLayout = (device) => {
+    const fragment = GPUShaderStage.FRAGMENT,
+      vertexFragment = flags(GPUShaderStage.VERTEX, GPUShaderStage.FRAGMENT);
+    return bindLayout(device, 'prop-data', [
+      entry.texture('float', '2d-array', fragment),
+      entry.texture('float', '2d-array', fragment),
+      ...Array.from({ length: DATA_BUFFERS }, () => entry.storage(true, vertexFragment)),
+      ...LeafTextures.entries(fragment),
     ]);
-    this.dataGroup = bindGroup(device, dataLayout, props.visibilityResources, 'prop-data');
-    this.idLayout = bindLayout(device, 'prop-ids', [entry.texture('uint', '2d', F)]);
-    const primitive = { topology: 'triangle-list', cullMode: 'none' };
+  };
 
-    const raster = shader(device, props.withCards(visibilityWGSL), 'prop-visibility');
+export class PropsVisibility {
+  // Created per resolution in resize().
+  idGroup;
+  idView;
+  ids;
+
+  constructor(device, shared, scatter) {
+    this.device = device;
+    this.props = scatter;
+    const dataLayout = createDataLayout(device),
+      primitive = { cullMode: 'none', topology: 'triangle-list' },
+      raster = shader(device, scatter.withCards(visibilityWGSL), 'prop-visibility'),
+      resolve = shader(device, scatter.withCards(resolveWGSL), 'prop-resolve');
+    this.dataGroup = bindGroup(device, dataLayout, scatter.visibilityResources, 'prop-data');
+    this.idLayout = bindLayout(device, 'prop-ids', [entry.texture('uint', '2d', GPUShaderStage.FRAGMENT)]);
     this.rasterPipeline = device.createRenderPipelineAsync({
+      depthStencil: depthState(),
+      fragment: { entryPoint: 'fs', module: raster, targets: [{ format: ID_FORMAT }] },
       label: 'prop-visibility',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, dataLayout] }),
-      vertex: { module: raster, entryPoint: 'vs' },
-      fragment: { module: raster, entryPoint: 'fs', targets: [{ format: ID_FORMAT }] },
       primitive,
-      depthStencil: depthState(),
+      vertex: { entryPoint: 'vs', module: raster },
     });
-    const resolve = shader(device, props.withCards(resolveWGSL), 'prop-resolve');
     this.resolvePipeline = device.createRenderPipelineAsync({
+      // Depth is already final: the resolve neither tests nor writes it.
+      depthStencil: { depthCompare: 'always', depthWriteEnabled: false, format: DEPTH },
+      fragment: { entryPoint: 'fs', module: resolve, targets: [{ format: HDR }] },
       label: 'prop-resolve',
       layout: device.createPipelineLayout({
         bindGroupLayouts: [shared.frame, shared.shadow, dataLayout, this.idLayout],
       }),
-      vertex: { module: resolve, entryPoint: 'vs' },
-      fragment: { module: resolve, entryPoint: 'fs', targets: [{ format: HDR }] },
       primitive,
-      // depth is already final: the resolve neither tests nor writes it
-      depthStencil: { format: DEPTH, depthWriteEnabled: false, depthCompare: 'always' },
+      vertex: { entryPoint: 'vs', module: resolve },
     });
   }
 
   resize(targets) {
     this.ids?.destroy();
     this.ids = this.device.createTexture({
+      format: ID_FORMAT,
       label: 'prop-ids',
       size: [targets.width, targets.height],
-      format: ID_FORMAT,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      usage: flags(GPUTextureUsage.RENDER_ATTACHMENT, GPUTextureUsage.TEXTURE_BINDING),
     });
     this.idView = this.ids.createView();
     this.idGroup = bindGroup(this.device, this.idLayout, [this.idView], 'prop-ids');
   }
 
-  // Raster pass: clears the scene depth and fills it with the props.
-  encode(encoder, targets, frameGroup, shadowGroup, drawProps) {
+  // Raster pass: clears the scene depth and fills it with the props when `shouldDraw`.
+  // `groups` holds the shared `frame` and `shadow` bind groups.
+  encode(encoder, targets, groups, shouldDraw) {
     const pass = encoder.beginRenderPass({
-      label: 'prop-visibility',
-      colorAttachments: [{ view: this.idView, loadOp: 'clear', storeOp: 'store', clearValue: [EMPTY, 0, 0, 0] }],
+      colorAttachments: [{ clearValue: [EMPTY, 0, 0, 0], loadOp: 'clear', storeOp: 'store', view: this.idView }],
       depthStencilAttachment: {
-        view: targets.views.depth,
         depthClearValue: 0,
         depthLoadOp: 'clear',
         depthStoreOp: 'store',
+        view: targets.views.depth,
       },
+      label: 'prop-visibility',
     });
-    if (drawProps) {
+    if (shouldDraw) {
       pass.setPipeline(this.rasterPipeline);
-      pass.setBindGroup(0, frameGroup);
-      pass.setBindGroup(1, shadowGroup);
-      pass.setBindGroup(2, this.dataGroup);
+      pass.setBindGroup(GROUP.frame, groups.frame);
+      pass.setBindGroup(GROUP.shadow, groups.shadow);
+      pass.setBindGroup(GROUP.data, this.dataGroup);
       pass.drawIndirect(this.props.drawArgs, 0);
     }
     pass.end();
@@ -83,10 +97,10 @@ export class PropsVisibility {
   // Shades the covered pixels, inside the opaque pass.
   resolve(pass, frameGroup, shadowGroup) {
     pass.setPipeline(this.resolvePipeline);
-    pass.setBindGroup(0, frameGroup);
-    pass.setBindGroup(1, shadowGroup);
-    pass.setBindGroup(2, this.dataGroup);
-    pass.setBindGroup(3, this.idGroup);
-    pass.draw(3);
+    pass.setBindGroup(GROUP.frame, frameGroup);
+    pass.setBindGroup(GROUP.shadow, shadowGroup);
+    pass.setBindGroup(GROUP.data, this.dataGroup);
+    pass.setBindGroup(GROUP.ids, this.idGroup);
+    pass.draw(FULLSCREEN_VERTICES);
   }
 }

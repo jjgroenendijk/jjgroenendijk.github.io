@@ -1,96 +1,115 @@
 // Bakes the ground material textures once at start-up (see shaders/materials.js):
 // patterns -> normals and occlusion -> mip chains.
-import { shader, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { groundBakeWGSL, groundDeriveWGSL, groundMipWGSL, MAT_TEX, GROUND_COUNT } from '../shaders/materials.js';
+import { GROUND_COUNT, MAT_TEX, groundBakeWGSL, groundDeriveWGSL, groundMipWGSL } from '../shaders/materials.js';
+import { bindGroup, bindLayout, entry, flags, shader } from '../core/gpu.js';
 
-const FORMAT = 'rgba8unorm';
-const MIPS = Math.log2(MAT_TEX) + 1;
-const C = () => GPUShaderStage.COMPUTE;
+// The bake, derive and mip shaders run 8x8 workgroups, one layer per ground material.
+const FORMAT = 'rgba8unorm',
+  MAX_ANISOTROPY = 8,
+  MIPS = Math.log2(MAT_TEX) + 1,
+  WORKGROUP = 8,
+  compute = () => GPUShaderStage.COMPUTE,
+  // Stage is { code, entryPoint }.
+  computePipeline = (device, label, layout, stage) =>
+    device.createComputePipelineAsync({
+      compute: { entryPoint: stage.entryPoint, module: shader(device, stage.code, label) },
+      label,
+      layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
+    }),
+  mipView = (texture, mip) => texture.createView({ baseMipLevel: mip, dimension: '2d-array', mipLevelCount: 1 }),
+  storageUsage = () => flags(GPUTextureUsage.STORAGE_BINDING, GPUTextureUsage.TEXTURE_BINDING),
+  workgroups = (size) => [Math.ceil(size / WORKGROUP), Math.ceil(size / WORKGROUP), GROUND_COUNT];
 
 export class GroundMaterials {
   constructor(device) {
     this.device = device;
-    const usage = GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING;
-    const tex = (label, mips) =>
+    const tex = (label) =>
       device.createTexture({
-        label,
-        size: [MAT_TEX, MAT_TEX, GROUND_COUNT],
         format: FORMAT,
-        mipLevelCount: mips,
-        usage,
+        label,
+        mipLevelCount: MIPS,
+        size: [MAT_TEX, MAT_TEX, GROUND_COUNT],
+        usage: storageUsage(),
       });
-    this.albedo = tex('ground-albedo-height', MIPS);
-    this.surface = tex('ground-normal-rough-ao', MIPS);
-    this.views = [this.albedo, this.surface].map((t) => t.createView({ dimension: '2d-array' }));
-    // anisotropic filtering keeps grazing views of the ground sharp
+    this.albedo = tex('ground-albedo-height');
+    this.surface = tex('ground-normal-rough-ao');
+    this.views = [this.albedo, this.surface].map((texture) => texture.createView({ dimension: '2d-array' }));
+    // Anisotropic filtering keeps grazing views of the ground sharp
     this.sampler = device.createSampler({
-      label: 'ground',
       addressModeU: 'repeat',
       addressModeV: 'repeat',
+      label: 'ground',
       magFilter: 'linear',
+      maxAnisotropy: MAX_ANISOTROPY,
       minFilter: 'linear',
       mipmapFilter: 'linear',
-      maxAnisotropy: 8,
     });
-    this.ready = this.bake(); // pipelines compile asynchronously
+    // Pipelines compile asynchronously
+    this.ready = this.bake();
   }
 
   async bake() {
-    const d = this.device;
-    const rough = d.createTexture({
-      label: 'ground-rough',
-      size: [MAT_TEX, MAT_TEX, GROUND_COUNT],
-      format: FORMAT,
-      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
-    });
-    const level = (t, m) => t.createView({ dimension: '2d-array', baseMipLevel: m, mipLevelCount: 1 });
-    const pipeline = (code, label, entryPoint, layout) =>
-      d.createComputePipelineAsync({
-        label,
-        layout: d.createPipelineLayout({ bindGroupLayouts: [layout] }),
-        compute: { module: shader(d, code, label), entryPoint },
-      });
-    const enc = d.createCommandEncoder({ label: 'ground-bake' });
-    const pass = enc.beginComputePass({ label: 'ground-bake' });
-    const groups = (n) => [Math.ceil(n / 8), Math.ceil(n / 8), GROUND_COUNT];
+    const rough = this.device.createTexture({
+        format: FORMAT,
+        label: 'ground-rough',
+        size: [MAT_TEX, MAT_TEX, GROUND_COUNT],
+        usage: storageUsage(),
+      }),
+      encoder = this.device.createCommandEncoder({ label: 'ground-bake' }),
+      pass = encoder.beginComputePass({ label: 'ground-bake' });
+    await this.bakeBase(pass, rough);
+    await this.bakeDerived(pass, rough);
+    await this.bakeMips(pass);
+    pass.end();
+    this.device.queue.submit([encoder.finish()]);
+    rough.destroy();
+  }
 
-    const bakeLayout = bindLayout(d, 'ground-bake', [
+  async bakeBase(pass, rough) {
+    const layout = bindLayout(this.device, 'ground-bake', [
       entry.storageTexture(FORMAT, '2d-array'),
       entry.storageTexture(FORMAT, '2d-array'),
     ]);
-    pass.setPipeline(await pipeline(groundBakeWGSL, 'ground-bake', 'main', bakeLayout));
-    pass.setBindGroup(0, bindGroup(d, bakeLayout, [level(this.albedo, 0), level(rough, 0)]));
-    pass.dispatchWorkgroups(...groups(MAT_TEX));
+    pass.setPipeline(
+      await computePipeline(this.device, 'ground-bake', layout, { code: groundBakeWGSL, entryPoint: 'main' }),
+    );
+    pass.setBindGroup(0, bindGroup(this.device, layout, [mipView(this.albedo, 0), mipView(rough, 0)]));
+    pass.dispatchWorkgroups(...workgroups(MAT_TEX));
+  }
 
-    const deriveLayout = bindLayout(d, 'ground-derive', [
-      entry.texture('float', '2d-array', C()),
-      entry.texture('float', '2d-array', C()),
+  async bakeDerived(pass, rough) {
+    const layout = bindLayout(this.device, 'ground-derive', [
+      entry.texture('float', '2d-array', compute()),
+      entry.texture('float', '2d-array', compute()),
       entry.storageTexture(FORMAT, '2d-array'),
     ]);
-    pass.setPipeline(await pipeline(groundDeriveWGSL, 'ground-derive', 'main', deriveLayout));
-    pass.setBindGroup(0, bindGroup(d, deriveLayout, [level(this.albedo, 0), level(rough, 0), level(this.surface, 0)]));
-    pass.dispatchWorkgroups(...groups(MAT_TEX));
+    pass.setPipeline(
+      await computePipeline(this.device, 'ground-derive', layout, { code: groundDeriveWGSL, entryPoint: 'main' }),
+    );
+    pass.setBindGroup(
+      0,
+      bindGroup(this.device, layout, [mipView(this.albedo, 0), mipView(rough, 0), mipView(this.surface, 0)]),
+    );
+    pass.dispatchWorkgroups(...workgroups(MAT_TEX));
+  }
 
-    const mipLayout = bindLayout(d, 'ground-mip', [
-      entry.texture('float', '2d-array', C()),
-      entry.storageTexture(FORMAT, '2d-array'),
-    ]);
-    const mips = {
-      albedo: pipeline(groundMipWGSL, 'ground-mip-albedo', 'albedo', mipLayout),
-      surface: pipeline(groundMipWGSL, 'ground-mip-surface', 'surface', mipLayout),
-    };
-    for (const [t, p] of [
-      [this.albedo, mips.albedo],
-      [this.surface, mips.surface],
-    ]) {
-      pass.setPipeline(await p);
-      for (let m = 1; m < MIPS; m++) {
-        pass.setBindGroup(0, bindGroup(d, mipLayout, [level(t, m - 1), level(t, m)]));
-        pass.dispatchWorkgroups(...groups(MAT_TEX >> m));
+  async bakeMips(pass) {
+    const layout = bindLayout(this.device, 'ground-mip', [
+        entry.texture('float', '2d-array', compute()),
+        entry.storageTexture(FORMAT, '2d-array'),
+      ]),
+      // Both mip pipelines compile in parallel
+      pipelines = await Promise.all(
+        ['albedo', 'surface'].map((entryPoint) =>
+          computePipeline(this.device, `ground-mip-${entryPoint}`, layout, { code: groundMipWGSL, entryPoint }),
+        ),
+      );
+    for (const [index, texture] of [this.albedo, this.surface].entries()) {
+      pass.setPipeline(pipelines[index]);
+      for (let mip = 1; mip < MIPS; mip += 1) {
+        pass.setBindGroup(0, bindGroup(this.device, layout, [mipView(texture, mip - 1), mipView(texture, mip)]));
+        pass.dispatchWorkgroups(...workgroups(Math.floor(MAT_TEX / 2 ** mip)));
       }
     }
-    pass.end();
-    d.queue.submit([enc.finish()]);
-    rough.destroy();
   }
 }

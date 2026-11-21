@@ -1,12 +1,21 @@
 // Ocean surface (refraction, screen-space reflections, foam) and floating
 // particles, rendered on top of a copy of the opaque scene.
-import { shader, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { waterWGSL, particleWGSL, reflectionWGSL } from '../shaders/water.js';
 import { HDR, depthState } from './layouts.js';
+import { bindGroup, bindLayout, entry, flags, shader } from '../core/gpu.js';
+import { particleWGSL, reflectionWGSL, waterWGSL } from '../shaders/water.js';
 
-const PARTICLES = 2400;
+// The reflection pass draws one fullscreen triangle, each particle a two-triangle quad.
+const ADDITIVE = { alpha: { dstFactor: 'one', srcFactor: 'one' }, color: { dstFactor: 'one', srcFactor: 'one' } },
+  FULLSCREEN_VERTICES = 3,
+  PARTICLES = 2400,
+  QUAD_VERTICES = 6;
 
 export class WaterPass {
+  refl;
+  reflGroup;
+  reflView;
+  sceneGroup;
+
   constructor(device, shared) {
     this.device = device;
     this.shared = shared;
@@ -16,41 +25,54 @@ export class WaterPass {
       entry.texture('depth'),
       entry.sampler(),
     ]);
-    const refl = shader(device, reflectionWGSL, 'water-reflection');
-    this.reflPipeline = device.createRenderPipelineAsync({
+    this.reflPipeline = this.createReflectionPipeline();
+    this.pipeline = this.createWaterPipeline();
+    this.particlePipeline = this.createParticlePipeline();
+  }
+
+  createReflectionPipeline() {
+    const refl = shader(this.device, reflectionWGSL, 'water-reflection');
+    return this.device.createRenderPipelineAsync({
+      fragment: { entryPoint: 'fs', module: refl, targets: [{ format: HDR }] },
       label: 'water-reflection',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.reflLayout] }),
-      vertex: { module: refl, entryPoint: 'vs' },
-      fragment: { module: refl, entryPoint: 'fs', targets: [{ format: HDR }] },
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.shared.frame, this.reflLayout] }),
       primitive: { topology: 'triangle-list' },
+      vertex: { entryPoint: 'vs', module: refl },
     });
-    const water = shader(device, waterWGSL, 'water');
-    this.pipeline = device.createRenderPipelineAsync({
+  }
+
+  createWaterPipeline() {
+    const water = shader(this.device, waterWGSL, 'water');
+    return this.device.createRenderPipelineAsync({
+      depthStencil: depthState(false),
+      fragment: { entryPoint: 'fs', module: water, targets: [{ format: HDR }] },
       label: 'water',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow, this.sceneLayout] }),
-      vertex: { module: water, entryPoint: 'vs' },
-      fragment: { module: water, entryPoint: 'fs', targets: [{ format: HDR }] },
-      primitive: { topology: 'triangle-list', cullMode: 'none' },
-      depthStencil: depthState(false),
+      layout: this.device.createPipelineLayout({
+        bindGroupLayouts: [this.shared.frame, this.shared.shadow, this.sceneLayout],
+      }),
+      primitive: { cullMode: 'none', topology: 'triangle-list' },
+      vertex: { entryPoint: 'vs', module: water },
     });
-    const particles = shader(device, particleWGSL, 'particles');
-    const additive = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } };
-    this.particlePipeline = device.createRenderPipelineAsync({
-      label: 'particles',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.shadow] }),
-      vertex: { module: particles, entryPoint: 'vs' },
-      fragment: { module: particles, entryPoint: 'fs', targets: [{ format: HDR, blend: additive }] },
+  }
+
+  createParticlePipeline() {
+    const particles = shader(this.device, particleWGSL, 'particles');
+    return this.device.createRenderPipelineAsync({
       depthStencil: depthState(false),
+      fragment: { entryPoint: 'fs', module: particles, targets: [{ blend: ADDITIVE, format: HDR }] },
+      label: 'particles',
+      layout: this.device.createPipelineLayout({ bindGroupLayouts: [this.shared.frame, this.shared.shadow] }),
+      vertex: { entryPoint: 'vs', module: particles },
     });
   }
 
   resize(targets) {
     this.refl?.destroy();
     this.refl = this.device.createTexture({
-      label: 'water-reflection',
-      size: [Math.max(1, targets.width >> 1), Math.max(1, targets.height >> 1)],
       format: HDR,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      label: 'water-reflection',
+      size: [Math.max(1, Math.floor(targets.width / 2)), Math.max(1, Math.floor(targets.height / 2))],
+      usage: flags(GPUTextureUsage.RENDER_ATTACHMENT, GPUTextureUsage.TEXTURE_BINDING),
     });
     this.reflView = this.refl.createView();
     this.sceneGroup = bindGroup(
@@ -67,24 +89,30 @@ export class WaterPass {
     );
   }
 
+  // Screen-space reflections of the scene copy, at half resolution.
+  renderReflection(encoder, frameGroup) {
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{ clearValue: [0, 0, 0, 0], loadOp: 'clear', storeOp: 'store', view: this.reflView }],
+      label: 'water-reflection',
+    });
+    pass.setPipeline(this.reflPipeline);
+    pass.setBindGroup(0, frameGroup);
+    pass.setBindGroup(1, this.reflGroup);
+    pass.draw(FULLSCREEN_VERTICES);
+    pass.end();
+  }
+
+  // eslint-disable-next-line max-params -- renderer.js calls encode with these five positional arguments
   encode(encoder, targets, frameGroup, shadowGroup, terrain) {
     encoder.copyTextureToTexture({ texture: targets.hdr }, { texture: targets.sceneCopy }, [
       targets.width,
       targets.height,
     ]);
-    const rp = encoder.beginRenderPass({
-      label: 'water-reflection',
-      colorAttachments: [{ view: this.reflView, loadOp: 'clear', storeOp: 'store', clearValue: [0, 0, 0, 0] }],
-    });
-    rp.setPipeline(this.reflPipeline);
-    rp.setBindGroup(0, frameGroup);
-    rp.setBindGroup(1, this.reflGroup);
-    rp.draw(3);
-    rp.end();
+    this.renderReflection(encoder, frameGroup);
     const pass = encoder.beginRenderPass({
+      colorAttachments: [{ loadOp: 'load', storeOp: 'store', view: targets.views.hdr }],
+      depthStencilAttachment: { depthReadOnly: true, view: targets.views.depth },
       label: 'water',
-      colorAttachments: [{ view: targets.views.hdr, loadOp: 'load', storeOp: 'store' }],
-      depthStencilAttachment: { view: targets.views.depth, depthReadOnly: true },
     });
     pass.setPipeline(this.pipeline);
     pass.setBindGroup(0, frameGroup);
@@ -92,7 +120,7 @@ export class WaterPass {
     pass.setBindGroup(2, this.sceneGroup);
     terrain.drawCulled(pass);
     pass.setPipeline(this.particlePipeline);
-    pass.draw(6, PARTICLES);
+    pass.draw(QUAD_VERTICES, PARTICLES);
     pass.end();
   }
 }

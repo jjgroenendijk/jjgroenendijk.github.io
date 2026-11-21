@@ -1,40 +1,78 @@
 // Cascaded shadow maps: three stabilised orthographic cascades around the camera.
-import { bindGroup } from '../core/gpu.js';
-import { mat4, vec3, frustumPlanes } from '../core/math.js';
+import { bindGroup, flags } from '../core/gpu.js';
+import { frustumPlanes, mat4, vec3 } from '../core/math.js';
 import { DEPTH } from './layouts.js';
 import { W } from '../world/noise.js';
 
-const CASCADES = 3;
-export const SPLITS = [16, 60, 280];
-const CASTER_RANGE = 700; // how far towards the light casters are captured
-// shadow cache: maximum age in frames per cascade, and what forces a re-render
-const MAX_AGE = [1, 2, 8];
-const LIGHT_COS = Math.cos((0.3 * Math.PI) / 180);
-const FWD_COS = Math.cos((1 * Math.PI) / 180);
-const MOVE_FRACTION = 0.02; // of the cascade radius
-
-// shortest offset in the wrapping world
-function wrapped(d) {
-  for (const k of [0, 2]) d[k] -= Math.round(d[k] / W) * W;
-  return d;
-}
+// Per cascade: far split (m), the shadow cache's maximum age in frames, and the terrain clipmap levels drawn into it.
+const CASCADE = [
+    { far: 16, maxAge: 1, terrainLevels: 3 },
+    { far: 60, maxAge: 2, terrainLevels: 5 },
+    { far: 280, maxAge: 8, terrainLevels: 5 },
+  ],
+  // How far towards the light casters are captured.
+  CASTER_RANGE = 700,
+  // Near end of the first cascade's slice.
+  FIRST_NEAR = 0.1,
+  HALF_TURN_DEG = 180,
+  // Light turn (degrees) that forces a cascade re-render.
+  LIGHT_DEG = 0.3,
+  MATRIX_BYTES = 64,
+  // Camera movement, as a fraction of the cascade radius, that forces a re-render.
+  MOVE_FRACTION = 0.02,
+  // Above this |light.y| the light-space basis is built from the x axis instead of y.
+  POLE_COS = 0.99,
+  // A one-degree camera turn forces a re-render.
+  REDRAW_FWD_COS = Math.cos(Math.PI / HALF_TURN_DEG),
+  REDRAW_LIGHT_COS = Math.cos((LIGHT_DEG * Math.PI) / HALF_TURN_DEG),
+  SPLITS = CASCADE.map((cascade) => cascade.far),
+  // Light-space axes: `toLight` is the unit vector towards the light, `lx` and `ly` span the shadow map.
+  lightBasis = (light) => {
+    const lightAxis = vec3.normalize(light),
+      // Any axis off the light direction spans the map plane: y, or x when the light is near vertical.
+      lx = vec3.normalize(vec3.cross((Math.abs(lightAxis[1]) > POLE_COS && [1, 0, 0]) || [0, 1, 0], lightAxis));
+    return { lx, ly: vec3.cross(lightAxis, lx), toLight: lightAxis };
+  },
+  // Bounding sphere of a cascade's view slice (radius depends only on fov and split => stable), camera-relative
+  // centre made absolute.
+  sliceSphere = (near, far, camera) => {
+    const halfHeight = far * Math.tan(camera.fov / 2),
+      mid = (near + far) / 2,
+      radius = Math.ceil(Math.hypot(far - mid, halfHeight, halfHeight * camera.aspect));
+    return { center: vec3.add(vec3.scale(camera.fwd, mid), camera.pos), radius };
+  },
+  // Snaps the centre to whole shadow texels in light space.
+  snapToTexels = (center, radius, size, { lx, ly, toLight }) => {
+    const texel = (2 * radius) / size,
+      toGrid = (axis) => vec3.scale(axis, Math.round(vec3.dot(center, axis) / texel) * texel);
+    return vec3.add(vec3.add(toGrid(lx), toGrid(ly)), vec3.scale(toLight, vec3.dot(center, toLight)));
+  },
+  // Shortest offset in the wrapping world.
+  wrapped = (d) => {
+    for (const k of [0, 2]) d[k] -= Math.round(d[k] / W) * W;
+    return d;
+  };
 
 export class ShadowPass {
+  // Per cascade: whether this frame re-renders it, and the camera and light it was last rendered with.
+  active;
+  rendered = [];
+
   constructor(device, shared, size, cloudMapView) {
     this.device = device;
     this.size = size;
     this.texture = device.createTexture({
-      label: 'shadow-map',
-      size: [size, size, CASCADES],
       format: DEPTH,
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
+      label: 'shadow-map',
+      size: [size, size, CASCADE.length],
+      usage: flags(GPUTextureUsage.RENDER_ATTACHMENT, GPUTextureUsage.TEXTURE_BINDING),
     });
-    this.layerViews = Array.from({ length: CASCADES }, (_, i) =>
-      this.texture.createView({ dimension: '2d', baseArrayLayer: i, arrayLayerCount: 1 }),
+    this.layerViews = Array.from({ length: CASCADE.length }, (_, layer) =>
+      this.texture.createView({ arrayLayerCount: 1, baseArrayLayer: layer, dimension: '2d' }),
     );
     this.arrayView = this.texture.createView({ dimension: '2d-array' });
-    this.buffers = Array.from({ length: CASCADES }, () =>
-      device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+    this.buffers = Array.from({ length: CASCADE.length }, () =>
+      device.createBuffer({ size: MATRIX_BYTES, usage: flags(GPUBufferUsage.UNIFORM, GPUBufferUsage.COPY_DST) }),
     );
     this.groups = this.buffers.map((b) => bindGroup(device, shared.cascade, [b]));
     this.sampleGroup = bindGroup(
@@ -43,95 +81,93 @@ export class ShadowPass {
       [this.arrayView, shared.compare, shared.linear, cloudMapView],
       'shadow-sample',
     );
-    this.matrices = Array.from({ length: CASCADES }, () => mat4.identity());
+    this.matrices = Array.from({ length: CASCADE.length }, () => mat4.identity());
   }
 
   // Cached cascades: a cascade is re-rendered when it is older than its
   // maximum age or the view / light moved noticeably; otherwise last render's
   // map is reused with its matrix shifted by the camera's movement.
-  plan(camera, L, frame) {
-    this.rendered ||= [];
-    return Array.from({ length: CASCADES }, (_, c) => {
+  plan(camera, toLight, frame) {
+    return CASCADE.map((cascade, c) => {
       const r = this.rendered[c];
-      if (!r || frame === 0 || frame - r.frame >= MAX_AGE[c]) return true;
-      if (vec3.dot(L, r.light) < LIGHT_COS || vec3.dot(camera.fwd, r.fwd) < FWD_COS) return true;
-      return vec3.length(wrapped(vec3.sub(camera.pos, r.pos))) > r.radius * MOVE_FRACTION;
+      return (
+        !r ||
+        frame === 0 ||
+        frame - r.frame >= cascade.maxAge ||
+        vec3.dot(toLight, r.light) < REDRAW_LIGHT_COS ||
+        vec3.dot(camera.fwd, r.fwd) < REDRAW_FWD_COS ||
+        vec3.length(wrapped(vec3.sub(camera.pos, r.pos))) > r.radius * MOVE_FRACTION
+      );
     });
   }
 
-  // camera: { pos (world), fwd, fov, aspect }, light: unit vector towards the light
+  // Camera: { pos (world), fwd, fov, aspect }, light: unit vector towards the light.
   update(camera, light, frame) {
-    const L = vec3.normalize(light);
-    this.active = this.plan(camera, L, frame);
-    const helper = Math.abs(L[1]) > 0.99 ? [1, 0, 0] : [0, 1, 0];
-    const lx = vec3.normalize(vec3.cross(helper, L));
-    const ly = vec3.cross(L, lx);
-    const tanV = Math.tan(camera.fov / 2);
-    let near = 0.1;
-    for (let c = 0; c < CASCADES; c++) {
-      const far = SPLITS[c];
-      const mid = (near + far) / 2;
-      near = far;
-      if (!this.active[c]) {
-        const r = this.rendered[c];
-        const d = wrapped(vec3.sub(camera.pos, r.pos));
-        this.matrices[c] = mat4.multiply(r.matrix, mat4.translation(d[0], d[1], d[2]));
-        this.device.queue.writeBuffer(this.buffers[c], 0, this.matrices[c]);
-        continue;
-      }
-      const hFar = far * tanV,
-        wFar = hFar * camera.aspect;
-      // bounding sphere of the slice (radius depends only on fov and split => stable)
-      const radius = Math.ceil(Math.hypot(far - mid, hFar, wFar));
-      const centerRel = vec3.scale(camera.fwd, mid);
-      const centerAbs = vec3.add(centerRel, camera.pos);
-      // snap the centre to whole shadow texels in light space
-      const texel = (2 * radius) / this.size;
-      const sx = Math.round(vec3.dot(centerAbs, lx) / texel) * texel;
-      const sy = Math.round(vec3.dot(centerAbs, ly) / texel) * texel;
-      const sz = vec3.dot(centerAbs, L);
-      const snapped = vec3.add(vec3.add(vec3.scale(lx, sx), vec3.scale(ly, sy)), vec3.scale(L, sz));
-      const rel = vec3.sub(snapped, camera.pos);
-      const eye = vec3.add(rel, vec3.scale(L, CASTER_RANGE));
-      const view = mat4.multiply(
-        mat4.viewFromBasis(lx, ly, vec3.scale(L, -1)),
-        mat4.translation(-eye[0], -eye[1], -eye[2]),
-      );
-      const proj = mat4.ortho(-radius, radius, -radius, radius, 0.5, CASTER_RANGE + radius);
-      this.matrices[c] = mat4.multiply(proj, view);
-      this.rendered[c] = {
-        matrix: this.matrices[c],
-        pos: [...camera.pos],
-        fwd: [...camera.fwd],
-        light: L,
-        radius,
-        frame,
-      };
+    const basis = lightBasis(light);
+    this.active = this.plan(camera, basis.toLight, frame);
+    for (const [c, isActive] of this.active.entries()) {
+      if (isActive) this.fit(c, camera, basis, frame);
+      else this.reuse(c, camera);
       this.device.queue.writeBuffer(this.buffers[c], 0, this.matrices[c]);
     }
   }
 
-  encode(encoder, frameGroup, terrain, props) {
-    for (let c = 0; c < CASCADES; c++) {
-      if (!this.active[c]) continue;
-      const pass = encoder.beginRenderPass({
-        label: `shadow-${c}`,
-        colorAttachments: [],
-        depthStencilAttachment: {
-          view: this.layerViews[c],
-          depthClearValue: 1,
-          depthLoadOp: 'clear',
-          depthStoreOp: 'store',
-        },
-      });
-      terrain.drawShadow(
-        pass,
-        frameGroup,
-        this.groups[c],
-        terrain.visibleDraws(frustumPlanes(this.matrices[c]), c === 0 ? 3 : 5),
+  // Fits cascade `c` to its view slice and records what it was rendered with.
+  fit(c, camera, basis, frame) {
+    const { center, radius } = sliceSphere([FIRST_NEAR, ...SPLITS][c], SPLITS[c], camera),
+      eye = vec3.add(
+        vec3.sub(snapToTexels(center, radius, this.size, basis), camera.pos),
+        vec3.scale(basis.toLight, CASTER_RANGE),
+      ),
+      proj = mat4.ortho(-radius, radius, -radius, radius, 0.5, CASTER_RANGE + radius),
+      view = mat4.multiply(
+        mat4.viewFromBasis(basis.lx, basis.ly, vec3.scale(basis.toLight, -1)),
+        mat4.translation(-eye[0], -eye[1], -eye[2]),
       );
-      props.drawShadow(pass, frameGroup, this.groups[c], c);
-      pass.end();
-    }
+    this.matrices[c] = mat4.multiply(proj, view);
+    this.rendered[c] = {
+      frame,
+      fwd: [...camera.fwd],
+      light: basis.toLight,
+      matrix: this.matrices[c],
+      pos: [...camera.pos],
+      radius,
+    };
+  }
+
+  // Reuses cascade `c`'s last map, shifting its matrix by the camera's movement since.
+  reuse(c, camera) {
+    const { matrix, pos } = this.rendered[c],
+      d = wrapped(vec3.sub(camera.pos, pos));
+    this.matrices[c] = mat4.multiply(matrix, mat4.translation(d[0], d[1], d[2]));
+  }
+
+  encode(encoder, frameGroup, terrain, scatter) {
+    for (const [c, isActive] of this.active.entries())
+      if (isActive) this.encodeCascade(encoder, c, frameGroup, { scatter, terrain });
+  }
+
+  // Renders cascade `c`'s casters: the terrain tiles inside its frustum and the props.
+  encodeCascade(encoder, c, frameGroup, { scatter, terrain }) {
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [],
+      depthStencilAttachment: {
+        depthClearValue: 1,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store',
+        view: this.layerViews[c],
+      },
+      label: `shadow-${c}`,
+    });
+    terrain.drawShadow(
+      pass,
+      frameGroup,
+      this.groups[c],
+      terrain.visibleDraws(frustumPlanes(this.matrices[c]), CASCADE[c].terrainLevels),
+    );
+    scatter.drawShadow(pass, frameGroup, this.groups[c], c);
+    pass.end();
   }
 }
+
+export { SPLITS };

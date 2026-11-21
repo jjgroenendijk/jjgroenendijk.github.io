@@ -1,23 +1,50 @@
 // Post processing chain: volumetric light, temporal AA, bloom, tonemapping.
-import { shader, bindLayout, bindGroup, entry } from '../core/gpu.js';
-import { volumeWGSL, taaWGSL, bloomDownWGSL, bloomUpWGSL, compositeWGSL } from '../shaders/post.js';
+import { bindGroup, bindLayout, entry, flags, shader } from '../core/gpu.js';
+import { bloomDownWGSL, bloomUpWGSL, compositeWGSL, taaWGSL, volumeWGSL } from '../shaders/post.js';
 import { HDR } from './layouts.js';
 
+// Every pass draws one fullscreen triangle. A bloom step's uniform is one vec4f: texel size and the shader's
+// karis value (1 enables the Karis average on the first downsample and is the weight of each upsample).
+const ADDITIVE = { alpha: { dstFactor: 'one', srcFactor: 'one' }, color: { dstFactor: 'one', srcFactor: 'one' } },
+  BLOOM_UNIFORM_BYTES = 16,
+  FULLSCREEN_VERTICES = 3,
+  // Size of bloom mip `level`: the chain starts at half the render resolution.
+  bloomSize = (size, level) => Math.max(1, Math.floor(size / 2 ** (level + 1))),
+  // Draws one fullscreen pass into view; loadOp 'load' blends onto what is there.
+  drawFullscreen = (encoder, { groups, label, loadOp = 'clear', pipeline, view }) => {
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{ clearValue: [0, 0, 0, 1], loadOp, storeOp: 'store', view }],
+      label,
+    });
+    pass.setPipeline(pipeline);
+    for (const [index, group] of groups.entries()) pass.setBindGroup(index, group);
+    pass.draw(FULLSCREEN_VERTICES);
+    pass.end();
+  };
+
 export class PostPass {
+  bloomDown;
+  bloomUp;
+  compGroups;
+  depthGroup;
+  taaGroups;
+
   constructor(device, shared, outputFormat) {
     this.device = device;
     this.shared = shared;
-    const fullscreen = (label, code, layouts, format, blend) => {
+    const fullscreen = (label, code, layouts, target) => {
       const module = shader(device, code, label);
       return device.createRenderPipelineAsync({
+        fragment: { entryPoint: 'fs', module, targets: [target] },
         label,
         layout: device.createPipelineLayout({ bindGroupLayouts: layouts }),
-        vertex: { module, entryPoint: 'vs' },
-        fragment: { module, entryPoint: 'fs', targets: [{ format, blend }] },
+        vertex: { entryPoint: 'vs', module },
       });
     };
     this.depthLayout = bindLayout(device, 'depth-only', [entry.texture('depth')]);
-    this.volumePipeline = fullscreen('volume', volumeWGSL, [shared.frame, shared.shadow, this.depthLayout], HDR);
+    this.volumePipeline = fullscreen('volume', volumeWGSL, [shared.frame, shared.shadow, this.depthLayout], {
+      format: HDR,
+    });
 
     this.taaLayout = bindLayout(device, 'taa', [
       entry.texture(),
@@ -26,81 +53,102 @@ export class PostPass {
       entry.texture('depth'),
       entry.sampler(),
     ]);
-    this.taaPipeline = fullscreen('taa', taaWGSL, [shared.frame, this.taaLayout], HDR);
+    this.taaPipeline = fullscreen('taa', taaWGSL, [shared.frame, this.taaLayout], { format: HDR });
 
     this.bloomLayout = bindLayout(device, 'bloom', [
       entry.texture(),
       entry.sampler(),
       entry.uniform(false, GPUShaderStage.FRAGMENT),
     ]);
-    this.downPipeline = fullscreen('bloom-down', bloomDownWGSL, [this.bloomLayout], HDR);
-    const add = { color: { srcFactor: 'one', dstFactor: 'one' }, alpha: { srcFactor: 'one', dstFactor: 'one' } };
-    this.upPipeline = fullscreen('bloom-up', bloomUpWGSL, [this.bloomLayout], HDR, add);
+    this.downPipeline = fullscreen('bloom-down', bloomDownWGSL, [this.bloomLayout], { format: HDR });
+    this.upPipeline = fullscreen('bloom-up', bloomUpWGSL, [this.bloomLayout], { blend: ADDITIVE, format: HDR });
 
     this.compLayout = bindLayout(device, 'composite', [entry.texture(), entry.texture(), entry.sampler()]);
-    this.compositePipeline = fullscreen('composite', compositeWGSL, [shared.frame, this.compLayout], outputFormat);
+    this.compositePipeline = fullscreen('composite', compositeWGSL, [shared.frame, this.compLayout], {
+      format: outputFormat,
+    });
+  }
+
+  // One bloom step reading `source`, a w x h texture.
+  bloomGroup(source, [w, h], karis) {
+    const uniforms = this.device.createBuffer({
+      size: BLOOM_UNIFORM_BYTES,
+      usage: flags(GPUBufferUsage.UNIFORM, GPUBufferUsage.COPY_DST),
+    });
+    this.device.queue.writeBuffer(uniforms, 0, new Float32Array([1 / w, 1 / h, karis, 0]));
+    return bindGroup(this.device, this.bloomLayout, [source, this.shared.linear, uniforms]);
   }
 
   resize(targets) {
-    const d = this.device,
-      s = this.shared;
-    this.depthGroup = bindGroup(d, this.depthLayout, [targets.views.depth]);
+    const mipSize = (level) => [bloomSize(targets.width, level), bloomSize(targets.height, level)];
+    this.depthGroup = bindGroup(this.device, this.depthLayout, [targets.views.depth]);
     // TAA ping-pong: group[i] writes history[i] and reads history[1-i]
-    this.taaGroups = [0, 1].map((i) =>
-      bindGroup(d, this.taaLayout, [
+    this.taaGroups = [0, 1].map((index) =>
+      bindGroup(this.device, this.taaLayout, [
         targets.views.hdr,
         targets.views.volume,
-        targets.views.history[1 - i],
+        targets.views.history[1 - index],
         targets.views.depth,
-        s.linear,
+        this.shared.linear,
       ]),
     );
-    this.compGroups = [0, 1].map((i) =>
-      bindGroup(d, this.compLayout, [targets.views.history[i], targets.bloomViews[0], s.linear]),
+    this.compGroups = [0, 1].map((index) =>
+      bindGroup(this.device, this.compLayout, [
+        targets.views.history[index],
+        targets.bloomViews[0],
+        this.shared.linear,
+      ]),
     );
-    // bloom chain
-    const mk = (src, w, h, k) => {
-      const ub = d.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
-      d.queue.writeBuffer(ub, 0, new Float32Array([1 / w, 1 / h, k, 0]));
-      return bindGroup(d, this.bloomLayout, [src, s.linear, ub]);
-    };
-    const bw = (i) => Math.max(1, (targets.width >> 1) >> i),
-      bh = (i) => Math.max(1, (targets.height >> 1) >> i);
-    this.bloomDown = [0, 1].map((h) => [mk(targets.views.history[h], targets.width, targets.height, 1)]);
-    for (let i = 1; i < targets.bloomMips; i++) {
-      const g = mk(targets.bloomViews[i - 1], bw(i - 1), bh(i - 1), 0);
-      this.bloomDown[0].push(g);
-      this.bloomDown[1].push(g);
+    // Bloom chain
+    this.bloomDown = [0, 1].map((history) => [
+      this.bloomGroup(targets.views.history[history], [targets.width, targets.height], 1),
+    ]);
+    for (let level = 1; level < targets.bloomMips; level += 1) {
+      const group = this.bloomGroup(targets.bloomViews[level - 1], mipSize(level - 1), 0);
+      this.bloomDown[0].push(group);
+      this.bloomDown[1].push(group);
     }
     this.bloomUp = [];
-    for (let i = targets.bloomMips - 1; i > 0; i--)
-      this.bloomUp.push({ target: i - 1, group: mk(targets.bloomViews[i], bw(i), bh(i), 1) });
+    for (let level = targets.bloomMips - 1; level > 0; level -= 1)
+      this.bloomUp.push({ group: this.bloomGroup(targets.bloomViews[level], mipSize(level), 1), target: level - 1 });
   }
 
-  fullscreenPass(encoder, label, view, pipeline, groups, load = false) {
-    const pass = encoder.beginRenderPass({
-      label,
-      colorAttachments: [{ view, loadOp: load ? 'load' : 'clear', storeOp: 'store', clearValue: [0, 0, 0, 1] }],
-    });
-    pass.setPipeline(pipeline);
-    groups.forEach((g, i) => pass.setBindGroup(i, g));
-    pass.draw(3);
-    pass.end();
-  }
-
+  // eslint-disable-next-line max-params -- renderer.js calls encode with these six positional arguments
   encode(encoder, targets, frameGroup, shadowGroup, outputView, historyIndex) {
     const h = historyIndex;
-    this.fullscreenPass(encoder, 'volume', targets.views.volume, this.volumePipeline, [
-      frameGroup,
-      shadowGroup,
-      this.depthGroup,
-    ]);
-    this.fullscreenPass(encoder, 'taa', targets.views.history[h], this.taaPipeline, [frameGroup, this.taaGroups[h]]);
-    for (let i = 0; i < targets.bloomMips; i++) {
-      this.fullscreenPass(encoder, `bloom-down-${i}`, targets.bloomViews[i], this.downPipeline, [this.bloomDown[h][i]]);
+    drawFullscreen(encoder, {
+      groups: [frameGroup, shadowGroup, this.depthGroup],
+      label: 'volume',
+      pipeline: this.volumePipeline,
+      view: targets.views.volume,
+    });
+    drawFullscreen(encoder, {
+      groups: [frameGroup, this.taaGroups[h]],
+      label: 'taa',
+      pipeline: this.taaPipeline,
+      view: targets.views.history[h],
+    });
+    for (let level = 0; level < targets.bloomMips; level += 1) {
+      drawFullscreen(encoder, {
+        groups: [this.bloomDown[h][level]],
+        label: `bloom-down-${level}`,
+        pipeline: this.downPipeline,
+        view: targets.bloomViews[level],
+      });
     }
-    for (const u of this.bloomUp)
-      this.fullscreenPass(encoder, 'bloom-up', targets.bloomViews[u.target], this.upPipeline, [u.group], true);
-    this.fullscreenPass(encoder, 'composite', outputView, this.compositePipeline, [frameGroup, this.compGroups[h]]);
+    for (const step of this.bloomUp)
+      drawFullscreen(encoder, {
+        groups: [step.group],
+        label: 'bloom-up',
+        loadOp: 'load',
+        pipeline: this.upPipeline,
+        view: targets.bloomViews[step.target],
+      });
+    drawFullscreen(encoder, {
+      groups: [frameGroup, this.compGroups[h]],
+      label: 'composite',
+      pipeline: this.compositePipeline,
+      view: outputView,
+    });
   }
 }

@@ -1,56 +1,78 @@
 // Caustics on the sea floor near the camera: photons refracted through the
 // animated water surface are splatted into a map every frame.
-import { shader, buffer, bindLayout, bindGroup, entry, at } from '../core/gpu.js';
-import { causticSplatWGSL, causticResolveWGSL, CAUSTIC_N, CAUSTIC_SPAN, PHOTONS } from '../shaders/lighting.js';
+import { CAUSTIC_N, CAUSTIC_SPAN, PHOTONS, causticResolveWGSL, causticSplatWGSL } from '../shaders/lighting.js';
+import { at, bindGroup, bindLayout, buffer, entry, flags, shader } from '../core/gpu.js';
 
-const TEXEL = CAUSTIC_SPAN / CAUSTIC_N;
-const MAX_ALTITUDE = 150; // above this the sea floor detail is too small to matter
+// The photon accumulator holds one atomic u32 per map texel, at a binding above those the shared WGSL libraries
+// declare. Above MAX_ALTITUDE the sea floor detail is too small to matter, and below MIN_SUN_HEIGHT (the light
+// direction's y) there is too little sun to cast caustics. Both compute shaders run 8x8 workgroups.
+const ACCUMULATOR_BYTES_PER_TEXEL = 4,
+  MAX_ALTITUDE = 150,
+  MIN_SUN_HEIGHT = 0.02,
+  PHOTON_BINDING = 6,
+  TEXEL = CAUSTIC_SPAN / CAUSTIC_N,
+  WORKGROUP = 8,
+  snap = (v) => Math.floor(v / TEXEL) * TEXEL - CAUSTIC_SPAN / 2;
 
 export class CausticsPass {
+  active;
+  resolveGroup;
+  resolvePipeline;
+  splatGroup;
+  splatPipeline;
+
   constructor(device, frameBuffer, cacheView) {
     this.texture = device.createTexture({
+      format: 'rgba16float',
       label: 'caustics',
       size: [CAUSTIC_N, CAUSTIC_N],
-      format: 'rgba16float',
-      usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
+      usage: flags(GPUTextureUsage.STORAGE_BINDING, GPUTextureUsage.TEXTURE_BINDING),
     });
     this.view = this.texture.createView();
     this.photons = buffer(
       device,
-      CAUSTIC_N * CAUSTIC_N * 4,
-      GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      CAUSTIC_N * CAUSTIC_N * ACCUMULATOR_BYTES_PER_TEXEL,
+      flags(GPUBufferUsage.STORAGE, GPUBufferUsage.COPY_DST),
       'caustic-photons',
     );
-    const C = GPUShaderStage.COMPUTE;
-    const splatLayout = bindLayout(device, 'caustic-splat', [
+    this.createSplat(device, frameBuffer, cacheView);
+    this.createResolve(device);
+  }
+
+  createSplat(device, frameBuffer, cacheView) {
+    const layout = bindLayout(device, 'caustic-splat', [
       entry.uniform(),
-      entry.texture('unfilterable-float', '2d-array', C),
-      at(6, entry.storage()),
+      entry.texture('unfilterable-float', '2d-array', GPUShaderStage.COMPUTE),
+      at(PHOTON_BINDING, entry.storage()),
     ]);
-    this.splatGroup = bindGroup(device, splatLayout, [frameBuffer, cacheView, at(6, this.photons)], 'caustic-splat');
+    this.splatGroup = bindGroup(
+      device,
+      layout,
+      [frameBuffer, cacheView, at(PHOTON_BINDING, this.photons)],
+      'caustic-splat',
+    );
     this.splatPipeline = device.createComputePipelineAsync({
+      compute: { entryPoint: 'main', module: shader(device, causticSplatWGSL, 'caustic-splat') },
       label: 'caustic-splat',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [splatLayout] }),
-      compute: { module: shader(device, causticSplatWGSL, 'caustic-splat'), entryPoint: 'main' },
+      layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
     });
-    const resolveLayout = bindLayout(device, 'caustic-resolve', [
-      entry.storage(true),
-      entry.storageTexture('rgba16float'),
-    ]);
-    this.resolveGroup = bindGroup(device, resolveLayout, [this.photons, this.view], 'caustic-resolve');
+  }
+
+  createResolve(device) {
+    const layout = bindLayout(device, 'caustic-resolve', [entry.storage(true), entry.storageTexture('rgba16float')]);
+    this.resolveGroup = bindGroup(device, layout, [this.photons, this.view], 'caustic-resolve');
     this.resolvePipeline = device.createComputePipelineAsync({
+      compute: { entryPoint: 'main', module: shader(device, causticResolveWGSL, 'caustic-resolve') },
       label: 'caustic-resolve',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [resolveLayout] }),
-      compute: { module: shader(device, causticResolveWGSL, 'caustic-resolve'), entryPoint: 'main' },
+      layout: device.createPipelineLayout({ bindGroupLayouts: [layout] }),
     });
   }
 
   // Map placement for the frame uniforms: [origin x, origin z, 1 / span, valid].
   // The origin snaps to texels so the pattern does not swim as the camera moves.
-  placement(cam, lightDir) {
-    const snap = (v) => Math.floor(v / TEXEL) * TEXEL - CAUSTIC_SPAN / 2;
-    this.active = cam[1] < MAX_ALTITUDE && lightDir[1] > 0.02;
-    return [snap(cam[0]), snap(cam[2]), 1 / CAUSTIC_SPAN, this.active ? 1 : 0];
+  placement(cam, lightDirection) {
+    this.active = cam[1] < MAX_ALTITUDE && lightDirection[1] > MIN_SUN_HEIGHT;
+    return [snap(cam[0]), snap(cam[2]), 1 / CAUSTIC_SPAN, Number(this.active)];
   }
 
   encode(encoder) {
@@ -59,10 +81,10 @@ export class CausticsPass {
     const pass = encoder.beginComputePass({ label: 'caustics' });
     pass.setPipeline(this.splatPipeline);
     pass.setBindGroup(0, this.splatGroup);
-    pass.dispatchWorkgroups(PHOTONS / 8, PHOTONS / 8);
+    pass.dispatchWorkgroups(PHOTONS / WORKGROUP, PHOTONS / WORKGROUP);
     pass.setPipeline(this.resolvePipeline);
     pass.setBindGroup(0, this.resolveGroup);
-    pass.dispatchWorkgroups(CAUSTIC_N / 8, CAUSTIC_N / 8);
+    pass.dispatchWorkgroups(CAUSTIC_N / WORKGROUP, CAUSTIC_N / WORKGROUP);
     pass.end();
   }
 }
