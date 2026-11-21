@@ -7,7 +7,8 @@ import { W, hashu } from './noise.js';
 
 const TAU = Math.PI * 2;
 const query = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
-export const PATH_SEED = query && query.has('path') ? Number(query.get('path')) >>> 0 : Math.floor(Math.random() * 2 ** 31);
+export const PATH_SEED =
+  query && query.has('path') ? Number(query.get('path')) >>> 0 : Math.floor(Math.random() * 2 ** 31);
 
 const rnd = (i) => hashu((PATH_SEED * 31 + i * 7919 + 17) >>> 0) / 4294967296;
 const pick = (i, lo, hi) => lo + Math.floor(rnd(i) * (hi - lo + 1));

@@ -6,20 +6,45 @@ function noiseBuffer(ctx, seconds = 3) {
   const b = ctx.createBuffer(1, ctx.sampleRate * seconds, ctx.sampleRate);
   const d = b.getChannelData(0);
   let pink = 0;
-  for (let i = 0; i < d.length; i++) { pink = 0.97 * pink + 0.03 * (Math.random() * 2 - 1); d[i] = pink * 3 + (Math.random() * 2 - 1) * 0.15; }
+  for (let i = 0; i < d.length; i++) {
+    pink = 0.97 * pink + 0.03 * (Math.random() * 2 - 1);
+    d[i] = pink * 3 + (Math.random() * 2 - 1) * 0.15;
+  }
   return b;
 }
 
 export class Ambience {
-  constructor() { this.ctx = null; this.on = false; this.nextBird = 0; this.nextBubble = 0; }
+  constructor() {
+    this.ctx = null;
+    this.on = false;
+    this.nextBird = 0;
+    this.nextBubble = 0;
+  }
 
   start() {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     this.ctx = ctx;
     const noise = noiseBuffer(ctx);
-    const src = () => { const s = ctx.createBufferSource(); s.buffer = noise; s.loop = true; s.loopStart = Math.random(); s.start(0, Math.random() * 2); return s; };
-    const filter = (type, f, q = 0.7) => { const n = ctx.createBiquadFilter(); n.type = type; n.frequency.value = f; n.Q.value = q; return n; };
-    const gain = (v = 0) => { const g = ctx.createGain(); g.gain.value = v; return g; };
+    const src = () => {
+      const s = ctx.createBufferSource();
+      s.buffer = noise;
+      s.loop = true;
+      s.loopStart = Math.random();
+      s.start(0, Math.random() * 2);
+      return s;
+    };
+    const filter = (type, f, q = 0.7) => {
+      const n = ctx.createBiquadFilter();
+      n.type = type;
+      n.frequency.value = f;
+      n.Q.value = q;
+      return n;
+    };
+    const gain = (v = 0) => {
+      const g = ctx.createGain();
+      g.gain.value = v;
+      return g;
+    };
 
     this.master = gain(0);
     this.muffle = filter('lowpass', 18000, 0.5);
@@ -28,24 +53,35 @@ export class Ambience {
     // surf: two detuned noise layers with slowly breathing gain
     this.surf = gain(0);
     src().connect(filter('lowpass', 520)).connect(this.surf);
-    src().connect(filter('bandpass', 1400, 0.4)).connect(gain(0.25)).connect(this.surf);
+    src()
+      .connect(filter('bandpass', 1400, 0.4))
+      .connect(gain(0.25))
+      .connect(this.surf);
     this.surf.connect(this.muffle);
 
     this.wind = gain(0);
-    src().connect(filter('bandpass', 380, 0.6)).connect(this.wind).connect(this.muffle);
+    src()
+      .connect(filter('bandpass', 380, 0.6))
+      .connect(this.wind)
+      .connect(this.muffle);
 
     this.insects = gain(0);
     const ins = filter('bandpass', 5200, 9);
     const trem = gain(0.5);
-    const lfo = ctx.createOscillator(); lfo.frequency.value = 13; const lfoAmt = gain(0.5);
-    lfo.connect(lfoAmt).connect(trem.gain); lfo.start();
+    const lfo = ctx.createOscillator();
+    lfo.frequency.value = 13;
+    const lfoAmt = gain(0.5);
+    lfo.connect(lfoAmt).connect(trem.gain);
+    lfo.start();
     src().connect(ins).connect(trem).connect(this.insects).connect(this.muffle);
 
     this.rumble = gain(0);
     src().connect(filter('lowpass', 140)).connect(this.rumble).connect(this.master);
 
-    this.birdBus = gain(0.0); this.birdBus.connect(this.muffle);
-    this.bubbleBus = gain(0.0); this.bubbleBus.connect(this.master);
+    this.birdBus = gain(0.0);
+    this.birdBus.connect(this.muffle);
+    this.bubbleBus = gain(0.0);
+    this.bubbleBus.connect(this.master);
   }
 
   toggle() {
@@ -60,7 +96,8 @@ export class Ambience {
 
   chirp(t, base) {
     const ctx = this.ctx;
-    const o = ctx.createOscillator(), g = ctx.createGain();
+    const o = ctx.createOscillator(),
+      g = ctx.createGain();
     const notes = 2 + Math.floor(Math.random() * 4);
     o.type = 'sine';
     g.gain.value = 0;
@@ -74,13 +111,18 @@ export class Ambience {
       g.gain.exponentialRampToValueAtTime(0.0005, s + 0.08);
     }
     const pan = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-    if (pan) { pan.pan.value = Math.random() * 1.6 - 0.8; o.connect(g).connect(pan).connect(this.birdBus); } else o.connect(g).connect(this.birdBus);
-    o.start(t); o.stop(t + notes * 0.15 + 0.2);
+    if (pan) {
+      pan.pan.value = Math.random() * 1.6 - 0.8;
+      o.connect(g).connect(pan).connect(this.birdBus);
+    } else o.connect(g).connect(this.birdBus);
+    o.start(t);
+    o.stop(t + notes * 0.15 + 0.2);
   }
 
   bubble(t) {
     const ctx = this.ctx;
-    const o = ctx.createOscillator(), g = ctx.createGain();
+    const o = ctx.createOscillator(),
+      g = ctx.createGain();
     const f = 300 + Math.random() * 500;
     o.frequency.setValueAtTime(f, t);
     o.frequency.exponentialRampToValueAtTime(f * 2.5, t + 0.12);
@@ -88,7 +130,8 @@ export class Ambience {
     g.gain.linearRampToValueAtTime(0.04, t + 0.01);
     g.gain.exponentialRampToValueAtTime(0.0005, t + 0.14);
     o.connect(g).connect(this.bubbleBus);
-    o.start(t); o.stop(t + 0.2);
+    o.start(t);
+    o.stop(t + 0.2);
   }
 
   update(dt, shot, env) {

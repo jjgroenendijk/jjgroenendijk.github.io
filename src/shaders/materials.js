@@ -193,7 +193,10 @@ fn groundMat(m: u32, u: vec2f) -> Mat {
 `;
 
 // Pass 1: albedo + height (A) and roughness (scratch).
-export const groundBakeWGSL = noiseLib + patterns + /* wgsl */ `
+export const groundBakeWGSL =
+  noiseLib +
+  patterns +
+  /* wgsl */ `
 @group(0) @binding(0) var outA: texture_storage_2d_array<rgba8unorm, write>;
 @group(0) @binding(1) var outRough: texture_storage_2d_array<rgba8unorm, write>;
 @compute @workgroup_size(8, 8, 1)
@@ -206,7 +209,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 `;
 
 // Pass 2: normals and occlusion from the baked heights (B).
-export const groundDeriveWGSL = groundLib + /* wgsl */ `
+export const groundDeriveWGSL =
+  groundLib +
+  /* wgsl */ `
 @group(0) @binding(0) var texA: texture_2d_array<f32>;
 @group(0) @binding(1) var texRough: texture_2d_array<f32>;
 @group(0) @binding(2) var outB: texture_storage_2d_array<rgba8unorm, write>;

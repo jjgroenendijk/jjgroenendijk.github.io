@@ -8,7 +8,10 @@ export const SKY_LUT = [128, 64];
 const SH_DIRS = 32; // the irradiance bake integrates SH_DIRS^2 directions
 
 // Bindings 0-5 of group 0 are the frame's (see common.js); the bakes write to 6+.
-export const skyBakeWGSL = frameStruct + commonLib + /* wgsl */ `
+export const skyBakeWGSL =
+  frameStruct +
+  commonLib +
+  /* wgsl */ `
 @group(0) @binding(6) var lutOut: texture_storage_2d<rgba16float, write>;
 @group(0) @binding(7) var shOut: texture_storage_2d<rgba16float, write>;
 
@@ -51,13 +54,17 @@ fn irradiance(@builtin(local_invocation_index) li: u32) {
 }
 `;
 
-export const CAUSTIC_N = 256;     // map texels per side
-export const CAUSTIC_SPAN = 64;   // metres covered by the map
-export const PHOTONS = 512;       // photons per side
+export const CAUSTIC_N = 256; // map texels per side
+export const CAUSTIC_SPAN = 64; // metres covered by the map
+export const PHOTONS = 512; // photons per side
 // photon weight in fixed point; bilinear splatting keeps the total per photon
 const UNIT = 256;
 
-export const causticSplatWGSL = frameStruct + commonLib + cacheLib + /* wgsl */ `
+export const causticSplatWGSL =
+  frameStruct +
+  commonLib +
+  cacheLib +
+  /* wgsl */ `
 @group(0) @binding(6) var<storage, read_write> acc: array<atomic<u32>>;
 ${waveArr('CW', CAUSTIC_WAVES)}
 fn causticSlope(p: vec2f, t: f32) -> vec2f {

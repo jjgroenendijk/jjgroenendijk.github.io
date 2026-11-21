@@ -1,9 +1,10 @@
 ---
 name: linting-and-formatting
-description: Formatter and strictest-possible linting for every file type in this repo (JS, embedded WGSL, HTML, CSS,
-  Markdown, YAML, JSON), plus machine-checked architecture and clean-code rules (layering, cycles, complexity,
-  duplication, dead code) and the 120-character Markdown line length. Use before committing, after editing
-  any file, when adding a new file type, or when setting up or changing lint and format tooling.
+description:
+  Formatter and strictest-possible linting for every file type in this repo (JS, embedded WGSL, HTML, CSS, Markdown,
+  YAML, JSON), plus machine-checked architecture and clean-code rules (layering, cycles, complexity, duplication, dead
+  code) and the 120-character Markdown line length. Use before committing, after editing any file, when adding a new
+  file type, or when setting up or changing lint and format tooling.
 ---
 
 # Linting and formatting
@@ -18,14 +19,14 @@ config files never reach the site, and the app itself stays build-free.
 
 - **JS** (`src/**/*.js`): Prettier; ESLint flat config starting from `js.configs.all` plus `eslint-plugin-unicorn`
   `all`, `eslint-plugin-sonarjs` and the architecture rules below.
-- **HTML and inline CSS** (`index.html`): Prettier; `html-validate` (`recommended` + `strict`), and Stylelint
-  through `postcss-html`.
+- **HTML and inline CSS** (`index.html`): Prettier; `html-validate` (`recommended` + `strict`), and Stylelint through
+  `postcss-html`.
 - **Markdown**: Prettier with `proseWrap: "always"` and `printWidth: 120`; `markdownlint-cli2` with all rules on and
   `MD013` set to 120.
 - **YAML**: Prettier; `actionlint` for `.github/workflows`, `yamllint` strict elsewhere.
 - **JSON**: Prettier, whose parse step doubles as the check.
-- **WGSL** (template strings in `src/shaders`): no standalone formatter or linter fits embedded WGSL, so compile
-  errors in the browser console (`checking-rendering`) are the check.
+- **WGSL** (template strings in `src/shaders`): no standalone formatter or linter fits embedded WGSL, so compile errors
+  in the browser console (`checking-rendering`) are the check.
 
 Expose it as `npm run format` (write), `npm run lint` (check everything, non-zero exit on any warning) and
 `npm run check` (format check plus lint, never writes).
@@ -34,8 +35,8 @@ Expose it as `npm run format` (write), `npm run lint` (check everything, non-zer
 
 CI enforces the same checks, so nothing unformatted or failing lint lands on `main`:
 
-- A `check` job (`.github/workflows/check.yml`, or a job in `pages.yml`) runs `npm ci` and `npm run check` on every
-  pull request and on every push to `main`. It also runs `actionlint` on the workflows.
+- A `check` job (`.github/workflows/check.yml`, or a job in `pages.yml`) runs `npm ci` and `npm run check` on every pull
+  request and on every push to `main`. It also runs `actionlint` on the workflows.
 - Deployment depends on it. The Pages `deploy` job has `needs: check` (or the deploy workflow runs only after a
   successful check run), so a failing check blocks the release.
 - CI only checks. It never auto-formats or pushes fixes; the fix happens locally with `npm run format`.
@@ -56,17 +57,18 @@ Use machine checks wherever a principle can be checked, so it holds without rely
   - `world/`
   - `core/`
 
-  `audio/` and `debug/` are leaves, imported only from `main.js`. `world/` stays GPU-free, because the camera
-  director runs it on the CPU. Also forbid:
+  `audio/` and `debug/` are leaves, imported only from `main.js`. `world/` stays GPU-free, because the camera director
+  runs it on the CPU. Also forbid:
   - circular imports
   - orphan modules
   - imports of `../` paths outside `src/`
   - deep imports into another layer's internals where a public module exists
 
   The layers have no file-level cycle today, but `scene/` and `shaders/` depend on each other: `scene/catalog.js` and
-  `scene/trees.js` import constants from `shaders/`, and `shaders/` imports `TYPE`/`MAT` from `scene/catalog.js`.
-  Record those imports as known violations (a dependency-cruiser `--ignore-known` baseline), then remove them by
-  moving the shared constants so they point one way. Don't loosen the rule to fit them.
+  `scene/trees.js` import constants from `shaders/`, and `shaders/` imports `TYPE`/`MAT` from `scene/catalog.js`. Record
+  those imports as known violations (a dependency-cruiser `--ignore-known` baseline), then remove them by moving the
+  shared constants so they point one way. Don't loosen the rule to fit them.
+
 - **Size and complexity** (ESLint core + `eslint-plugin-sonarjs`):
   - `complexity`
   - `sonarjs/cognitive-complexity`
@@ -77,11 +79,12 @@ Use machine checks wherever a principle can be checked, so it holds without rely
   - `max-lines`
   - `max-nested-callbacks`
 
-  Set strict thresholds. Existing hotspots go into a temporary per-file override with a comment, which shrinks as
-  code is refactored and never grows. WGSL strings are data, so exclude template literals from line counts
-  (`skipComments` / `ignorePattern`), or scope the size rules away from `src/shaders`.
-- **Duplication** (`jscpd`, threshold close to 0%): duplicated JS logic gets extracted. The JS/WGSL twins in `world/`
-  vs `shaders/` are intended duplication across two languages and stay out of scope.
+  Set strict thresholds. Existing hotspots go into a temporary per-file override with a comment, which shrinks as code
+  is refactored and never grows. WGSL strings are data, so exclude template literals from line counts (`skipComments` /
+  `ignorePattern`), or scope the size rules away from `src/shaders`.
+
+- **Duplication** (`jscpd`, threshold close to 0%): duplicated JS logic gets extracted. The JS/WGSL twins in `world/` vs
+  `shaders/` are intended duplication across two languages and stay out of scope.
 - **Dead code** (`knip`): no unused files, exports or dependencies.
 - **Naming and idioms** (`unicorn`, ESLint `id-length`, `prefer-const`, `no-param-reassign`, `eqeqeq`,
   `no-implicit-coercion`, `no-shadow`):
@@ -106,5 +109,5 @@ Run all of these from `npm run lint`, so a single command covers style, architec
 
 ## Before committing
 
-Run `npm run format` and `npm run lint` on the changed files, re-stage what the formatter rewrote, and commit only
-when both are clean. Treat a lint failure as part of the task, not a follow-up.
+Run `npm run format` and `npm run lint` on the changed files, re-stage what the formatter rewrote, and commit only when
+both are clean. Treat a lint failure as part of the task, not a follow-up.

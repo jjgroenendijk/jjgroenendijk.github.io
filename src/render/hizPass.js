@@ -28,24 +28,31 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 export class HiZPass {
   constructor(device) {
     this.device = device;
-    const layout = (depth) => bindLayout(device, 'hiz', [
-      entry.texture(depth ? 'depth' : 'unfilterable-float', '2d', GPUShaderStage.COMPUTE),
-      entry.storageTexture('r32float'),
-    ]);
+    const layout = (depth) =>
+      bindLayout(device, 'hiz', [
+        entry.texture(depth ? 'depth' : 'unfilterable-float', '2d', GPUShaderStage.COMPUTE),
+        entry.storageTexture('r32float'),
+      ]);
     this.layouts = [layout(true), layout(false)];
-    this.pipelines = [true, false].map((depth, k) => device.createComputePipelineAsync({
-      label: 'hiz',
-      layout: device.createPipelineLayout({ bindGroupLayouts: [this.layouts[k]] }),
-      compute: { module: shader(device, reduceWGSL(depth), 'hiz'), entryPoint: 'main' },
-    }));
+    this.pipelines = [true, false].map((depth, k) =>
+      device.createComputePipelineAsync({
+        label: 'hiz',
+        layout: device.createPipelineLayout({ bindGroupLayouts: [this.layouts[k]] }),
+        compute: { module: shader(device, reduceWGSL(depth), 'hiz'), entryPoint: 'main' },
+      }),
+    );
   }
 
   resize(targets) {
     this.texture?.destroy();
-    const w = Math.max(1, Math.ceil(targets.width / 2)), h = Math.max(1, Math.ceil(targets.height / 2));
+    const w = Math.max(1, Math.ceil(targets.width / 2)),
+      h = Math.max(1, Math.ceil(targets.height / 2));
     const mips = Math.floor(Math.log2(Math.max(w, h))) + 1;
     this.texture = this.device.createTexture({
-      label: 'hiz', size: [w, h], format: 'r32float', mipLevelCount: mips,
+      label: 'hiz',
+      size: [w, h],
+      format: 'r32float',
+      mipLevelCount: mips,
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.view = this.texture.createView();

@@ -18,9 +18,19 @@ export function createShared(device) {
     entry.texture(), // cloud shadow map
   ]);
   const cascade = bindLayout(device, 'cascade', [entry.uniform(false, GPUShaderStage.VERTEX)]);
-  const linear = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' });
+  const linear = device.createSampler({
+    magFilter: 'linear',
+    minFilter: 'linear',
+    addressModeU: 'clamp-to-edge',
+    addressModeV: 'clamp-to-edge',
+  });
   // wraps around in u: the sky LUT's azimuth
-  const frameSampler = device.createSampler({ magFilter: 'linear', minFilter: 'linear', addressModeU: 'repeat', addressModeV: 'clamp-to-edge' });
+  const frameSampler = device.createSampler({
+    magFilter: 'linear',
+    minFilter: 'linear',
+    addressModeU: 'repeat',
+    addressModeV: 'clamp-to-edge',
+  });
   const compare = device.createSampler({ compare: 'less', magFilter: 'linear', minFilter: 'linear' });
   return { frame, shadow, cascade, linear, compare, frameSampler };
 }
@@ -29,4 +39,8 @@ export const HDR = 'rgba16float';
 export const DEPTH = 'depth32float';
 
 // Common pipeline state for camera passes (reverse-Z depth).
-export const depthState = (write = true, compare = 'greater') => ({ format: DEPTH, depthWriteEnabled: write, depthCompare: compare });
+export const depthState = (write = true, compare = 'greater') => ({
+  format: DEPTH,
+  depthWriteEnabled: write,
+  depthCompare: compare,
+});

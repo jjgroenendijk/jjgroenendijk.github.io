@@ -1,6 +1,6 @@
 {
   "format": ["javascript"],
-  "threshold": 0.45,
+  "threshold": 0.75,
   "reporters": ["console"],
   "silent": true,
   "absolute": false,

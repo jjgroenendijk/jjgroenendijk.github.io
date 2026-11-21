@@ -1,8 +1,9 @@
 # jjgroenendijk.github.io
 
-An endless, procedurally generated tropical island, rendered in real time with WebGPU.
-Open the page and the camera starts drifting through the archipelago: high over the islands, low across turquoise lagoons, along jungle valleys and over coral reefs, through a full day and night cycle with drifting weather.
-There are no binary assets: terrain, plants, animals, ships, clouds, sound and textures are all generated in code.
+An endless, procedurally generated tropical island, rendered in real time with WebGPU. Open the page and the camera
+starts drifting through the archipelago: high over the islands, low across turquoise lagoons, along jungle valleys and
+over coral reefs, through a full day and night cycle with drifting weather. There are no binary assets: terrain, plants,
+animals, ships, clouds, sound and textures are all generated in code.
 
 Requires a browser with WebGPU (recent Chrome/Edge, Safari 26+ on iOS/macOS).
 
@@ -17,18 +18,18 @@ python3 -m http.server 8000
 
 Useful URL parameters while developing:
 
-| parameter | effect |
-|-----------|--------|
-| `u=0.4` | start at this point of the shot cycle (0 aerial, 0.25 lagoon, 0.4 jungle, 0.7 reef) |
-| `path=42` | which camera path to fly (a new one every visit by default) |
-| `cycle=3` | which of the eight shot cycles to play (random by default) |
-| `seed=0.3` | weather seed (random by default); with `path` and `cycle` it makes runs repeatable |
-| `tod=0.7` | time of day (0 midnight, 0.5 noon, 0.75 sunset) |
-| `q=low\|medium\|high` | quality preset |
-| `px=1.5` | fixed render resolution in pixels per CSS pixel (disables adaptive resolution) |
-| `freeze` | stop time |
-| `capture=N` | render offscreen and show frame N as an image (for headless/software GPUs) |
-| `skip=water,props` | leave out render passes (debugging) |
+| parameter             | effect                                                                              |
+| --------------------- | ----------------------------------------------------------------------------------- |
+| `u=0.4`               | start at this point of the shot cycle (0 aerial, 0.25 lagoon, 0.4 jungle, 0.7 reef) |
+| `path=42`             | which camera path to fly (a new one every visit by default)                         |
+| `cycle=3`             | which of the eight shot cycles to play (random by default)                          |
+| `seed=0.3`            | weather seed (random by default); with `path` and `cycle` it makes runs repeatable  |
+| `tod=0.7`             | time of day (0 midnight, 0.5 noon, 0.75 sunset)                                     |
+| `q=low\|medium\|high` | quality preset                                                                      |
+| `px=1.5`              | fixed render resolution in pixels per CSS pixel (disables adaptive resolution)      |
+| `freeze`              | stop time                                                                           |
+| `capture=N`           | render offscreen and show frame N as an image (for headless/software GPUs)          |
+| `skip=water,props`    | leave out render passes (debugging)                                                 |
 
 ## How it works
 
@@ -44,29 +45,79 @@ src/
   audio/             procedural ambient soundscape (Web Audio)
 ```
 
-At start-up six ground materials (white and black sand, grass, leaf litter, rock, basalt) are baked into two texture arrays with full mip chains: albedo and height, and normal, roughness and occlusion. The patterns are procedural (warped Voronoi grains, tufts, leaves, cracked rock with lichen), tile seamlessly, and the mips keep roughness honest by folding the lost normal detail into it (Toksvig).
+At start-up six ground materials (white and black sand, grass, leaf litter, rock, basalt) are baked into two texture
+arrays with full mip chains: albedo and height, and normal, roughness and occlusion. The patterns are procedural (warped
+Voronoi grains, tufts, leaves, cracked rock with lichen), tile seamlessly, and the mips keep roughness honest by folding
+the lost normal detail into it (Toksvig).
 
-The rainforest trees are grown by space colonisation: attraction points fill a lumpy crown envelope, denser towards its surface, and branches grow from the trunk towards them, so limbs spread and fork like real crowns; branch radii follow da Vinci's rule. There are three species (broad canopy trees in two variants, emergent giants with buttress roots and umbrella crowns, slender understory trees), with lianas and epiphytes on the big ones. Leaves are cluster cards cut from baked leaf textures (broad glossy leaves, small-leaved twigs, pinnate fronds), with normals bent outwards from the crown centre so a crown shades as one soft volume, occlusion that darkens its interior, light through the leaves when seen against the sun, glossy sky reflections, alpha-tested leaf shadows, and wind in three layers: the whole tree sways, the limbs bend, the leaves flutter. The forest grows in groves with gaps, the biggest trees in the moist hollows, the understory thickest at the forest edge. Bark gathers moss on top of the limbs and low on the trunk.
+The rainforest trees are grown by space colonisation: attraction points fill a lumpy crown envelope, denser towards its
+surface, and branches grow from the trunk towards them, so limbs spread and fork like real crowns; branch radii follow
+da Vinci's rule. There are three species (broad canopy trees in two variants, emergent giants with buttress roots and
+umbrella crowns, slender understory trees), with lianas and epiphytes on the big ones. Leaves are cluster cards cut from
+baked leaf textures (broad glossy leaves, small-leaved twigs, pinnate fronds), with normals bent outwards from the crown
+centre so a crown shades as one soft volume, occlusion that darkens its interior, light through the leaves when seen
+against the sun, glossy sky reflections, alpha-tested leaf shadows, and wind in three layers: the whole tree sways, the
+limbs bend, the leaves flutter. The forest grows in groves with gaps, the biggest trees in the moist hollows, the
+understory thickest at the forest edge. Bark gathers moss on top of the limbs and low on the trunk.
 
-The heightfield itself is fbm with analytic derivatives: from the second octave on, detail is damped on steep slopes, and on the hillsides two octaves of gully noise carve ridges and channels that run downhill, the finer ones branching along the coarser.
+The heightfield itself is fbm with analytic derivatives: from the second octave on, detail is damped on steep slopes,
+and on the hillsides two octaves of gully noise carve ridges and channels that run downhill, the finer ones branching
+along the coarser.
 
 Each frame:
 
-1. **Terrain cache** (compute): heights, normals, far horizon shadows, sky visibility (horizon ambient occlusion) and curvature of a nine-level geometry clipmap (about 12 km of view distance) are baked into a toroidal texture array. When a level scrolls only the newly exposed rows and columns are baked; the slow-changing far detail (horizon shadows, soft cloud-lit tint) is refreshed a band of rows per frame, so no frame pays for a whole level.
-2. **Sky lighting** (compute): the sky's radiance is baked into a small direction LUT and projected onto nine spherical-harmonic coefficients, only when the sun, moon or haze change. Fog, reflections and refraction read the LUT; every surface gets directional sky ambient from the SH9 irradiance.
-3. **Caustics** (compute): photons are refracted through the animated water surface and splatted into a map around the camera, giving the dancing light patterns on the shallow sea floor.
-4. **Cloud shadow map** (compute): the light let through by the cloud layer is baked into a small texture, so the ground, plants and water sample it once instead of evaluating cloud noise per pixel.
-5. **Flocking** (compute): fish schools and bird flocks are boids that keep apart, align with and stay close to their neighbours while following a target that roams along the island. Their state persists between frames.
-6. **Scatter** (compute): vegetation, coral, wildlife and set pieces are placed around the camera, frustum culled (cheaply before any terrain noise is evaluated), occlusion culled against last frame's depth pyramid, and sorted into levels of detail, straight into GPU buffers. A final pass lays all draw slots end to end so the camera view draws every prop with a single indirect draw. Every instance sits on the cached terrain heights, exactly on the drawn ground. Neighbouring levels of detail overlap by a short band in which they cross-fade with complementary dithering (TAA smooths it), so nothing pops. The tree levels of detail are also built to agree: every leaf card takes its randomness from its own twig, and coarser levels keep a subset of the same cards, enlarged around their centres, so the crown keeps its shape across a switch. Distant palms and trees are re-scattered only every other frame and beyond about 700 m become octahedral impostors: camera-facing cards that blend the three nearest of 36 views baked over the upper hemisphere at start-up (colour, normal and translucency), each reprojected along the view ray onto its own image plane, so they hold up from the air as well as from the ground.
-7. **Terrain culling** (compute): each clipmap tile finds its exact height range in the cache and is tested against the frustum and the depth pyramid; the visible tiles are compacted into one index list, so terrain and water are one indirect draw each.
-8. **Shadows**: three stabilised, cached cascades. A cascade is only redrawn when it gets too old (every frame, every 2nd, every 8th) or the sun or view moved noticeably; otherwise last render is reused with its matrix shifted. Distant cascades only get large casters at coarse detail.
+1. **Terrain cache** (compute): heights, normals, far horizon shadows, sky visibility (horizon ambient occlusion) and
+   curvature of a nine-level geometry clipmap (about 12 km of view distance) are baked into a toroidal texture array.
+   When a level scrolls only the newly exposed rows and columns are baked; the slow-changing far detail (horizon
+   shadows, soft cloud-lit tint) is refreshed a band of rows per frame, so no frame pays for a whole level.
+2. **Sky lighting** (compute): the sky's radiance is baked into a small direction LUT and projected onto nine
+   spherical-harmonic coefficients, only when the sun, moon or haze change. Fog, reflections and refraction read the
+   LUT; every surface gets directional sky ambient from the SH9 irradiance.
+3. **Caustics** (compute): photons are refracted through the animated water surface and splatted into a map around the
+   camera, giving the dancing light patterns on the shallow sea floor.
+4. **Cloud shadow map** (compute): the light let through by the cloud layer is baked into a small texture, so the
+   ground, plants and water sample it once instead of evaluating cloud noise per pixel.
+5. **Flocking** (compute): fish schools and bird flocks are boids that keep apart, align with and stay close to their
+   neighbours while following a target that roams along the island. Their state persists between frames.
+6. **Scatter** (compute): vegetation, coral, wildlife and set pieces are placed around the camera, frustum culled
+   (cheaply before any terrain noise is evaluated), occlusion culled against last frame's depth pyramid, and sorted into
+   levels of detail, straight into GPU buffers. A final pass lays all draw slots end to end so the camera view draws
+   every prop with a single indirect draw. Every instance sits on the cached terrain heights, exactly on the drawn
+   ground. Neighbouring levels of detail overlap by a short band in which they cross-fade with complementary dithering
+   (TAA smooths it), so nothing pops. The tree levels of detail are also built to agree: every leaf card takes its
+   randomness from its own twig, and coarser levels keep a subset of the same cards, enlarged around their centres, so
+   the crown keeps its shape across a switch. Distant palms and trees are re-scattered only every other frame and beyond
+   about 700 m become octahedral impostors: camera-facing cards that blend the three nearest of 36 views baked over the
+   upper hemisphere at start-up (colour, normal and translucency), each reprojected along the view ray onto its own
+   image plane, so they hold up from the air as well as from the ground.
+7. **Terrain culling** (compute): each clipmap tile finds its exact height range in the cache and is tested against the
+   frustum and the depth pyramid; the visible tiles are compacted into one index list, so terrain and water are one
+   indirect draw each.
+8. **Shadows**: three stabilised, cached cascades. A cascade is only redrawn when it gets too old (every frame, every
+   2nd, every 8th) or the sun or view moved noticeably; otherwise last render is reused with its matrix shifted. Distant
+   cascades only get large casters at coarse detail.
 9. **Clouds**: ray-marched volumetric cumulus at reduced resolution.
-10. **Prop visibility buffer**: the single prop draw writes only depth and a (slot, instance, triangle) ID per pixel. A fullscreen resolve rebuilds each pixel's triangle, interpolates it with perspective-correct barycentrics and shades it once, so the many overlapping layers of jungle foliage are no longer shaded and then thrown away.
-11. **Opaque**: the resolved props, then terrain tiles (which lose the depth test wherever a prop covers them), then sky (reverse-Z, HDR). The ground picks at most two materials per pixel from slope, curvature, altitude and region and blends them by height, so sand settles between pebbles. Flat ground uses stochastic tiling (offset variants cross-faded by a slow noise) against visible repeats, cliffs use triplanar mapping; detail normals are combined with reoriented normal mapping. Shading is PBR: Lambert plus GGX with Schlick Fresnel, and a specular ambient from the sky LUT with an analytic environment BRDF and specular occlusion. Occlusion combines the material, sky visibility and a cavity term from curvature. Rain wets the ground (darker, smoother, puddles in hollows) and it dries out in the sun. The beach shows wet sand behind each wave's run-up and a trail of footprints. Afterwards a min-depth pyramid (Hi-Z) is built for next frame's culling.
-12. **Water**: Gerstner waves, refraction with absorption, and foam. Reflections are traced at half resolution against the smooth swell and looked up with a ripple offset; floating particles. Waves and ripples too small to resolve in the distance are not dropped but turned into roughness (their slope variance), so the far sea keeps a soft sheen, a long sun glitter path and a horizon slightly darker than the sky; drifting wind patches and calm slicks break up its surface.
+10. **Prop visibility buffer**: the single prop draw writes only depth and a (slot, instance, triangle) ID per pixel. A
+    fullscreen resolve rebuilds each pixel's triangle, interpolates it with perspective-correct barycentrics and shades
+    it once, so the many overlapping layers of jungle foliage are no longer shaded and then thrown away.
+11. **Opaque**: the resolved props, then terrain tiles (which lose the depth test wherever a prop covers them), then sky
+    (reverse-Z, HDR). The ground picks at most two materials per pixel from slope, curvature, altitude and region and
+    blends them by height, so sand settles between pebbles. Flat ground uses stochastic tiling (offset variants
+    cross-faded by a slow noise) against visible repeats, cliffs use triplanar mapping; detail normals are combined with
+    reoriented normal mapping. Shading is PBR: Lambert plus GGX with Schlick Fresnel, and a specular ambient from the
+    sky LUT with an analytic environment BRDF and specular occlusion. Occlusion combines the material, sky visibility
+    and a cavity term from curvature. Rain wets the ground (darker, smoother, puddles in hollows) and it dries out in
+    the sun. The beach shows wet sand behind each wave's run-up and a trail of footprints. Afterwards a min-depth
+    pyramid (Hi-Z) is built for next frame's culling.
+12. **Water**: Gerstner waves, refraction with absorption, and foam. Reflections are traced at half resolution against
+    the smooth swell and looked up with a ripple offset; floating particles. Waves and ripples too small to resolve in
+    the distance are not dropped but turned into roughness (their slope variance), so the far sea keeps a soft sheen, a
+    long sun glitter path and a horizon slightly darker than the sky; drifting wind patches and calm slicks break up its
+    surface.
 13. **Post**: volumetric light shafts, TAA, bloom, ACES tonemapping and grading.
 
-The world is periodic over 16 km in both directions, with every noise lattice wrapped, so the camera can fly forever without losing floating-point precision.
-The JavaScript copy of the terrain function in `world/` uses the same integer hashing and erosion as the WGSL version, so the camera director can keep a safe distance from the ground.
+The world is periodic over 16 km in both directions, with every noise lattice wrapped, so the camera can fly forever
+without losing floating-point precision. The JavaScript copy of the terrain function in `world/` uses the same integer
+hashing and erosion as the WGSL version, so the camera director can keep a safe distance from the ground.
 
 Deployment: `.github/workflows/pages.yml` publishes `index.html` and `src/` to GitHub Pages.

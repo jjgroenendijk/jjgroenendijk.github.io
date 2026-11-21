@@ -1,7 +1,8 @@
 ---
 name: committing-changes
-description: Commit conventions for this repo, Conventional Commits messages and atomic commits. Use whenever creating a
-  commit, splitting work into commits, writing a commit message or PR title, or the user asks to commit or push.
+description:
+  Commit conventions for this repo, Conventional Commits messages and atomic commits. Use whenever creating a commit,
+  splitting work into commits, writing a commit message or PR title, or the user asks to commit or push.
 ---
 
 # Committing changes
@@ -16,9 +17,9 @@ One commit holds one logical change, and the site loads and renders without cons
 - tooling or config and the code it is applied to
 - unrelated fixes made along the way
 
-Before committing, read `git diff --staged` and check it tells one story. Split mixed work with `git add -p` (or
-stage whole files). If a change only works together with another, they belong in the same commit. Run the formatter
-and linters on the staged files first (`linting-and-formatting` skill).
+Before committing, read `git diff --staged` and check it tells one story. Split mixed work with `git add -p` (or stage
+whole files). If a change only works together with another, they belong in the same commit. Run the formatter and
+linters on the staged files first (`linting-and-formatting` skill).
 
 ## Message format
 
@@ -33,8 +34,8 @@ about how. The diff already shows what changed.
 BREAKING CHANGE: only when a URL parameter, deployed path or similar contract changes
 ```
 
-- Types: `feat` (visible new behaviour), `fix`, `perf`, `refactor`, `style` (formatting only), `docs`, `test`,
-  `build`, `ci`, `chore` (tooling, config, agent instructions).
+- Types: `feat` (visible new behaviour), `fix`, `perf`, `refactor`, `style` (formatting only), `docs`, `test`, `build`,
+  `ci`, `chore` (tooling, config, agent instructions).
 - Scope is the area touched: `terrain`, `props`, `trees`, `water`, `sky`, `clouds`, `shadows`, `post`, `audio`,
   `director`, `env`, `controls`, `loader`, `deploy`, `lint`, `claude`. Leave it out when the change spans many areas.
 - Keep the header within 72 characters. A `!` after the scope marks a breaking change.

@@ -13,7 +13,12 @@ fn viewRay2(uv: vec2f) -> vec3f {
 `;
 
 // Volumetric light shafts (jungle god rays and underwater beams), half resolution.
-export const volumeWGSL = frameStruct + commonLib + fullscreenVS + sceneDistFn + /* wgsl */ `
+export const volumeWGSL =
+  frameStruct +
+  commonLib +
+  fullscreenVS +
+  sceneDistFn +
+  /* wgsl */ `
 @group(1) @binding(0) var shadowTex: texture_depth_2d_array;
 @group(1) @binding(1) var shadowSmp: sampler_comparison;
 @group(1) @binding(2) var linSmp: sampler;
@@ -62,7 +67,11 @@ fn hg(mu: f32, g: f32) -> f32 { return (1.0 - g * g) / (4.0 * PI * pow(1.0 + g *
 `;
 
 // Temporal anti-aliasing with variance clipping.
-export const taaWGSL = frameStruct + fullscreenVS + sceneDistFn + /* wgsl */ `
+export const taaWGSL =
+  frameStruct +
+  fullscreenVS +
+  sceneDistFn +
+  /* wgsl */ `
 @group(1) @binding(0) var curTex: texture_2d<f32>;
 @group(1) @binding(1) var volTex: texture_2d<f32>;
 @group(1) @binding(2) var histTex: texture_2d<f32>;
@@ -141,7 +150,9 @@ fn catmull(uv: vec2f) -> vec3f {
 }
 `;
 
-export const bloomDownWGSL = fullscreenVS + /* wgsl */ `
+export const bloomDownWGSL =
+  fullscreenVS +
+  /* wgsl */ `
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var smp: sampler;
 struct BP { texel: vec2f, karis: f32, pad: f32 };
@@ -166,7 +177,9 @@ fn s(uv: vec2f) -> vec3f { return min(textureSampleLevel(src, smp, uv, 0.0).rgb,
 }
 `;
 
-export const bloomUpWGSL = fullscreenVS + /* wgsl */ `
+export const bloomUpWGSL =
+  fullscreenVS +
+  /* wgsl */ `
 @group(0) @binding(0) var src: texture_2d<f32>;
 @group(0) @binding(1) var smp: sampler;
 struct BP { texel: vec2f, karis: f32, pad: f32 };
@@ -183,7 +196,10 @@ struct BP { texel: vec2f, karis: f32, pad: f32 };
 `;
 
 // Final: bloom, exposure, filmic tonemap, grade, vignette, grain, output encoding.
-export const compositeWGSL = frameStruct + fullscreenVS + /* wgsl */ `
+export const compositeWGSL =
+  frameStruct +
+  fullscreenVS +
+  /* wgsl */ `
 @group(1) @binding(0) var colTex: texture_2d<f32>;
 @group(1) @binding(1) var bloomTex: texture_2d<f32>;
 @group(1) @binding(2) var smp: sampler;

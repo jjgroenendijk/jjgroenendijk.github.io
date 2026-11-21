@@ -24,14 +24,25 @@ export class ShadowPass {
     this.device = device;
     this.size = size;
     this.texture = device.createTexture({
-      label: 'shadow-map', size: [size, size, CASCADES], format: DEPTH,
+      label: 'shadow-map',
+      size: [size, size, CASCADES],
+      format: DEPTH,
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,
     });
-    this.layerViews = Array.from({ length: CASCADES }, (_, i) => this.texture.createView({ dimension: '2d', baseArrayLayer: i, arrayLayerCount: 1 }));
+    this.layerViews = Array.from({ length: CASCADES }, (_, i) =>
+      this.texture.createView({ dimension: '2d', baseArrayLayer: i, arrayLayerCount: 1 }),
+    );
     this.arrayView = this.texture.createView({ dimension: '2d-array' });
-    this.buffers = Array.from({ length: CASCADES }, () => device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }));
+    this.buffers = Array.from({ length: CASCADES }, () =>
+      device.createBuffer({ size: 64, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST }),
+    );
     this.groups = this.buffers.map((b) => bindGroup(device, shared.cascade, [b]));
-    this.sampleGroup = bindGroup(device, shared.shadow, [this.arrayView, shared.compare, shared.linear, cloudMapView], 'shadow-sample');
+    this.sampleGroup = bindGroup(
+      device,
+      shared.shadow,
+      [this.arrayView, shared.compare, shared.linear, cloudMapView],
+      'shadow-sample',
+    );
     this.matrices = Array.from({ length: CASCADES }, () => mat4.identity());
   }
 
@@ -68,7 +79,8 @@ export class ShadowPass {
         this.device.queue.writeBuffer(this.buffers[c], 0, this.matrices[c]);
         continue;
       }
-      const hFar = far * tanV, wFar = hFar * camera.aspect;
+      const hFar = far * tanV,
+        wFar = hFar * camera.aspect;
       // bounding sphere of the slice (radius depends only on fov and split => stable)
       const radius = Math.ceil(Math.hypot(far - mid, hFar, wFar));
       const centerRel = vec3.scale(camera.fwd, mid);
@@ -81,10 +93,20 @@ export class ShadowPass {
       const snapped = vec3.add(vec3.add(vec3.scale(lx, sx), vec3.scale(ly, sy)), vec3.scale(L, sz));
       const rel = vec3.sub(snapped, camera.pos);
       const eye = vec3.add(rel, vec3.scale(L, CASTER_RANGE));
-      const view = mat4.multiply(mat4.viewFromBasis(lx, ly, vec3.scale(L, -1)), mat4.translation(-eye[0], -eye[1], -eye[2]));
+      const view = mat4.multiply(
+        mat4.viewFromBasis(lx, ly, vec3.scale(L, -1)),
+        mat4.translation(-eye[0], -eye[1], -eye[2]),
+      );
       const proj = mat4.ortho(-radius, radius, -radius, radius, 0.5, CASTER_RANGE + radius);
       this.matrices[c] = mat4.multiply(proj, view);
-      this.rendered[c] = { matrix: this.matrices[c], pos: [...camera.pos], fwd: [...camera.fwd], light: L, radius, frame };
+      this.rendered[c] = {
+        matrix: this.matrices[c],
+        pos: [...camera.pos],
+        fwd: [...camera.fwd],
+        light: L,
+        radius,
+        frame,
+      };
       this.device.queue.writeBuffer(this.buffers[c], 0, this.matrices[c]);
     }
   }
@@ -95,9 +117,19 @@ export class ShadowPass {
       const pass = encoder.beginRenderPass({
         label: `shadow-${c}`,
         colorAttachments: [],
-        depthStencilAttachment: { view: this.layerViews[c], depthClearValue: 1, depthLoadOp: 'clear', depthStoreOp: 'store' },
+        depthStencilAttachment: {
+          view: this.layerViews[c],
+          depthClearValue: 1,
+          depthLoadOp: 'clear',
+          depthStoreOp: 'store',
+        },
       });
-      terrain.drawShadow(pass, frameGroup, this.groups[c], terrain.visibleDraws(frustumPlanes(this.matrices[c]), c === 0 ? 3 : 5));
+      terrain.drawShadow(
+        pass,
+        frameGroup,
+        this.groups[c],
+        terrain.visibleDraws(frustumPlanes(this.matrices[c]), c === 0 ? 3 : 5),
+      );
       props.drawShadow(pass, frameGroup, this.groups[c], c);
       pass.end();
     }

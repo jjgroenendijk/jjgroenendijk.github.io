@@ -21,7 +21,12 @@ fn viewRay(uv: vec2f) -> vec3f {
 `;
 
 // Volumetric cloud layer, rendered at reduced resolution.
-export const cloudWGSL = frameStruct + commonLib + fullscreenVS + rayDir + /* wgsl */ `
+export const cloudWGSL =
+  frameStruct +
+  commonLib +
+  fullscreenVS +
+  rayDir +
+  /* wgsl */ `
 const CB: f32 = 1150.0;
 const CT: f32 = 2500.0;
 fn cloudDensity(p: vec3f, detail: bool) -> f32 {
@@ -104,7 +109,12 @@ fn march(in: FSO, rd: vec3f) -> vec4f {
 `;
 
 // Sky (sun, moon, stars, distant ocean) composited with the cloud layer.
-export const skyWGSL = frameStruct + commonLib + fullscreenVS + rayDir + /* wgsl */ `
+export const skyWGSL =
+  frameStruct +
+  commonLib +
+  fullscreenVS +
+  rayDir +
+  /* wgsl */ `
 @group(1) @binding(0) var cloudTex: texture_2d<f32>;
 @group(1) @binding(1) var smp: sampler;
 
@@ -203,7 +213,10 @@ fn meteor(rd: vec3f) -> vec3f {
 
 // Cloud shadow map: the light let through by the cloud layer, baked once per
 // frame so ground, plants and water need a single texture lookup.
-export const cloudMapWGSL = frameStruct + commonLib + /* wgsl */ `
+export const cloudMapWGSL =
+  frameStruct +
+  commonLib +
+  /* wgsl */ `
 @group(1) @binding(0) var mapOut: texture_storage_2d<rgba16float, write>;
 @compute @workgroup_size(8, 8, 1)
 fn main(@builtin(global_invocation_id) gid: vec3u) {

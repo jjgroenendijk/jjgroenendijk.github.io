@@ -48,7 +48,10 @@ fn cacheHeight(p: vec2f) -> f32 {
 // array. Only texels that are new to a level's window are computed, plus a band
 // of rows per frame that is refreshed so horizon shadows follow the sun.
 export const BAKE_BYTES = (LEVELS + 1) * 16;
-export const terrainCacheWGSL = frameStruct + commonLib + /* wgsl */ `
+export const terrainCacheWGSL =
+  frameStruct +
+  commonLib +
+  /* wgsl */ `
 @group(0) @binding(1) var cacheOut: texture_storage_2d_array<rgba32float, write>;
 struct Bake {
   prev: array<vec4f, ${LEVELS}>, // xy previous level centre, z mode (0 keep, 1 new texels, 2 everything)
@@ -139,7 +142,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 }
 `;
 
-const terrainVS = cacheLib + /* wgsl */ `
+const terrainVS =
+  cacheLib +
+  /* wgsl */ `
 
 struct TV {
   @builtin(position) pos: vec4f,
@@ -208,7 +213,16 @@ fn pickTwo(w: array<f32, ${GROUND_COUNT}>) -> Pick {
 fn isRocky(m: u32) -> bool { return m == G_ROCK || m == G_BASALT; }
 `;
 
-export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + shoreLib + groundSampleLib + groundShadingLib + groundChoice + /* wgsl */ `
+export const terrainWGSL =
+  frameStruct +
+  commonLib +
+  shadowLib +
+  terrainVS +
+  shoreLib +
+  groundSampleLib +
+  groundShadingLib +
+  groundChoice +
+  /* wgsl */ `
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> TV {
   let gp = gridPoint(vi);
   var o = terrainVertex(gp.xy, u32(gp.z));
@@ -344,7 +358,11 @@ export const terrainWGSL = frameStruct + commonLib + shadowLib + terrainVS + sho
 }
 `;
 
-export const terrainShadowWGSL = frameStruct + commonLib + terrainVS + /* wgsl */ `
+export const terrainShadowWGSL =
+  frameStruct +
+  commonLib +
+  terrainVS +
+  /* wgsl */ `
 struct Cascade { vp: mat4x4f };
 @group(1) @binding(0) var<uniform> CS: Cascade;
 @vertex fn vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
@@ -359,7 +377,12 @@ struct Cascade { vp: mat4x4f };
 // depth pyramid. Visible tiles append their indices (made absolute: the level
 // is folded into the vertex index) to one compact list, so the whole terrain,
 // and the water on the same grid, is a single indexed indirect draw.
-export const terrainCullWGSL = frameStruct + commonLib + hizLib + cacheLib + /* wgsl */ `
+export const terrainCullWGSL =
+  frameStruct +
+  commonLib +
+  hizLib +
+  cacheLib +
+  /* wgsl */ `
 struct Cluster { first: u32, count: u32, level: u32, tile: u32 };
 @group(1) @binding(0) var<storage, read> clusters: array<Cluster>;
 @group(1) @binding(1) var<storage, read_write> args: array<atomic<u32>>; // indexed indirect args, cleared each frame

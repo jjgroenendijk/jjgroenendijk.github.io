@@ -28,7 +28,11 @@ export function buffer(device, size, usage, label) {
 }
 
 export function bufferWithData(device, data, usage, label) {
-  const b = device.createBuffer({ size: Math.ceil(data.byteLength / 4) * 4, usage: usage | GPUBufferUsage.COPY_DST, label });
+  const b = device.createBuffer({
+    size: Math.ceil(data.byteLength / 4) * 4,
+    usage: usage | GPUBufferUsage.COPY_DST,
+    label,
+  });
   device.queue.writeBuffer(b, 0, data);
   return b;
 }
@@ -37,25 +41,45 @@ export function bufferWithData(device, data, usage, label) {
 const VFC = () => GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT | GPUShaderStage.COMPUTE;
 const VF = () => GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT;
 export const entry = {
-  uniform: (dynamic = false, visibility = VFC()) => ({ visibility, buffer: { type: 'uniform', hasDynamicOffset: dynamic } }),
-  storage: (readOnly = false, visibility = GPUShaderStage.COMPUTE) => ({ visibility, buffer: { type: readOnly ? 'read-only-storage' : 'storage' } }),
-  texture: (sampleType = 'float', viewDimension = '2d', visibility = VF()) => ({ visibility, texture: { sampleType, viewDimension } }),
-  storageTexture: (format, viewDimension = '2d') => ({ visibility: GPUShaderStage.COMPUTE, storageTexture: { access: 'write-only', format, viewDimension } }),
+  uniform: (dynamic = false, visibility = VFC()) => ({
+    visibility,
+    buffer: { type: 'uniform', hasDynamicOffset: dynamic },
+  }),
+  storage: (readOnly = false, visibility = GPUShaderStage.COMPUTE) => ({
+    visibility,
+    buffer: { type: readOnly ? 'read-only-storage' : 'storage' },
+  }),
+  texture: (sampleType = 'float', viewDimension = '2d', visibility = VF()) => ({
+    visibility,
+    texture: { sampleType, viewDimension },
+  }),
+  storageTexture: (format, viewDimension = '2d') => ({
+    visibility: GPUShaderStage.COMPUTE,
+    storageTexture: { access: 'write-only', format, viewDimension },
+  }),
   sampler: (type = 'filtering', visibility = VF()) => ({ visibility, sampler: { type } }),
 };
 
 // Entries are numbered by position unless they name a binding with at(): a
 // layout can then leave room for bindings that shared WGSL libraries declare.
 export const at = (binding, item) => ({ binding, item });
-const numbered = (list) => list.map((x, i) => (x && x.item !== undefined && Number.isInteger(x.binding) ? x : { binding: i, item: x }));
+const numbered = (list) =>
+  list.map((x, i) => (x && x.item !== undefined && Number.isInteger(x.binding) ? x : { binding: i, item: x }));
 
 export function bindLayout(device, label, entries) {
-  return device.createBindGroupLayout({ label, entries: numbered(entries).map(({ binding, item }) => ({ binding, ...item })) });
+  return device.createBindGroupLayout({
+    label,
+    entries: numbered(entries).map(({ binding, item }) => ({ binding, ...item })),
+  });
 }
 
 export function bindGroup(device, layout, resources, label) {
   return device.createBindGroup({
-    label, layout,
-    entries: numbered(resources).map(({ binding, item }) => ({ binding, resource: item instanceof GPUBuffer ? { buffer: item } : item })),
+    label,
+    layout,
+    entries: numbered(resources).map(({ binding, item }) => ({
+      binding,
+      resource: item instanceof GPUBuffer ? { buffer: item } : item,
+    })),
   });
 }

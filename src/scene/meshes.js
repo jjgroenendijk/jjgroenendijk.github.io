@@ -2,7 +2,18 @@
 // units, used for GPU frustum culling.
 import { palm, bush, fern, banana, flowerBush } from './plants.js';
 import { tree, bound } from './trees.js';
-import { rock, coralBranch, coralBrain, seaFan, seagrass, coralTable, tubeSponge, softCoral, anemone, starfish } from './reef.js';
+import {
+  rock,
+  coralBranch,
+  coralBrain,
+  seaFan,
+  seagrass,
+  coralTable,
+  tubeSponge,
+  softCoral,
+  anemone,
+  starfish,
+} from './reef.js';
 import { fish, bird, manta, turtle, dolphin, butterfly, shark, jellyfish, crab } from './fauna.js';
 import { galleon, wreck, chest, rowboat, barrel } from './pirates.js';
 
@@ -11,7 +22,13 @@ import { MAT } from './catalog.js';
 // Impostor quad (x, y in [-1, 1]); extra.y selects the card species.
 function card(species) {
   const v = [];
-  for (const [x, y] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) v.push(x, y, 0, 0, 0, 1, MAT.card, species, 0, 0);
+  for (const [x, y] of [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ])
+    v.push(x, y, 0, 0, 0, 1, MAT.card, species, 0, 0);
   return { v: new Float32Array(v), i: new Uint32Array([0, 1, 2, 0, 2, 3]) };
 }
 
@@ -25,8 +42,12 @@ function treeLods(name, kind, variant, lods) {
 }
 
 export function buildMeshes() {
-  const trees = { ...treeLods('treeA', 'canopy', 0, 3), ...treeLods('treeB', 'canopy', 1, 3),
-    ...treeLods('emergent', 'emergent', 0, 3), ...treeLods('understory', 'understory', 0, 2) };
+  const trees = {
+    ...treeLods('treeA', 'canopy', 0, 3),
+    ...treeLods('treeB', 'canopy', 1, 3),
+    ...treeLods('emergent', 'emergent', 0, 3),
+    ...treeLods('understory', 'understory', 0, 2),
+  };
   return {
     ...trees,
     palm0: { ...palm(0), bound: 0.75 },

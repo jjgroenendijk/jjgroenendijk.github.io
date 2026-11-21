@@ -2,7 +2,11 @@ import { frameStruct, commonLib, shadowLib, shadowLibSimple } from './common.js'
 import { GRID_M, SIDE, cacheLib } from './terrain.js';
 import { WAVES, RIPPLES } from '../world/waves.js';
 
-export const waterWGSL = frameStruct + commonLib + shadowLib + /* wgsl */ `
+export const waterWGSL =
+  frameStruct +
+  commonLib +
+  shadowLib +
+  /* wgsl */ `
 @group(2) @binding(0) var sceneTex: texture_2d<f32>;
 @group(2) @binding(1) var depthTex: texture_depth_2d;
 @group(2) @binding(2) var reflTex: texture_2d<f32>;
@@ -198,7 +202,10 @@ fn waterScatter() -> vec3f {
 // Half resolution reflection trace: each pixel's view ray is intersected with
 // the swell (sea plane + large Gerstner waves) and marched through the depth
 // buffer. Output: reflected colour and confidence (0 = use the sky).
-export const reflectionWGSL = frameStruct + commonLib + /* wgsl */ `
+export const reflectionWGSL =
+  frameStruct +
+  commonLib +
+  /* wgsl */ `
 @group(1) @binding(0) var sceneTex: texture_2d<f32>;
 @group(1) @binding(1) var depthTex: texture_depth_2d;
 @group(1) @binding(2) var smp: sampler;
@@ -261,7 +268,10 @@ fn sceneAt(uv: vec2f) -> vec3f { return textureSampleLevel(sceneTex, smp, uv, 0.
 }
 `;
 
-export const particleWGSL = frameStruct + commonLib + /* wgsl */ `
+export const particleWGSL =
+  frameStruct +
+  commonLib +
+  /* wgsl */ `
 @group(1) @binding(0) var shadowTex: texture_depth_2d_array;
 @group(1) @binding(1) var shadowSmp: sampler_comparison;
 @group(1) @binding(2) var linSmp: sampler;

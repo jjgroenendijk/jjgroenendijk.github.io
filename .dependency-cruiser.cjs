@@ -34,5 +34,5 @@ module.exports = {
       to: { path: '^src/(audio|debug)/' },
     },
   ],
-  options: { doNotFollow: { path: 'node_modules' }},
+  options: { doNotFollow: { path: 'node_modules' } },
 };

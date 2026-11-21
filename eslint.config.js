@@ -8,8 +8,33 @@ import unicorn from 'eslint-plugin-unicorn';
 import globals from 'globals';
 
 // Short names are the house style in vector, noise and shader-adjacent maths.
-const MATH_NAMES = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'm', 'n', 'p', 'q', 'r', 's', 't', 'u', 'v',
-  'w', 'x', 'y', 'z', '_'];
+const MATH_NAMES = [
+  'a',
+  'b',
+  'c',
+  'd',
+  'e',
+  'f',
+  'g',
+  'h',
+  'i',
+  'j',
+  'k',
+  'm',
+  'n',
+  'p',
+  'q',
+  'r',
+  's',
+  't',
+  'u',
+  'v',
+  'w',
+  'x',
+  'y',
+  'z',
+  '_',
+];
 
 export default [
   { ignores: ['node_modules/', '_site/', 'public/', 'themes/'] },
@@ -37,8 +62,17 @@ export default [
     // GPU APIs so they stay portable and testable.
     files: ['src/world/**/*.js', 'src/core/math.js'],
     rules: {
-      'no-restricted-globals': ['error', 'window', 'document', 'navigator', 'location', 'GPUBufferUsage',
-        'GPUTextureUsage', 'GPUShaderStage', 'GPUMapMode'],
+      'no-restricted-globals': [
+        'error',
+        'window',
+        'document',
+        'navigator',
+        'location',
+        'GPUBufferUsage',
+        'GPUTextureUsage',
+        'GPUShaderStage',
+        'GPUMapMode',
+      ],
     },
   },
   {

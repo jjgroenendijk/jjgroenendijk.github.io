@@ -4,7 +4,9 @@
 // cliffs), times two textures. Plus the shared PBR lighting for the ground.
 import { groundLib } from './materials.js';
 
-export const groundSampleLib = groundLib + /* wgsl */ `
+export const groundSampleLib =
+  groundLib +
+  /* wgsl */ `
 @group(2) @binding(0) var groundA: texture_2d_array<f32>;  // sqrt(albedo), height
 @group(2) @binding(1) var groundB: texture_2d_array<f32>;  // normal xy, roughness, occlusion
 @group(2) @binding(2) var groundSmp: sampler;

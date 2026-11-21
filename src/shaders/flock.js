@@ -25,7 +25,10 @@ fn agentAt(k: u32) -> Agent {
 }
 `;
 
-export const flockWGSL = frameStruct + commonLib + /* wgsl */ `
+export const flockWGSL =
+  frameStruct +
+  commonLib +
+  /* wgsl */ `
 struct Step { dt: f32, t: f32, pad0: f32, pad1: f32 };
 @group(1) @binding(0) var<uniform> S: Step;
 @group(1) @binding(1) var<storage, read_write> flock: array<vec4f>;

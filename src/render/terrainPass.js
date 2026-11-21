@@ -3,7 +3,18 @@
 // moves only bakes the texels that scrolled in; a few rows per frame are
 // refreshed so far horizon shadows follow the sun without frame-time spikes.
 import { shader, buffer, bufferWithData, bindLayout, bindGroup, entry, at } from '../core/gpu.js';
-import { terrainCacheWGSL, terrainWGSL, terrainShadowWGSL, terrainCullWGSL, GRID_M, SIDE, TILES, TILE, BAKE_BYTES, CACHE_LAYERS } from '../shaders/terrain.js';
+import {
+  terrainCacheWGSL,
+  terrainWGSL,
+  terrainShadowWGSL,
+  terrainCullWGSL,
+  GRID_M,
+  SIDE,
+  TILES,
+  TILE,
+  BAKE_BYTES,
+  CACHE_LAYERS,
+} from '../shaders/terrain.js';
 import { HDR, DEPTH, depthState } from './layouts.js';
 import { LEVELS } from '../shaders/common.js';
 
@@ -22,18 +33,24 @@ function buildGrid() {
     const out = [];
     const ranges = [];
     const h = GRID_M / 2 - 1;
-    for (let tz = 0; tz < TILES; tz++) for (let tx = 0; tx < TILES; tx++) {
-      const first = out.length;
-      for (let z = tz * TILE - GRID_M; z < (tz + 1) * TILE - GRID_M; z++) for (let x = tx * TILE - GRID_M; x < (tx + 1) * TILE - GRID_M; x++) {
-        if (hole && x >= -h && x < h && z >= -h && z < h) continue;
-        const a = idx(x, z), b = idx(x + 1, z), c = idx(x + 1, z + 1), d = idx(x, z + 1);
-        out.push(a, c, b, a, d, c);
+    for (let tz = 0; tz < TILES; tz++)
+      for (let tx = 0; tx < TILES; tx++) {
+        const first = out.length;
+        for (let z = tz * TILE - GRID_M; z < (tz + 1) * TILE - GRID_M; z++)
+          for (let x = tx * TILE - GRID_M; x < (tx + 1) * TILE - GRID_M; x++) {
+            if (hole && x >= -h && x < h && z >= -h && z < h) continue;
+            const a = idx(x, z),
+              b = idx(x + 1, z),
+              c = idx(x + 1, z + 1),
+              d = idx(x, z + 1);
+            out.push(a, c, b, a, d, c);
+          }
+        ranges.push([first, out.length - first]);
       }
-      ranges.push([first, out.length - first]);
-    }
     return { indices: out, ranges };
   };
-  const full = build(false), ring = build(true);
+  const full = build(false),
+    ring = build(true);
   const indices = new Uint32Array(full.indices.length + ring.indices.length);
   indices.set(full.indices);
   indices.set(ring.indices, full.indices.length);
@@ -44,7 +61,9 @@ function buildGrid() {
 // is the box [lo, hi] (camera relative) at least partly inside all planes?
 function boxVisible(planes, lo, hi) {
   for (const p of planes) {
-    const x = p[0] >= 0 ? hi[0] : lo[0], y = p[1] >= 0 ? hi[1] : lo[1], z = p[2] >= 0 ? hi[2] : lo[2];
+    const x = p[0] >= 0 ? hi[0] : lo[0],
+      y = p[1] >= 0 ? hi[1] : lo[1],
+      z = p[2] >= 0 ? hi[2] : lo[2];
     if (p[0] * x + p[1] * y + p[2] * z + p[3] < 0) return false;
   }
   return true;
@@ -56,7 +75,11 @@ export class TerrainPass {
     const grid = buildGrid();
     // ground material textures (albedo + height, normal + roughness + occlusion)
     const F = GPUShaderStage.FRAGMENT;
-    const groundLayout = bindLayout(device, 'ground', [entry.texture('float', '2d-array', F), entry.texture('float', '2d-array', F), entry.sampler('filtering', F)]);
+    const groundLayout = bindLayout(device, 'ground', [
+      entry.texture('float', '2d-array', F),
+      entry.texture('float', '2d-array', F),
+      entry.sampler('filtering', F),
+    ]);
     this.groundGroup = bindGroup(device, groundLayout, [...ground.views, ground.sampler], 'ground');
     const U = GPUBufferUsage;
     this.indexBuffer = bufferWithData(device, grid.indices, U.INDEX | U.STORAGE, 'grid-indices');
@@ -64,14 +87,20 @@ export class TerrainPass {
     this.levelData = new Float32Array(LEVELS * 4);
 
     this.cache = device.createTexture({
-      label: 'terrain-cache', size: [SIDE, SIDE, CACHE_LAYERS], format: 'rgba32float',
+      label: 'terrain-cache',
+      size: [SIDE, SIDE, CACHE_LAYERS],
+      format: 'rgba32float',
       usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING,
     });
     this.cacheView = this.cache.createView({ dimension: '2d-array' });
 
     this.bakeData = new Float32Array(BAKE_BYTES / 4);
     this.bakeBuffer = buffer(device, BAKE_BYTES, U.UNIFORM | U.COPY_DST, 'terrain-bake');
-    const cacheLayout = bindLayout(device, 'terrain-cache', [entry.uniform(), entry.storageTexture('rgba32float', '2d-array'), at(6, entry.uniform())]);
+    const cacheLayout = bindLayout(device, 'terrain-cache', [
+      entry.uniform(),
+      entry.storageTexture('rgba32float', '2d-array'),
+      at(6, entry.uniform()),
+    ]);
     this.cacheLayout = cacheLayout;
     this.cachePipeline = device.createComputePipelineAsync({
       label: 'terrain-cache',
@@ -92,8 +121,13 @@ export class TerrainPass {
     let maxIndices = 0;
     for (let c = 0; c < this.clusterCount; c++) maxIndices += clusters[c * 4 + 1];
     this.drawIndices = buffer(device, maxIndices * 4, U.STORAGE | U.INDEX, 'terrain-visible-indices');
-    this.cullLayout = bindLayout(device, 'terrain-cull', [entry.storage(true), entry.storage(),
-      entry.texture('unfilterable-float', '2d', GPUShaderStage.COMPUTE), entry.storage(true), entry.storage()]);
+    this.cullLayout = bindLayout(device, 'terrain-cull', [
+      entry.storage(true),
+      entry.storage(),
+      entry.texture('unfilterable-float', '2d', GPUShaderStage.COMPUTE),
+      entry.storage(true),
+      entry.storage(),
+    ]);
     this.cullPipeline = device.createComputePipelineAsync({
       label: 'terrain-cull',
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, this.cullLayout] }),
@@ -114,7 +148,13 @@ export class TerrainPass {
       layout: device.createPipelineLayout({ bindGroupLayouts: [shared.frame, shared.cascade] }),
       vertex: { module: sh, entryPoint: 'vs', buffers: vertexBuffers },
       primitive: { topology: 'triangle-list', cullMode: 'none' },
-      depthStencil: { format: DEPTH, depthWriteEnabled: true, depthCompare: 'less', depthBias: 3, depthBiasSlopeScale: 2.5 },
+      depthStencil: {
+        format: DEPTH,
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+        depthBias: 3,
+        depthBiasSlopeScale: 2.5,
+      },
     });
 
     this.centers = new Array(LEVELS).fill(null);
@@ -151,7 +191,12 @@ export class TerrainPass {
   }
 
   cacheBindGroup(frameBuffer) {
-    return bindGroup(this.device, this.cacheLayout, [frameBuffer, this.cacheView, at(6, this.bakeBuffer)], 'terrain-cache');
+    return bindGroup(
+      this.device,
+      this.cacheLayout,
+      [frameBuffer, this.cacheView, at(6, this.bakeBuffer)],
+      'terrain-cache',
+    );
   }
 
   bake(pass, group) {
@@ -165,7 +210,8 @@ export class TerrainPass {
   // as few draws as possible: [firstIndex, indexCount, level].
   visibleDraws(planes, levels = LEVELS) {
     const draws = [];
-    const lo = [0, Y_RANGE[0] - this.cam[1], 0], hi = [0, Y_RANGE[1] - this.cam[1], 0];
+    const lo = [0, Y_RANGE[0] - this.cam[1], 0],
+      hi = [0, Y_RANGE[1] - this.cam[1], 0];
     for (let l = 0; l < levels; l++) {
       const [cx, cz, cell] = this.levelData.subarray(l * 4, l * 4 + 3);
       const ranges = this.tileRanges[l === 0 ? 0 : 1];
@@ -173,12 +219,21 @@ export class TerrainPass {
       for (let t = 0; t < ranges.length; t++) {
         const [first, count] = ranges[t];
         if (!count) continue;
-        const tx = t % TILES, tz = (t / TILES) | 0;
-        lo[0] = cx - this.cam[0] + (tx * TILE - GRID_M) * cell; hi[0] = lo[0] + TILE * cell;
-        lo[2] = cz - this.cam[2] + (tz * TILE - GRID_M) * cell; hi[2] = lo[2] + TILE * cell;
-        if (!boxVisible(planes, lo, hi)) { open = null; continue; }
+        const tx = t % TILES,
+          tz = (t / TILES) | 0;
+        lo[0] = cx - this.cam[0] + (tx * TILE - GRID_M) * cell;
+        hi[0] = lo[0] + TILE * cell;
+        lo[2] = cz - this.cam[2] + (tz * TILE - GRID_M) * cell;
+        hi[2] = lo[2] + TILE * cell;
+        if (!boxVisible(planes, lo, hi)) {
+          open = null;
+          continue;
+        }
         if (open && open[0] + open[1] === first) open[1] += count;
-        else { open = [first, count, l]; draws.push(open); }
+        else {
+          open = [first, count, l];
+          draws.push(open);
+        }
       }
     }
     return draws;
@@ -190,7 +245,12 @@ export class TerrainPass {
   }
 
   setHiZ(view) {
-    this.cullGroup = bindGroup(this.device, this.cullLayout, [this.clusterBuffer, this.drawArgs, view, this.indexBuffer, this.drawIndices], 'terrain-cull');
+    this.cullGroup = bindGroup(
+      this.device,
+      this.cullLayout,
+      [this.clusterBuffer, this.drawArgs, view, this.indexBuffer, this.drawIndices],
+      'terrain-cull',
+    );
   }
 
   // Exact per-tile height bounds, frustum and occlusion test on the GPU; the
