@@ -15,7 +15,6 @@
     "lint:dup": "jscpd src",
     "lint:dead": "knip",
     "lint:actions": "if command -v actionlint >/dev/null; then actionlint; else echo \"actionlint not installed: skipped here, CI runs it\"; fi",
-    "lint:prune": "eslint . --prune-suppressions",
     "check": "npm run format:check && npm run lint"
   },
   "devDependencies": {
